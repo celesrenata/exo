@@ -395,7 +395,9 @@ class Worker:
         while True:
             # TODO: EdgeDeleted
             edges = set(self.state.topology.list_connections())
-            conns = await check_reachable(self.state.topology, self.state.node_profiles)
+            conns = await check_reachable(
+                self.node_id, self.state.topology, self.state.node_profiles
+            )
             for nid in conns:
                 for ip in conns[nid]:
                     edge = SocketConnection(
