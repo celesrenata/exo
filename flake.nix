@@ -270,7 +270,7 @@
             
             package = mkOption {
               type = types.package;
-              default = pkgs.exo-cpu or (mkExoPackage { inherit pkgs; system = pkgs.system; accelerator = "cpu"; });
+              default = pkgs."exo-${cfg.accelerator}" or (mkExoPackage { inherit pkgs; system = pkgs.system; accelerator = cfg.accelerator; });
               description = "EXO package to use";
             };
             
@@ -351,8 +351,10 @@
                 DASHBOARD_DIR = "${cfg.package}/share/exo/dashboard";
                 # Fix Python interpreter for PyO3 Rust bindings
                 PYTHONPATH = "${cfg.package}/lib/python3.13/site-packages";
-                # Force CPU inference on Linux systems (MLX only works on macOS)
-              } // (if pkgs.stdenv.isLinux then {
+                # Set inference engine based on accelerator choice
+                EXO_INFERENCE_ENGINE = cfg.accelerator;
+              } // (if cfg.accelerator == "cpu" || (pkgs.stdenv.isLinux && cfg.accelerator == "mlx") then {
+                # Force CPU inference and disable MLX when using CPU accelerator or MLX on Linux
                 EXO_INFERENCE_ENGINE = "cpu";
                 MLX_DISABLE = "1";
               } else {});
