@@ -36,3 +36,41 @@ clean:
     rm -rf dashboard/node_modules
     rm -rf dashboard/.svelte-kit
     rm -rf dashboard/build
+
+# NixOS specific commands
+nix-build-cpu:
+    nix build .#exo-cpu
+
+nix-build-debug:
+    ./build-debug.sh
+
+nix-shell:
+    nix develop
+
+# Troubleshooting commands
+debug-rust:
+    #!/usr/bin/env bash
+    echo "🦀 Rust Debug Info"
+    echo "=================="
+    rustc --version
+    cargo --version
+    echo "Cargo home: $CARGO_HOME"
+    echo "Rust toolchain: $(rustup show active-toolchain 2>/dev/null || echo 'Not using rustup')"
+
+debug-python:
+    #!/usr/bin/env bash
+    echo "🐍 Python Debug Info"
+    echo "==================="
+    python --version
+    which python
+    python -c "import sys; print('Python path:', sys.path)"
+    echo "Pip version: $(pip --version)"
+
+debug-env:
+    #!/usr/bin/env bash
+    echo "🌍 Environment Debug Info"
+    echo "========================"
+    echo "NIX_STORE: $NIX_STORE"
+    echo "PATH: $PATH"
+    echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+    echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
