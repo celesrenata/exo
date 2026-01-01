@@ -332,11 +332,21 @@
                 PrivateTmp = true;
                 ProtectSystem = "strict";
                 ProtectHome = true;
-                ReadWritePaths = [ "/var/lib/exo" ];
+                ReadWritePaths = [ "/var/lib/exo" "/var/log/exo" "/var/cache/exo" ];
+                
+                # Set proper working directory and cache locations
+                WorkingDirectory = "/var/lib/exo";
+                CacheDirectory = "exo";
+                LogsDirectory = "exo";
+                StateDirectory = "exo";
               };
               
               environment = {
                 EXO_PORT = toString cfg.port;
+                # Set cache and log directories to writable locations
+                XDG_CACHE_HOME = "/var/cache/exo";
+                XDG_DATA_HOME = "/var/lib/exo";
+                HOME = "/var/lib/exo";
               };
             };
             
@@ -346,6 +356,8 @@
             
             systemd.tmpfiles.rules = [
               "d /var/lib/exo 0755 ${cfg.user} ${cfg.group} -"
+              "d /var/log/exo 0755 ${cfg.user} ${cfg.group} -"
+              "d /var/cache/exo 0755 ${cfg.user} ${cfg.group} -"
             ];
           };
         };
