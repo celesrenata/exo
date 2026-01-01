@@ -123,7 +123,7 @@
             
             package = mkOption {
               type = types.package;
-              default = config.nixpkgs.overlays.exo.exo-cpu;
+              default = pkgs.exo-cpu or (mkExoPackage { inherit pkgs; system = pkgs.system; accelerator = "cpu"; });
               description = "EXO package to use";
             };
             
