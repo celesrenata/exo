@@ -351,7 +351,11 @@
                 DASHBOARD_DIR = "${cfg.package}/share/exo/dashboard";
                 # Fix Python interpreter for PyO3 Rust bindings
                 PYTHONPATH = "${cfg.package}/lib/python3.13/site-packages";
-              };
+                # Force CPU inference on Linux systems (MLX only works on macOS)
+              } // (if pkgs.stdenv.isLinux then {
+                EXO_INFERENCE_ENGINE = "cpu";
+                MLX_DISABLE = "1";
+              } else {});
             };
             
             networking.firewall = mkIf cfg.openFirewall {

@@ -36,12 +36,40 @@ from exo.shared.types.worker.runners import (
     RunnerWarmingUp,
 )
 from exo.utils.channels import ClosedResourceError, MpReceiver, MpSender
-from exo.worker.engines.mlx.generator.generate import mlx_generate, warmup_inference
-from exo.worker.engines.mlx.utils_mlx import (
-    initialize_mlx,
-    load_mlx_items,
-    mlx_force_oom,
-)
+
+# Conditional MLX imports - only import if MLX is available and not disabled
+try:
+    import os
+    if os.getenv("MLX_DISABLE") == "1":
+        raise ImportError("MLX disabled by environment variable")
+    
+    from exo.worker.engines.mlx.generator.generate import mlx_generate, warmup_inference
+    from exo.worker.engines.mlx.utils_mlx import (
+        initialize_mlx,
+        load_mlx_items,
+        mlx_force_oom,
+    )
+    MLX_AVAILABLE = True
+except ImportError as e:
+    print(f"MLX not available: {e}")
+    MLX_AVAILABLE = False
+    
+    # Provide dummy implementations for CPU fallback
+    def mlx_generate(*args, **kwargs):
+        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
+    
+    def warmup_inference(*args, **kwargs):
+        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
+    
+    def initialize_mlx(*args, **kwargs):
+        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
+    
+    def load_mlx_items(*args, **kwargs):
+        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
+    
+    def mlx_force_oom(*args, **kwargs):
+        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
+
 from exo.worker.runner.bootstrap import logger
 
 
@@ -50,6 +78,14 @@ def main(
     event_sender: MpSender[Event],
     task_receiver: MpReceiver[Task],
 ):
+    # Check if we're trying to use MLX on a non-macOS system
+    if not MLX_AVAILABLE:
+        import sys
+        import platform
+        logger.error(f"MLX inference engine is not available on {platform.system()}. "
+                    f"This version of EXO requires MLX which only works on macOS. "
+                    f"Please use a version with CPU inference support or run on macOS.")
+        sys.exit(1)
     instance, runner_id, shard_metadata = (
         bound_instance.instance,
         bound_instance.bound_runner_id,
