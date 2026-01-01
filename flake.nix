@@ -347,6 +347,10 @@
                 XDG_CACHE_HOME = "/var/cache/exo";
                 XDG_DATA_HOME = "/var/lib/exo";
                 HOME = "/var/lib/exo";
+                # Set dashboard directory for the application to find
+                DASHBOARD_DIR = "${cfg.package}/share/exo/dashboard";
+                # Fix Python interpreter for PyO3 Rust bindings
+                PYTHONPATH = "${cfg.package}/lib/python3.13/site-packages";
               };
             };
             
