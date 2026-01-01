@@ -78,14 +78,22 @@ def main(
     event_sender: MpSender[Event],
     task_receiver: MpReceiver[Task],
 ):
-    # Check if we're trying to use MLX on a non-macOS system
-    if not MLX_AVAILABLE:
+    # Check if we're trying to use MLX when it's not available
+    # Only exit if we're specifically configured to use MLX but it's unavailable
+    import os
+    inference_engine = os.getenv("EXO_INFERENCE_ENGINE", "mlx")  # Default was MLX
+    
+    if not MLX_AVAILABLE and inference_engine == "mlx":
         import sys
         import platform
         logger.error(f"MLX inference engine is not available on {platform.system()}. "
                     f"This version of EXO requires MLX which only works on macOS. "
                     f"Please use a version with CPU inference support or run on macOS.")
         sys.exit(1)
+    elif not MLX_AVAILABLE:
+        # MLX not available but we're using a different inference engine - that's fine
+        logger.info(f"MLX not available, using {inference_engine} inference engine")
+    
     instance, runner_id, shard_metadata = (
         bound_instance.instance,
         bound_instance.bound_runner_id,
