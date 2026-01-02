@@ -291,7 +291,9 @@ function transformTopology(raw: RawTopology, profiles?: RawNodeProfiles): Topolo
 	}
 
 	// Handle connections - can be objects with localNodeId/sendBackNodeId or tuples [source, target, metadata]
-	for (const conn of raw.connections || []) {
+	// Convert connections object to array if needed
+	const connectionsArray = Array.isArray(raw.connections) ? raw.connections : Object.values(raw.connections || {});
+	for (const conn of connectionsArray) {
 		let localNodeId: string | undefined;
 		let sendBackNodeId: string | undefined;
 		let sendBackMultiaddr: { multiaddr?: string; address?: string; ip_address?: string } | string | undefined;
