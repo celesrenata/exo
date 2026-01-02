@@ -27,7 +27,6 @@ class CustomTestError(Exception):
     """Custom exception for testing."""
 
 
-
 class TestErrorHandler:
     """Test cases for ErrorHandler."""
 

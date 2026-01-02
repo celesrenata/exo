@@ -163,7 +163,6 @@ def initialize_distributed_ipex(
 ) -> tuple[IPEXModel, IPEXTokenizerWrapper, Callable[[torch.Tensor], torch.Tensor]]:
     """Initialize IPEX for distributed inference across multiple Intel GPUs."""
     try:
-
         # Initialize distributed Intel GPU setup
         dist_group = initialize_intel_gpu_distributed(bound_instance)
 
@@ -1428,9 +1427,11 @@ def apply_memory_efficient_attention(model: Any) -> Any:
                         module.scale_attn_weights = True
 
                     # Enable attention dropout fusion
-                    if hasattr(module, "attn_dropout") and hasattr(
-                        module.attn_dropout, "p"
-                    ) and module.attn_dropout.p == 0.0:
+                    if (
+                        hasattr(module, "attn_dropout")
+                        and hasattr(module.attn_dropout, "p")
+                        and module.attn_dropout.p == 0.0
+                    ):
                         # Replace with identity for inference
                         module.attn_dropout = torch.nn.Identity()
 
@@ -1513,7 +1514,6 @@ def optimize_batch_processing_for_intel_gpu(
 def enable_intel_gpu_kernel_optimizations() -> None:
     """Enable Intel GPU specific kernel optimizations."""
     try:
-
         logger.info("Enabling Intel GPU kernel optimizations")
 
         # Enable Intel GPU specific optimizations

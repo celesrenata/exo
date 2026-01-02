@@ -7,8 +7,6 @@ from exo.shared.types.profiling import SystemPerformanceProfile
 """Linux system monitoring utilities."""
 
 
-
-
 def get_cpu_temperature() -> float:
     """Get CPU temperature from thermal zones."""
     try:
@@ -20,10 +18,13 @@ def get_cpu_temperature() -> float:
             if temps:
                 # Look for CPU-related sensors
                 for sensor_name, entries in temps.items():
-                    if any(
-                        keyword in sensor_name.lower()
-                        for keyword in ["cpu", "core", "processor"]
-                    ) and entries:
+                    if (
+                        any(
+                            keyword in sensor_name.lower()
+                            for keyword in ["cpu", "core", "processor"]
+                        )
+                        and entries
+                    ):
                         return entries[0].current
                 # Fallback to first available sensor
                 first_sensor = next(iter(temps.values()))
