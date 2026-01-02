@@ -112,6 +112,7 @@ def main(
                         isinstance(current_status, RunnerConnected)
                         and group is not None
                     ) or (isinstance(current_status, RunnerIdle) and group is None):
+                        logger.debug(f"LoadModel accepted: status={current_status}, group={'present' if group is not None else 'None'}")
                         current_status = RunnerLoading()
                         logger.info("runner loading")
                         event_sender.send(
@@ -201,6 +202,23 @@ def main(
                         )
                         break
                     case _:
+                        # Add detailed logging for debugging state machine issues
+                        logger.error(
+                            f"Task {task.__class__.__name__} rejected: "
+                            f"current_status={current_status}, "
+                            f"group={'present' if group is not None else 'None'}, "
+                            f"task_details={task}"
+                        )
+                        
+                        # For LoadModel tasks, provide specific guidance
+                        if isinstance(task, LoadModel):
+                            if isinstance(current_status, RunnerConnected) and group is None:
+                                logger.error("LoadModel rejected: RunnerConnected but no group available")
+                            elif isinstance(current_status, RunnerIdle) and group is not None:
+                                logger.error("LoadModel rejected: RunnerIdle but group is present")
+                            else:
+                                logger.error(f"LoadModel rejected: Unexpected state combination")
+                        
                         raise ValueError(
                             f"Received {task.__class__.__name__} outside of state machine in {current_status=}"
                         )

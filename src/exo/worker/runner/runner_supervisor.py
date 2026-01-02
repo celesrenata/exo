@@ -744,7 +744,11 @@ class RunnerSupervisor:
                     f"{error_resources} resources in error state"
                 )
 
-            health_status["metrics"]["resource_states"] = resource_states
+            # Convert ResourceState enums to strings for serialization
+            health_status["metrics"]["resource_states"] = {
+                state.name if hasattr(state, 'name') else str(state): count 
+                for state, count in resource_states.items()
+            }
 
             # Check pending tasks (too many might indicate a problem)
             pending_count = len(self.pending)
