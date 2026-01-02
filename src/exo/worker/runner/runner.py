@@ -232,9 +232,22 @@ def main(
                             else:
                                 logger.error(f"LoadModel rejected: Unexpected state combination - status={current_status}, group={group}")
                         
-                        raise ValueError(
-                            f"Received {task.__class__.__name__} outside of state machine in {current_status=}, group={group}"
+                        # Instead of crashing with ValueError, gracefully reject the task
+                        error_message = f"Task {task.__class__.__name__} rejected due to invalid state transition: current_status={current_status}, group={group}"
+                        logger.warning(f"Gracefully rejecting task: {error_message}")
+                        
+                        # Brief delay to allow for potential state synchronization
+                        time.sleep(0.1)
+                        
+                        # Send task failure status instead of crashing
+                        event_sender.send(
+                            TaskStatusUpdated(
+                                task_id=task.task_id, task_status=TaskStatus.Failed
+                            )
                         )
+                        
+                        # Continue processing instead of crashing - skip to next task
+                        continue
                 event_sender.send(
                     TaskStatusUpdated(
                         task_id=task.task_id, task_status=TaskStatus.Complete
