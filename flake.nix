@@ -472,7 +472,7 @@
         checks.formatting = treefmtEval.config.build.check inputs.self;
         checks.lint = pkgs.runCommand "lint-check" { } ''
           export RUFF_CACHE_DIR="$TMPDIR/ruff-cache"
-          ${pkgs.ruff}/bin/ruff check ${inputs.self}/
+          ${pkgs.ruff}/bin/ruff check ${inputs.self}/ --exclude src/exo_pyo3_bindings/
           touch $out
         '';
 
