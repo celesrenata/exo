@@ -1,10 +1,8 @@
 """Engine initialization that supports multiple backends."""
 
-from typing import Any, Callable, Union
+from typing import Any, Callable
 
 from exo.shared.types.worker.instances import BoundInstance
-from exo.worker.engines.engine_utils import select_best_engine
-from exo.worker.runner.bootstrap import logger
 
 
 def initialize_engine(bound_instance: BoundInstance, connect_only: bool = False) -> tuple[Any, Any, Callable] | Any:
@@ -19,6 +17,10 @@ def initialize_engine(bound_instance: BoundInstance, connect_only: bool = False)
         If connect_only=True: group object (for MLX) or None
         If connect_only=False: tuple of (model, tokenizer, sampler)
     """
+    # Import here to avoid circular imports
+    from exo.worker.engines.engine_utils import select_best_engine
+    from exo.worker.runner.bootstrap import logger
+    
     engine_type = select_best_engine()
     
     if connect_only:
@@ -51,6 +53,10 @@ def warmup_engine(model: Any, tokenizer: Any, sampler: Callable) -> int:
     Returns:
         int: Number of tokens generated during warmup
     """
+    # Import here to avoid circular imports
+    from exo.worker.engines.engine_utils import select_best_engine
+    from exo.worker.runner.bootstrap import logger
+    
     engine_type = select_best_engine()
     
     logger.info(f"Warming up {engine_type} engine")
@@ -79,6 +85,10 @@ def generate_with_engine(
     Returns:
         Generator yielding GenerationResponse objects
     """
+    # Import here to avoid circular imports
+    from exo.worker.engines.engine_utils import select_best_engine
+    from exo.worker.runner.bootstrap import logger
+    
     engine_type = select_best_engine()
     
     logger.info(f"Generating with {engine_type} engine")
