@@ -46,6 +46,12 @@ export interface NodeInfo {
 	};
 	last_macmon_update: number;
 	friendly_name?: string;
+	// Engine information
+	available_engines?: string[];
+	selected_engine?: string;
+	mlx_available?: boolean;
+	torch_available?: boolean;
+	cpu_available?: boolean;
 }
 
 export interface TopologyEdge {
@@ -92,6 +98,12 @@ interface RawNodeProfile {
 		temp?: number;
 		sysPower?: number;
 	};
+	// Engine information
+	availableEngines?: string[];
+	selectedEngine?: string;
+	mlxAvailable?: boolean;
+	torchAvailable?: boolean;
+	cpuAvailable?: boolean;
 }
 
 interface RawTopologyNode {
@@ -268,7 +280,13 @@ function transformTopology(raw: RawTopology, profiles?: RawNodeProfiles): Topolo
 				sys_power: profile?.system?.sysPower
 			},
 			last_macmon_update: Date.now() / 1000,
-			friendly_name: profile?.friendlyName
+			friendly_name: profile?.friendlyName,
+			// Include engine information
+			available_engines: profile?.availableEngines,
+			selected_engine: profile?.selectedEngine,
+			mlx_available: profile?.mlxAvailable,
+			torch_available: profile?.torchAvailable,
+			cpu_available: profile?.cpuAvailable
 		};
 	}
 
