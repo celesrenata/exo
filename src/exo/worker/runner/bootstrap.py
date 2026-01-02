@@ -1065,6 +1065,9 @@ def entrypoint_with_fallback_mechanisms(
     This function provides an extra layer of fallback handling for cases where
     the primary startup mechanisms fail due to resource constraints.
     """
+    global logger
+    logger = _logger
+    
     runner_id = bound_instance.bound_runner_id
 
     try:
@@ -1079,10 +1082,6 @@ def entrypoint_with_fallback_mechanisms(
         # Fallback mechanism: try with reduced resource requirements
         try:
             logger.info(f"Attempting fallback startup for runner {runner_id}")
-
-            # Use a simpler startup approach with minimal resource management
-            global logger
-            logger = _logger
 
             # Set environment if needed
             if (
