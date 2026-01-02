@@ -82,6 +82,29 @@ class MiscData(TaggedModel):
         return cls(friendly_name=await get_friendly_name())
 
 
+class EngineInformation(TaggedModel):
+    """Engine and inference capability information"""
+    
+    available_engines: list[str]
+    selected_engine: str
+    mlx_available: bool
+    torch_available: bool
+    cpu_available: bool
+
+    @classmethod
+    async def gather(cls) -> Self:
+        from exo.worker.engines.engine_utils import get_engine_info
+        
+        engine_info = get_engine_info()
+        return cls(
+            available_engines=engine_info.get("available_engines", []),
+            selected_engine=engine_info.get("selected_engine", "unknown"),
+            mlx_available=engine_info.get("mlx_available", False),
+            torch_available=engine_info.get("torch_available", False),
+            cpu_available=engine_info.get("cpu_available", False),
+        )
+
+
 async def _gather_iface_map() -> dict[str, str] | None:
     proc = await anyio.run_process(
         ["networksetup", "-listallhardwareports"], check=False
@@ -111,6 +134,7 @@ GatheredInfo = (
     | NodeConfig
     | MiscData
     | StaticNodeInformation
+    | EngineInformation
 )
 
 
@@ -139,6 +163,10 @@ class InfoGatherer:
                 await self.info_sender.send(nc)
             sni = await StaticNodeInformation.gather()
             await self.info_sender.send(sni)
+            
+            # Gather engine information once at startup
+            engine_info = await EngineInformation.gather()
+            await self.info_sender.send(engine_info)
 
     def shutdown(self):
         self._tg.cancel_scope.cancel()

@@ -51,33 +51,58 @@ def get_network_interfaces() -> list[NetworkInterfaceInfo]:
 
 
 async def get_model_and_chip() -> tuple[str, str]:
-    """Get Mac system information using system_profiler."""
+    """Get system information for both Mac and Linux."""
     model = "Unknown Model"
     chip = "Unknown Chip"
 
-    # TODO: better non mac support
-    if sys.platform != "darwin":
-        return (model, chip)
+    if sys.platform == "darwin":
+        # macOS detection
+        try:
+            process = await run_process(
+                [
+                    "system_profiler",
+                    "SPHardwareDataType",
+                ]
+            )
+            output = process.stdout.decode().strip()
 
-    try:
-        process = await run_process(
-            [
-                "system_profiler",
-                "SPHardwareDataType",
-            ]
-        )
-    except CalledProcessError:
-        return (model, chip)
+            model_line = next(
+                (line for line in output.split("\n") if "Model Name" in line), None
+            )
+            model = model_line.split(": ")[1] if model_line else "Unknown Model"
 
-    # less interested in errors here because this value should be hard coded
-    output = process.stdout.decode().strip()
-
-    model_line = next(
-        (line for line in output.split("\n") if "Model Name" in line), None
-    )
-    model = model_line.split(": ")[1] if model_line else "Unknown Model"
-
-    chip_line = next((line for line in output.split("\n") if "Chip" in line), None)
-    chip = chip_line.split(": ")[1] if chip_line else "Unknown Chip"
+            chip_line = next((line for line in output.split("\n") if "Chip" in line), None)
+            chip = chip_line.split(": ")[1] if chip_line else "Unknown Chip"
+        except CalledProcessError:
+            pass
+    else:
+        # Linux detection
+        try:
+            # Get CPU model from /proc/cpuinfo
+            with open("/proc/cpuinfo", "r") as f:
+                for line in f:
+                    if line.startswith("model name"):
+                        chip = line.split(": ")[1].strip()
+                        break
+            
+            # Get system model from DMI
+            try:
+                with open("/sys/class/dmi/id/product_name", "r") as f:
+                    model = f.read().strip()
+                if not model or model in ["System Product Name", "To be filled by O.E.M."]:
+                    # Try board name as fallback
+                    with open("/sys/class/dmi/id/board_name", "r") as f:
+                        board = f.read().strip()
+                    if board and board not in ["System Board Name", "To be filled by O.E.M."]:
+                        model = f"Linux System ({board})"
+                    else:
+                        model = "Linux System"
+            except (FileNotFoundError, PermissionError):
+                model = "Linux System"
+                
+        except (FileNotFoundError, PermissionError):
+            # Fallback to basic Linux info
+            model = "Linux System"
+            chip = "Unknown CPU"
 
     return (model, chip)

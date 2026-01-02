@@ -33,6 +33,7 @@ from exo.shared.types.worker.downloads import DownloadProgress
 from exo.shared.types.worker.instances import Instance, InstanceId
 from exo.shared.types.worker.runners import RunnerId, RunnerStatus
 from exo.utils.info_gatherer.info_gatherer import (
+    EngineInformation,
     MacmonMetrics,
     MacTBConnections,
     MacTBIdentifiers,
@@ -232,6 +233,12 @@ def apply_node_gathered_info(event: NodeGatheredInfo, state: State) -> State:
         case StaticNodeInformation():
             profile.model_id = info.model
             profile.chip_id = info.chip
+        case EngineInformation():
+            profile.available_engines = info.available_engines
+            profile.selected_engine = info.selected_engine
+            profile.mlx_available = info.mlx_available
+            profile.torch_available = info.torch_available
+            profile.cpu_available = info.cpu_available
         # TODO: makes me slightly sad
         case NodeNetworkInterfaces():
             profile.network_interfaces = info.ifaces
