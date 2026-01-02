@@ -16,16 +16,13 @@ from exo.shared.types.events import (
     ForwarderEvent,
     IndexedEvent,
     NodeDownloadProgress,
-    NodeMemoryMeasured,
-    NodePerformanceMeasured,
+    NodeGatheredInfo,
     TaskCreated,
     TaskStatusUpdated,
     TopologyEdgeCreated,
     TopologyEdgeDeleted,
 )
-from exo.shared.types.models import ModelId
 from exo.shared.types.multiaddr import Multiaddr
-from exo.shared.types.profiling import MemoryPerformanceProfile, NodePerformanceProfile
 from exo.shared.types.state import State
 from exo.shared.types.tasks import (
     CreateRunner,
@@ -34,7 +31,7 @@ from exo.shared.types.tasks import (
     Task,
     TaskStatus,
 )
-from exo.shared.types.topology import Connection
+from exo.shared.types.topology import SocketConnection
 from exo.shared.types.worker.downloads import (
     DownloadCompleted,
     DownloadOngoing,
@@ -45,14 +42,14 @@ from exo.shared.types.worker.runners import RunnerId
 from exo.shared.types.worker.shards import ShardMetadata
 from exo.utils.channels import Receiver, Sender, channel
 from exo.utils.event_buffer import OrderedBuffer
+from exo.utils.info_gatherer.info_gatherer import GatheredInfo, InfoGatherer
+from exo.utils.info_gatherer.net_profile import check_reachable
 from exo.worker.download.download_utils import (
     map_repo_download_progress_to_download_progress_data,
 )
 from exo.worker.download.shard_downloader import RepoDownloadProgress, ShardDownloader
 from exo.worker.plan import plan
 from exo.worker.runner.runner_supervisor import RunnerSupervisor
-from exo.worker.utils import start_polling_memory_metrics, start_polling_node_metrics
-from exo.worker.utils.net_profile import check_reachable
 
 
 class Worker:
@@ -84,9 +81,9 @@ class Worker:
         self.out_for_delivery: dict[EventId, ForwarderEvent] = {}
 
         self.state: State = State()
-        self.download_status: dict[ModelId, DownloadProgress] = {}
+        self.download_status: dict[ShardMetadata, DownloadProgress] = {}
         self.runners: dict[RunnerId, RunnerSupervisor] = {}
-        self._tg: TaskGroup | None = None
+        self._tg: TaskGroup = create_task_group()
 
         self._nack_cancel_scope: CancelScope | None = None
         self._nack_attempts: int = 0
@@ -98,38 +95,13 @@ class Worker:
     async def run(self):
         logger.info("Starting Worker")
 
-        # TODO: CLEANUP HEADER
-        async def resource_monitor_callback(
-            node_performance_profile: NodePerformanceProfile,
-        ) -> None:
-            await self.event_sender.send(
-                NodePerformanceMeasured(
-                    node_id=self.node_id,
-                    node_profile=node_performance_profile,
-                    when=str(datetime.now(tz=timezone.utc)),
-                ),
-            )
+        info_send, info_recv = channel[GatheredInfo]()
+        info_gatherer: InfoGatherer = InfoGatherer(info_send)
 
-        async def memory_monitor_callback(
-            memory_profile: MemoryPerformanceProfile,
-        ) -> None:
-            await self.event_sender.send(
-                NodeMemoryMeasured(
-                    node_id=self.node_id,
-                    memory=memory_profile,
-                    when=str(datetime.now(tz=timezone.utc)),
-                )
-            )
-
-        # END CLEANUP
-
-        async with create_task_group() as tg:
-            self._tg = tg
+        async with self._tg as tg:
+            tg.start_soon(info_gatherer.run)
+            tg.start_soon(self._forward_info, info_recv)
             tg.start_soon(self.plan_step)
-            tg.start_soon(start_polling_node_metrics, resource_monitor_callback)
-
-            tg.start_soon(start_polling_memory_metrics, memory_monitor_callback)
-            tg.start_soon(self._emit_existing_download_progress)
             tg.start_soon(self._connection_message_event_writer)
             tg.start_soon(self._resend_out_for_delivery)
             tg.start_soon(self._event_applier)
@@ -141,6 +113,17 @@ class Worker:
         self.command_sender.close()
         for runner in self.runners.values():
             runner.shutdown()
+
+    async def _forward_info(self, recv: Receiver[GatheredInfo]):
+        with recv as info_stream:
+            async for info in info_stream:
+                await self.event_sender.send(
+                    NodeGatheredInfo(
+                        node_id=self.node_id,
+                        when=str(datetime.now(tz=timezone.utc)),
+                        info=info,
+                    )
+                )
 
     async def _event_applier(self):
         with self.global_event_receiver as events:
@@ -161,7 +144,6 @@ class Worker:
                     self._nack_cancel_scope is None
                     or self._nack_cancel_scope.cancel_called
                 ):
-                    assert self._tg
                     # Request the next index.
                     self._tg.start_soon(
                         self._nack_request, self.state.last_event_applied_idx + 1
@@ -202,11 +184,11 @@ class Worker:
                         )
                     )
                 case DownloadModel(shard_metadata=shard):
-                    if shard.model_meta.model_id not in self.download_status:
+                    if shard not in self.download_status:
                         progress = DownloadPending(
                             shard_metadata=shard, node_id=self.node_id
                         )
-                        self.download_status[shard.model_meta.model_id] = progress
+                        self.download_status[shard] = progress
                         await self.event_sender.send(
                             NodeDownloadProgress(download_progress=progress)
                         )
@@ -219,7 +201,7 @@ class Worker:
                         progress = DownloadCompleted(
                             shard_metadata=shard, node_id=self.node_id
                         )
-                        self.download_status[shard.model_meta.model_id] = progress
+                        self.download_status[shard] = progress
                         await self.event_sender.send(
                             NodeDownloadProgress(download_progress=progress)
                         )
@@ -230,7 +212,7 @@ class Worker:
                             )
                         )
                     else:
-                        await self.event_sender.send(
+                        self.event_sender.send_nowait(
                             TaskStatusUpdated(
                                 task_id=task.task_id, task_status=TaskStatus.Running
                             )
@@ -250,8 +232,7 @@ class Worker:
                     await self.runners[self._task_to_runner_id(task)].start_task(task)
 
     def shutdown(self):
-        if self._tg:
-            self._tg.cancel_scope.cancel()
+        self._tg.cancel_scope.cancel()
 
     def _task_to_runner_id(self, task: Task):
         instance = self.state.instances[task.instance_id]
@@ -268,24 +249,24 @@ class Worker:
         match msg.connection_type:
             case ConnectionMessageType.Connected:
                 return TopologyEdgeCreated(
-                    edge=Connection(
-                        local_node_id=self.node_id,
-                        send_back_node_id=msg.node_id,
-                        send_back_multiaddr=Multiaddr(
+                    source=self.node_id,
+                    sink=msg.node_id,
+                    edge=SocketConnection(
+                        sink_multiaddr=Multiaddr(
                             address=f"/ip4/{msg.remote_ipv4}/tcp/{msg.remote_tcp_port}"
                         ),
-                    )
+                    ),
                 )
 
             case ConnectionMessageType.Disconnected:
                 return TopologyEdgeDeleted(
-                    edge=Connection(
-                        local_node_id=self.node_id,
-                        send_back_node_id=msg.node_id,
-                        send_back_multiaddr=Multiaddr(
+                    source=self.node_id,
+                    sink=msg.node_id,
+                    edge=SocketConnection(
+                        sink_multiaddr=Multiaddr(
                             address=f"/ip4/{msg.remote_ipv4}/tcp/{msg.remote_tcp_port}"
                         ),
-                    )
+                    ),
                 )
 
     async def _nack_request(self, since_idx: int) -> None:
@@ -334,7 +315,6 @@ class Worker:
             event_sender=self.event_sender.clone(),
         )
         self.runners[task.bound_instance.bound_runner_id] = runner
-        assert self._tg
         self._tg.start_soon(runner.run)
         return runner
 
@@ -351,7 +331,7 @@ class Worker:
                 initial_progress
             ),
         )
-        self.download_status[task.shard_metadata.model_meta.model_id] = status
+        self.download_status[task.shard_metadata] = status
         self.event_sender.send_nowait(NodeDownloadProgress(download_progress=status))
 
         last_progress_time = 0.0
@@ -365,7 +345,7 @@ class Worker:
             nonlocal last_progress_time
             if progress.status == "complete":
                 status = DownloadCompleted(shard_metadata=shard, node_id=self.node_id)
-                self.download_status[shard.model_meta.model_id] = status
+                self.download_status[shard] = status
                 # Footgun!
                 self.event_sender.send_nowait(
                     NodeDownloadProgress(download_progress=status)
@@ -386,14 +366,13 @@ class Worker:
                         progress
                     ),
                 )
-                self.download_status[shard.model_meta.model_id] = status
+                self.download_status[shard] = status
                 self.event_sender.send_nowait(
                     NodeDownloadProgress(download_progress=status)
                 )
                 last_progress_time = current_time()
 
         self.shard_downloader.on_progress(download_progress_callback)
-        assert self._tg
         self._tg.start_soon(self.shard_downloader.ensure_shard, task.shard_metadata)
 
     async def _forward_events(self) -> None:
@@ -416,70 +395,35 @@ class Worker:
         while True:
             # TODO: EdgeDeleted
             edges = set(self.state.topology.list_connections())
-            conns = await check_reachable(self.state.topology, self.node_id)
+            conns = await check_reachable(
+                self.node_id, self.state.topology, self.state.node_profiles
+            )
             for nid in conns:
                 for ip in conns[nid]:
-                    if "127.0.0.1" in ip or "localhost" in ip:
-                        logger.warning(
-                            f"Loopback connection should not happen: {ip=} for {nid=}"
-                        )
-
-                    edge = Connection(
-                        local_node_id=self.node_id,
-                        send_back_node_id=nid,
+                    edge = SocketConnection(
                         # nonsense multiaddr
-                        send_back_multiaddr=Multiaddr(address=f"/ip4/{ip}/tcp/52415")
+                        sink_multiaddr=Multiaddr(address=f"/ip4/{ip}/tcp/52415")
                         if "." in ip
                         # nonsense multiaddr
                         else Multiaddr(address=f"/ip6/{ip}/tcp/52415"),
                     )
                     if edge not in edges:
                         logger.debug(f"ping discovered {edge=}")
-                        await self.event_sender.send(TopologyEdgeCreated(edge=edge))
+                        await self.event_sender.send(
+                            TopologyEdgeCreated(
+                                source=self.node_id, sink=nid, edge=edge
+                            )
+                        )
 
             for nid, conn in self.state.topology.out_edges(self.node_id):
-                if (
-                    nid not in conns
-                    or conn.send_back_multiaddr.ip_address not in conns.get(nid, set())
+                if not isinstance(conn, SocketConnection):
+                    continue
+                if nid not in conns or conn.sink_multiaddr.ip_address not in conns.get(
+                    nid, set()
                 ):
                     logger.debug(f"ping failed to discover {conn=}")
-                    await self.event_sender.send(TopologyEdgeDeleted(edge=conn))
+                    await self.event_sender.send(
+                        TopologyEdgeDeleted(source=self.node_id, sink=nid, edge=conn)
+                    )
 
             await anyio.sleep(10)
-
-    async def _emit_existing_download_progress(self) -> None:
-        try:
-            while True:
-                logger.info("Fetching and emitting existing download progress...")
-                async for (
-                    _,
-                    progress,
-                ) in self.shard_downloader.get_shard_download_status():
-                    if progress.status == "complete":
-                        status = DownloadCompleted(
-                            node_id=self.node_id, shard_metadata=progress.shard
-                        )
-                    elif progress.status in ["in_progress", "not_started"]:
-                        if progress.downloaded_bytes_this_session.in_bytes == 0:
-                            status = DownloadPending(
-                                node_id=self.node_id, shard_metadata=progress.shard
-                            )
-                        else:
-                            status = DownloadOngoing(
-                                node_id=self.node_id,
-                                shard_metadata=progress.shard,
-                                download_progress=map_repo_download_progress_to_download_progress_data(
-                                    progress
-                                ),
-                            )
-                    else:
-                        continue
-
-                    self.download_status[progress.shard.model_meta.model_id] = status
-                    await self.event_sender.send(
-                        NodeDownloadProgress(download_progress=status)
-                    )
-                logger.info("Done emitting existing download progress.")
-                await anyio.sleep(5 * 60)  # 5 minutes
-        except Exception as e:
-            logger.error(f"Error emitting existing download progress: {e}")

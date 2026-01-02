@@ -36,40 +36,12 @@ from exo.shared.types.worker.runners import (
     RunnerWarmingUp,
 )
 from exo.utils.channels import ClosedResourceError, MpReceiver, MpSender
-
-# Conditional MLX imports - only import if MLX is available and not disabled
-try:
-    import os
-    if os.getenv("MLX_DISABLE") == "1":
-        raise ImportError("MLX disabled by environment variable")
-    
-    from exo.worker.engines.mlx.generator.generate import mlx_generate, warmup_inference
-    from exo.worker.engines.mlx.utils_mlx import (
-        initialize_mlx,
-        load_mlx_items,
-        mlx_force_oom,
-    )
-    MLX_AVAILABLE = True
-except ImportError as e:
-    print(f"MLX not available: {e}")
-    MLX_AVAILABLE = False
-    
-    # Provide dummy implementations for CPU fallback
-    def mlx_generate(*args, **kwargs):
-        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
-    
-    def warmup_inference(*args, **kwargs):
-        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
-    
-    def initialize_mlx(*args, **kwargs):
-        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
-    
-    def load_mlx_items(*args, **kwargs):
-        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
-    
-    def mlx_force_oom(*args, **kwargs):
-        raise RuntimeError("MLX inference engine not available. This system requires CPU inference engine.")
-
+from exo.worker.engines.engine_init import (
+    generate_with_engine,
+    initialize_engine,
+    warmup_engine,
+)
+from exo.worker.engines.mlx.utils_mlx import mlx_force_oom
 from exo.worker.runner.bootstrap import logger
 
 
@@ -78,22 +50,6 @@ def main(
     event_sender: MpSender[Event],
     task_receiver: MpReceiver[Task],
 ):
-    # Check if we're trying to use MLX when it's not available
-    # Only exit if we're specifically configured to use MLX but it's unavailable
-    import os
-    inference_engine = os.getenv("EXO_INFERENCE_ENGINE", "mlx")  # Default was MLX
-    
-    if not MLX_AVAILABLE and inference_engine == "mlx":
-        import sys
-        import platform
-        logger.error(f"MLX inference engine is not available on {platform.system()}. "
-                    f"This version of EXO requires MLX which only works on macOS. "
-                    f"Please use a version with CPU inference support or run on macOS.")
-        sys.exit(1)
-    elif not MLX_AVAILABLE:
-        # MLX not available but we're using a different inference engine - that's fine
-        logger.info(f"MLX not available, using {inference_engine} inference engine")
-    
     instance, runner_id, shard_metadata = (
         bound_instance.instance,
         bound_instance.bound_runner_id,
@@ -137,7 +93,8 @@ def main(
                                 runner_id=runner_id, runner_status=current_status
                             )
                         )
-                        group = initialize_mlx(bound_instance)
+                        # Initialize engine (will handle MLX group setup if needed)
+                        group = initialize_engine(bound_instance, connect_only=True)
 
                         logger.info("runner connected")
                         current_status = RunnerConnected()
@@ -155,9 +112,7 @@ def main(
                             )
                         )
 
-                        model, tokenizer, sampler = load_mlx_items(
-                            bound_instance, group
-                        )
+                        model, tokenizer, sampler = initialize_engine(bound_instance)
 
                         current_status = RunnerLoaded()
                         logger.info("runner loaded")
@@ -174,11 +129,10 @@ def main(
                         )
 
                         logger.info(f"warming up inference for instance: {instance}")
-                        toks = warmup_inference(
+                        toks = warmup_engine(
                             model=model,
                             tokenizer=tokenizer,
                             sampler=sampler,
-                            # kv_prefix_cache=kv_prefix_cache,  # supply for warmup-time prefix caching
                         )
                         logger.info(f"warmed up by generating {toks} tokens")
                         logger.info(
@@ -203,8 +157,8 @@ def main(
                         assert task_params.messages[0].content is not None
                         _check_for_debug_prompts(task_params.messages[0].content)
 
-                        # Generate responses using the actual MLX generation
-                        for response in mlx_generate(
+                        # Generate responses using the selected engine
+                        for response in generate_with_engine(
                             model=model,
                             tokenizer=tokenizer,
                             sampler=sampler,
