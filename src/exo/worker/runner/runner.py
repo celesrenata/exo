@@ -41,8 +41,15 @@ from exo.worker.engines.engine_init import (
     initialize_engine,
     warmup_engine,
 )
-from exo.worker.engines.mlx.utils_mlx import mlx_force_oom
 from exo.worker.runner.bootstrap import logger
+
+# Conditional import for MLX utilities (only needed for testing)
+try:
+    from exo.worker.engines.mlx.utils_mlx import mlx_force_oom
+except ImportError:
+    def mlx_force_oom():
+        """Fallback function when MLX is not available"""
+        raise RuntimeError("MLX not available - cannot force OOM")
 
 
 def main(
