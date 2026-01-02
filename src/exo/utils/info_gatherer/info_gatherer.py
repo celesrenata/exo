@@ -134,6 +134,35 @@ class LinuxSystemMetrics(TaggedModel):
         return cls(system_profile=system_profile, memory=memory, friendly_name=friendly_name)
 
 
+class EngineInformation(TaggedModel):
+    """Engine and inference capability information"""
+    
+    available_engines: list[str]
+    selected_engine: str
+    mlx_available: bool
+    torch_available: bool
+    cpu_available: bool
+    ipex_available: bool = False
+    intel_gpu_count: int = 0
+    intel_gpu_memory: int = 0
+
+    @classmethod
+    async def gather(cls) -> Self:
+        from exo.worker.engines.engine_utils import get_engine_info
+        
+        engine_info = get_engine_info()
+        return cls(
+            available_engines=engine_info.get("available_engines", []),
+            selected_engine=engine_info.get("selected_engine", "unknown"),
+            mlx_available=engine_info.get("mlx_available", False),
+            torch_available=engine_info.get("torch_available", False),
+            cpu_available=engine_info.get("cpu_available", False),
+            ipex_available=engine_info.get("ipex_available", False),
+            intel_gpu_count=engine_info.get("intel_gpu_count", 0),
+            intel_gpu_memory=engine_info.get("intel_gpu_memory", 0),
+        )
+
+
 class IntelGPUMetrics(TaggedModel):
     """Intel GPU monitoring metrics"""
     
