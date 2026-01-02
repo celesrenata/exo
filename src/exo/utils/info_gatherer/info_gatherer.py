@@ -296,7 +296,7 @@ class InfoGatherer:
         
         while True:
             try:
-                metrics = LinuxSystemMetrics.gather()
+                metrics = await LinuxSystemMetrics.gather()
                 await self.info_sender.send(metrics)
             except Exception as e:
                 logger.warning(f"Failed to gather Linux system metrics: {e}")
