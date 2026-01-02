@@ -318,7 +318,7 @@ EOF
         };
     in
     {
-      # NixOS module
+      # NixOS module - moved to top level
       nixosModules.default = { config, lib, pkgs, ... }:
         with lib;
         let
