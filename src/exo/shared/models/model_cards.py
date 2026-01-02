@@ -13,7 +13,7 @@ class ModelCard(CamelCaseModel):
 
 
 MODEL_CARDS: dict[str, ModelCard] = {
-    # CPU-compatible models (PyTorch/Transformers) - using working models for now
+    # CPU-compatible models (PyTorch/Transformers) - CausalLM models only
     "dialogpt-medium-cpu": ModelCard(
         short_id="dialogpt-medium-cpu",
         model_id=ModelId("microsoft/DialoGPT-medium"),
@@ -56,21 +56,6 @@ MODEL_CARDS: dict[str, ModelCard] = {
             storage_size=Memory.from_mb(724),
             n_layers=24,
             hidden_size=960,
-            supports_tensor=True,
-        ),
-    ),
-    "blenderbot-small-cpu": ModelCard(
-        short_id="blenderbot-small-cpu",
-        model_id=ModelId("facebook/blenderbot_small-90M"),
-        name="BlenderBot Small (CPU)",
-        description="""Small conversational model for CPU inference.""",
-        tags=["cpu", "tiny"],
-        metadata=ModelMetadata(
-            model_id=ModelId("facebook/blenderbot_small-90M"),
-            pretty_name="BlenderBot Small (CPU)",
-            storage_size=Memory.from_mb(350),
-            n_layers=8,
-            hidden_size=512,
             supports_tensor=True,
         ),
     ),
