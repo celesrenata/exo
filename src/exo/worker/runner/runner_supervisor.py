@@ -10,6 +10,7 @@ import anyio
 from anyio import (
     BrokenResourceError,
     ClosedResourceError,
+    EndOfStream,
     create_task_group,
     to_thread,
 )
@@ -982,78 +983,97 @@ class RunnerSupervisor:
 
         with self._ev_recv as events:
             try:
-                async for event in events:
-                    # Check if shutdown is in progress
-                    if self._shutdown_in_progress:
-                        logger.debug(
-                            f"Stopping event forwarding due to shutdown for runner {self._runner_id}"
-                        )
-                        break
-
-                    if isinstance(event, RunnerStatusUpdated):
-                        self.status = event.runner_status
-                        logger.debug(
-                            f"Runner {self._runner_id} status updated: {event.runner_status}"
-                        )
-
-                    if isinstance(event, TaskAcknowledged):
-                        task_event = self.pending.pop(event.task_id, None)
-                        if task_event:
-                            task_event.set()
-                        logger.debug(
-                            f"Task {event.task_id} acknowledged by runner {self._runner_id}"
-                        )
-                        continue
-
+                while not self._shutdown_in_progress:
                     try:
-                        await self._event_sender.send(event)
-                    except Exception as e:
-                        # Handle event forwarding errors
+                        # Use explicit receive with proper exception handling for race conditions
+                        event = await events.receive_async()
+                        
+                        # Double-check shutdown status after receiving event
+                        if self._shutdown_in_progress:
+                            logger.debug(
+                                f"Stopping event forwarding due to shutdown for runner {self._runner_id}"
+                            )
+                            break
+
+                        if isinstance(event, RunnerStatusUpdated):
+                            self.status = event.runner_status
+                            logger.debug(
+                                f"Runner {self._runner_id} status updated: {event.runner_status}"
+                            )
+
+                        if isinstance(event, TaskAcknowledged):
+                            task_event = self.pending.pop(event.task_id, None)
+                            if task_event:
+                                task_event.set()
+                            logger.debug(
+                                f"Task {event.task_id} acknowledged by runner {self._runner_id}"
+                            )
+                            continue
+
+                        try:
+                            await self._event_sender.send(event)
+                        except Exception as e:
+                            # Handle event forwarding errors
+                            recovery_action = await self._error_handler.handle_error(
+                                error=e,
+                                component="RunnerSupervisor",
+                                operation="event_forward",
+                                runner_id=self._runner_id,
+                                additional_info={"event_type": type(event).__name__},
+                            )
+
+                            if recovery_action == RecoveryAction.RETRY:
+                                # Implement retry logic for event forwarding
+                                try:
+                                    await self._error_handler.retry_with_backoff(
+                                        self._event_sender.send, "event_forward", event
+                                    )
+                                except Exception as retry_error:
+                                    logger.error(
+                                        f"Event forwarding retry failed for runner {self._runner_id}: {retry_error}"
+                                    )
+                            else:
+                                logger.error(
+                                    f"Error forwarding event from runner {self._runner_id}: {e}"
+                                )
+                            # Continue processing other events
+
+                    except (ClosedResourceError, BrokenResourceError) as e:
+                        logger.info(
+                            f"Event channel closed for runner {self._runner_id}, checking runner status"
+                        )
+
+                        # Handle resource errors with error handler
                         recovery_action = await self._error_handler.handle_error(
                             error=e,
                             component="RunnerSupervisor",
-                            operation="event_forward",
+                            operation="event_forwarding",
                             runner_id=self._runner_id,
-                            additional_info={"event_type": type(event).__name__},
                         )
 
-                        if recovery_action == RecoveryAction.RETRY:
-                            # Implement retry logic for event forwarding
-                            try:
-                                await self._error_handler.retry_with_backoff(
-                                    self._event_sender.send, "event_forward", event
-                                )
-                            except Exception as retry_error:
-                                logger.error(
-                                    f"Event forwarding retry failed for runner {self._runner_id}: {retry_error}"
-                                )
-                        else:
-                            logger.error(
-                                f"Error forwarding event from runner {self._runner_id}: {e}"
+                        await self._check_runner(e)
+
+                        # Set all pending task events to avoid hanging
+                        for task_id, task_event in self.pending.items():
+                            task_event.set()
+                            logger.debug(
+                                f"Released pending task {task_id} due to channel closure"
                             )
-                        # Continue processing other events
+                        
+                        # Break out of the event loop when channel is closed
+                        break
 
-            except (ClosedResourceError, BrokenResourceError) as e:
-                logger.info(
-                    f"Event channel closed for runner {self._runner_id}, checking runner status"
-                )
-
-                # Handle resource errors with error handler
-                recovery_action = await self._error_handler.handle_error(
-                    error=e,
-                    component="RunnerSupervisor",
-                    operation="event_forwarding",
-                    runner_id=self._runner_id,
-                )
-
-                await self._check_runner(e)
-
-                # Set all pending task events to avoid hanging
-                for task_id, task_event in self.pending.items():
-                    task_event.set()
-                    logger.debug(
-                        f"Released pending task {task_id} due to channel closure"
-                    )
+                    except EndOfStream:
+                        logger.debug(
+                            f"End of stream reached for runner {self._runner_id}, stopping event forwarding"
+                        )
+                        # Set all pending task events
+                        for task_id, task_event in self.pending.items():
+                            task_event.set()
+                            logger.debug(
+                                f"Released pending task {task_id} due to end of stream"
+                            )
+                        break
 
             except Exception as e:
                 logger.error(
