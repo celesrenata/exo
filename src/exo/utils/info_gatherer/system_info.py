@@ -1,6 +1,7 @@
 import socket
 import sys
 from subprocess import CalledProcessError
+from typing import Any
 
 import psutil
 from anyio import run_process
@@ -106,3 +107,74 @@ async def get_model_and_chip() -> tuple[str, str]:
             chip = "Unknown CPU"
 
     return (model, chip)
+
+
+async def get_intel_gpu_info() -> dict[str, Any]:
+    """Get Intel GPU information."""
+    info = {
+        "intel_gpu_available": False,
+        "intel_gpu_count": 0,
+        "intel_gpu_memory": 0,
+        "intel_gpu_devices": [],
+        "ipex_version": None,
+        "intel_gpu_driver_version": None,
+    }
+    
+    try:
+        import intel_extension_for_pytorch as ipex
+        import torch
+        
+        info["ipex_version"] = ipex.__version__
+        
+        if hasattr(torch, 'xpu') and torch.xpu.is_available():
+            info["intel_gpu_available"] = True
+            info["intel_gpu_count"] = torch.xpu.device_count()
+            
+            # Get information for each Intel GPU device
+            for i in range(info["intel_gpu_count"]):
+                try:
+                    props = torch.xpu.get_device_properties(i)
+                    device_info = {
+                        "device_id": i,
+                        "name": props.name if hasattr(props, 'name') else f"Intel GPU {i}",
+                        "total_memory": props.total_memory if hasattr(props, 'total_memory') else 0,
+                        "max_compute_units": props.max_compute_units if hasattr(props, 'max_compute_units') else 0,
+                    }
+                    info["intel_gpu_devices"].append(device_info)
+                    
+                    # Use first device memory as primary memory info
+                    if i == 0 and hasattr(props, 'total_memory'):
+                        info["intel_gpu_memory"] = props.total_memory
+                        
+                except Exception:
+                    # If we can't get device properties, still record the device exists
+                    info["intel_gpu_devices"].append({
+                        "device_id": i,
+                        "name": f"Intel GPU {i}",
+                        "total_memory": 0,
+                        "max_compute_units": 0,
+                    })
+                    
+    except ImportError:
+        # IPEX not available
+        pass
+    except Exception:
+        # Other errors in Intel GPU detection
+        pass
+    
+    # Try to get Intel GPU driver version from system
+    if info["intel_gpu_available"]:
+        try:
+            if sys.platform == "linux":
+                # Try to get Intel GPU driver version from modinfo
+                process = await run_process(["modinfo", "i915"])
+                output = process.stdout.decode().strip()
+                for line in output.split("\n"):
+                    if line.startswith("version:"):
+                        info["intel_gpu_driver_version"] = line.split(": ")[1].strip()
+                        break
+        except (CalledProcessError, FileNotFoundError):
+            # Driver version detection failed, not critical
+            pass
+    
+    return info

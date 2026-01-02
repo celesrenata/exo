@@ -49,7 +49,7 @@ const sidebarVisible = $derived(chatSidebarVisible());
 	// Instance launch state
 	let models = $state<Array<{id: string, name?: string, storage_size_megabytes?: number}>>([]);
 	let selectedSharding = $state<'Pipeline' | 'Tensor'>('Pipeline');
-	type InstanceMeta = 'MlxRing' | 'MlxIbv' | 'MlxJaccl' | 'CpuRing' | 'CudaRing';
+	type InstanceMeta = 'MlxRing' | 'MlxIbv' | 'MlxJaccl' | 'CpuRing' | 'CudaRing' | 'IpexRing';
 	
 	let selectedInstanceType = $state<InstanceMeta>('MlxRing');
 	let selectedMinNodes = $state<number>(1);
@@ -189,6 +189,8 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 			? runtime === 'CpuRing'
 			: selectedInstanceType === 'CudaRing'
 			? runtime === 'CudaRing'
+			: selectedInstanceType === 'IpexRing'
+			? runtime === 'IpexRing'
 			: false;
 
 	// Helper to check if a model can be launched (has valid placement with >= minNodes)
@@ -243,11 +245,14 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 			case 'CudaRing':
 				// CUDA Ring should show CUDA-optimized models (or CPU models as fallback)
 				return tags.includes('cuda') || tags.includes('cpu');
+			case 'IpexRing':
+				// Intel IPEX Ring should show Intel GPU-optimized models (or CPU models as fallback)
+				return tags.includes('ipex') || tags.includes('intel') || tags.includes('cpu');
 			case 'MlxRing':
 			case 'MlxIbv':
 			case 'MlxJaccl':
-				// MLX instance types should show MLX-optimized models (no cpu/cuda tags)
-				return !tags.includes('cpu') && !tags.includes('cuda');
+				// MLX instance types should show MLX-optimized models (no cpu/cuda/ipex tags)
+				return !tags.includes('cpu') && !tags.includes('cuda') && !tags.includes('ipex') && !tags.includes('intel');
 			default:
 				return true;
 		}
@@ -787,6 +792,7 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 		else if (instanceTag === 'MlxIbvInstance' || instanceTag === 'MlxJacclInstance') instanceType = 'MLX RDMA';
 		else if (instanceTag === 'CpuRingInstance') instanceType = 'CPU Ring';
 		else if (instanceTag === 'CudaRingInstance') instanceType = 'CUDA Ring';
+		else if (instanceTag === 'IpexRingInstance') instanceType = 'Intel IPEX';
 		
 		const inst = instance as { 
 			shardAssignments?: { 
@@ -931,7 +937,7 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 		}
 
 		// Ring – derive ring order from pipeline shard ranks and pick host IPs from hostsByNode
-		if (instanceTag === 'MlxRingInstance' || instanceTag === 'CpuRingInstance' || instanceTag === 'CudaRingInstance') {
+		if (instanceTag === 'MlxRingInstance' || instanceTag === 'CpuRingInstance' || instanceTag === 'CudaRingInstance' || instanceTag === 'IpexRingInstance') {
 			const ordered = getOrderedRunnerNodes(instance as Record<string, unknown>, 'Pipeline');
 			const hostsByNode = (instance as { hostsByNode?: Record<string, Array<{ ip: string; port: number }>> }).hostsByNode || {};
 			const rows: Array<{ from: string; to: string; ip: string; ifaceLabel: string; missingIface: boolean }> = [];
@@ -1432,7 +1438,7 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 							<div class="flex-1 h-px bg-gradient-to-r from-exo-yellow/30 to-transparent"></div>
 							<span class="text-sm text-white/70 font-mono">{sortedModels().length} models</span>
 							<span class="text-xs text-exo-yellow/70 font-mono px-2 py-0.5 bg-exo-yellow/10 rounded border border-exo-yellow/30">
-								{selectedInstanceType === 'CpuRing' ? 'CPU' : selectedInstanceType === 'CudaRing' ? 'CUDA' : selectedInstanceType === 'MlxRing' ? 'MLX' : 'MLX'}
+								{selectedInstanceType === 'CpuRing' ? 'CPU' : selectedInstanceType === 'CudaRing' ? 'CUDA' : selectedInstanceType === 'IpexRing' ? 'IPEX' : selectedInstanceType === 'MlxRing' ? 'MLX' : 'MLX'}
 							</span>
 						</div>
 						
@@ -1602,6 +1608,17 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 											{/if}
 										</span>
 										CUDA Ring
+									</button>
+									<button 
+										onclick={() => selectedInstanceType = 'IpexRing'}
+										class="flex items-center gap-2 py-2 px-4 text-sm font-mono border rounded transition-all duration-200 cursor-pointer {selectedInstanceType === 'IpexRing' ? 'bg-transparent text-exo-yellow border-exo-yellow' : 'bg-transparent text-white/70 border-exo-medium-gray/50 hover:border-exo-yellow/50'}"
+									>
+										<span class="w-4 h-4 rounded-full border-2 flex items-center justify-center {selectedInstanceType === 'IpexRing' ? 'border-exo-yellow' : 'border-exo-medium-gray'}">
+											{#if selectedInstanceType === 'IpexRing'}
+												<span class="w-2 h-2 rounded-full bg-exo-yellow"></span>
+											{/if}
+										</span>
+										Intel IPEX
 									</button>
 								</div>
 							</div>

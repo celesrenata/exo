@@ -1,0 +1,26 @@
+--- a/src/exo/worker/plan.py
++++ b/src/exo/worker/plan.py
+@@ -72,12 +72,20 @@ def _kill_runner(
+         if (instance_id := runner.bound_instance.instance.instance_id) not in instances:
+             return Shutdown(instance_id=instance_id, runner_id=runner_id)
+ 
+         for (
+             global_runner_id
+         ) in runner.bound_instance.instance.shard_assignments.node_to_runner.values():
+             if runner_id == global_runner_id:
+                 continue
+ 
+-            if isinstance(all_runners.get(global_runner_id, None), RunnerFailed):
++            peer_status = all_runners.get(global_runner_id, None)
++            
++            # Don't cascade shutdown if we're still in initialization phase
++            # This prevents a race condition where one runner fails during init
++            # and kills all other runners before they can complete initialization
++            if isinstance(peer_status, RunnerFailed):
++                if isinstance(runner.status, (RunnerIdle, RunnerConnecting)):
++                    continue  # Give initialization time to complete
++                    
+                 return Shutdown(
+                     instance_id=instance_id,
+                     runner_id=runner_id,
+                 )

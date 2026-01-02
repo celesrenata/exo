@@ -52,6 +52,12 @@ export interface NodeInfo {
 	mlx_available?: boolean;
 	torch_available?: boolean;
 	cpu_available?: boolean;
+	// Intel GPU information
+	ipex_available?: boolean;
+	intel_gpu_count?: number;
+	intel_gpu_memory?: number;
+	intel_gpu_temp?: number;
+	intel_gpu_usage?: number;
 }
 
 export interface TopologyEdge {
@@ -104,6 +110,12 @@ interface RawNodeProfile {
 	mlxAvailable?: boolean;
 	torchAvailable?: boolean;
 	cpuAvailable?: boolean;
+	// Intel GPU information
+	ipexAvailable?: boolean;
+	intelGpuCount?: number;
+	intelGpuMemory?: number;
+	intelGpuTemp?: number;
+	intelGpuUsage?: number;
 }
 
 interface RawTopologyNode {
@@ -160,7 +172,7 @@ export interface ModelDownloadStatus {
 export interface PlacementPreview {
 	model_id: string;
 	sharding: 'Pipeline' | 'Tensor';
-	instance_meta: 'MlxRing' | 'MlxIbv' | 'MlxJaccl' | 'CpuRing' | 'CudaRing';
+	instance_meta: 'MlxRing' | 'MlxIbv' | 'MlxJaccl' | 'CpuRing' | 'CudaRing' | 'IpexRing';
 	instance: unknown | null;
 	memory_delta_by_node: Record<string, number> | null;
 	error: string | null;
@@ -172,7 +184,7 @@ export interface PlacementPreviewResponse {
 
 interface RawStateResponse {
 	topology?: RawTopology;
-	instances?: Record<string, { MlxRingInstance?: Instance; MlxIbvInstance?: Instance; MlxJacclInstance?: Instance; CpuRingInstance?: Instance; CudaRingInstance?: Instance }>;
+	instances?: Record<string, { MlxRingInstance?: Instance; MlxIbvInstance?: Instance; MlxJacclInstance?: Instance; CpuRingInstance?: Instance; CudaRingInstance?: Instance; IpexRingInstance?: Instance }>;
 	runners?: Record<string, unknown>;
 	downloads?: Record<string, unknown[]>;
 	nodeProfiles?: RawNodeProfiles;
@@ -286,7 +298,13 @@ function transformTopology(raw: RawTopology, profiles?: RawNodeProfiles): Topolo
 			selected_engine: profile?.selectedEngine,
 			mlx_available: profile?.mlxAvailable,
 			torch_available: profile?.torchAvailable,
-			cpu_available: profile?.cpuAvailable
+			cpu_available: profile?.cpuAvailable,
+			// Include Intel GPU information
+			ipex_available: profile?.ipexAvailable,
+			intel_gpu_count: profile?.intelGpuCount,
+			intel_gpu_memory: profile?.intelGpuMemory,
+			intel_gpu_temp: profile?.intelGpuTemp,
+			intel_gpu_usage: profile?.intelGpuUsage
 		};
 	}
 
@@ -629,6 +647,7 @@ class AppStore {
 		else if (instanceTag === 'MlxIbvInstance' || instanceTag === 'MlxJacclInstance') instanceType = 'MLX RDMA';
 		else if (instanceTag === 'CpuRingInstance') instanceType = 'CPU Ring';
 		else if (instanceTag === 'CudaRingInstance') instanceType = 'CUDA Ring';
+		else if (instanceTag === 'IpexRingInstance') instanceType = 'Intel IPEX';
 
 		let sharding: string | null = null;
 		const inst = instance as { shardAssignments?: { runnerToShard?: Record<string, unknown> } };

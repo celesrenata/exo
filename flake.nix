@@ -32,6 +32,45 @@
           python = pkgs.python313;
           rustToolchain = fenixToolchain system;
 
+          # Intel GPU detection function for runtime use
+          detectIntelGpu = pkgs.writeShellScript "detect-intel-gpu" ''
+            # Check for Intel GPU devices
+            if [ -d "/sys/class/drm" ]; then
+              for card in /sys/class/drm/card*; do
+                if [ -f "$card/device/vendor" ]; then
+                  vendor=$(cat "$card/device/vendor" 2>/dev/null || echo "")
+                  if [ "$vendor" = "0x8086" ]; then
+                    echo "intel-gpu-detected"
+                    exit 0
+                  fi
+                fi
+              done
+            fi
+            
+            # Check for Intel GPU via lspci if available
+            if command -v lspci >/dev/null 2>&1; then
+              if lspci | grep -i "intel.*graphics\|intel.*display" >/dev/null 2>&1; then
+                echo "intel-gpu-detected"
+                exit 0
+              fi
+            fi
+            
+            echo "no-intel-gpu"
+            exit 1
+          '';
+
+          # Automatic accelerator selection based on hardware (best effort)
+          autoAccelerator = 
+            if accelerator != "cpu" then accelerator
+            else if pkgs.stdenv.isDarwin then "mlx"
+            else if pkgs.stdenv.isLinux then
+              # Default to CPU on Linux, but allow Intel GPU detection at runtime
+              "cpu"
+            else "cpu";
+
+          # Use the specified or auto-detected accelerator
+          finalAccelerator = autoAccelerator;
+
           # Build Rust bindings as a separate derivation
           rustBindings =
             let
@@ -113,7 +152,7 @@
 
         in
         python.pkgs.buildPythonApplication rec {
-          pname = "exo-${accelerator}";
+          pname = "exo-${finalAccelerator}";
           version = "0.1.0";
           format = "other"; # Not a standard setuptools package
 
@@ -142,6 +181,15 @@
             echo "Adding openai_harmony stub..."
             cp ${./src/openai_harmony.py} src/openai_harmony.py
             
+            ${pkgs.lib.optionalString (finalAccelerator == "intel") ''
+              # Intel GPU specific optimizations
+              echo "Applying Intel GPU optimizations..."
+              
+              # Add Intel GPU environment variables for build
+              export INTEL_GPU_BUILD=1
+              export IPEX_OPTIMIZE=1
+            ''}
+            
             echo "🔧 POST-PATCH PHASE END"
             echo "======================"
           '';
@@ -151,11 +199,37 @@
             python.pkgs.wheel
             python.pkgs.pip
             python.pkgs.build
+          ] ++ pkgs.lib.optionals (finalAccelerator == "intel") [
+            # Intel GPU build dependencies
+            pkg-config
+          ];
+
+          buildInputs = with pkgs; [
+            # Base dependencies
+          ] ++ pkgs.lib.optionals (finalAccelerator == "intel") [
+            # Intel GPU runtime dependencies
+            intel-media-driver
+            intel-compute-runtime
+            level-zero
+            # Intel GPU development libraries
+            intel-media-sdk
           ];
 
           buildPhase = ''
             echo "🔨 BUILD PHASE START"
             echo "==================="
+            
+            ${pkgs.lib.optionalString (finalAccelerator == "intel") ''
+              # Set Intel GPU build environment
+              export INTEL_GPU_RUNTIME_PATH="${pkgs.intel-compute-runtime}/lib"
+              export LEVEL_ZERO_PATH="${pkgs.level-zero}/lib"
+              export INTEL_MEDIA_DRIVER_PATH="${pkgs.intel-media-driver}/lib"
+              
+              echo "Intel GPU build environment configured"
+              echo "INTEL_GPU_RUNTIME_PATH: $INTEL_GPU_RUNTIME_PATH"
+              echo "LEVEL_ZERO_PATH: $LEVEL_ZERO_PATH"
+              echo "INTEL_MEDIA_DRIVER_PATH: $INTEL_MEDIA_DRIVER_PATH"
+            ''}
             
             # Install the Python package
             python -m pip install --no-deps --no-build-isolation --target $out/lib/python3.13/site-packages .
@@ -262,6 +336,13 @@
                         mkdir -p $out/share/exo
                         cp -r ${dashboard} $out/share/exo/dashboard
                         echo "Dashboard installed successfully"
+                        
+                        # Install Intel GPU detection script
+                        echo "Installing Intel GPU detection script..."
+                        mkdir -p $out/bin
+                        cp ${detectIntelGpu} $out/bin/detect-intel-gpu
+                        chmod +x $out/bin/detect-intel-gpu
+                        echo "Intel GPU detection script installed"
 
                         echo "📦 INSTALL PHASE END"
                         echo "==================="
@@ -299,11 +380,15 @@
             tokenizers
             safetensors
             accelerate
-          ] ++ pkgs.lib.optionals (accelerator == "cuda") [
+          ] ++ pkgs.lib.optionals (finalAccelerator == "cuda") [
             # CUDA packages would go here
-          ] ++ pkgs.lib.optionals (accelerator == "rocm") [
+          ] ++ pkgs.lib.optionals (finalAccelerator == "rocm") [
             # ROCm packages would go here  
-          ] ++ pkgs.lib.optionals (accelerator == "mlx") [
+          ] ++ pkgs.lib.optionals (finalAccelerator == "intel") [
+            # Intel GPU dependencies for IPEX support
+            # Note: intel-extension-for-pytorch not available in nixpkgs yet
+            # Will need to be built from source or added when available
+          ] ++ pkgs.lib.optionals (finalAccelerator == "mlx") [
             # MLX packages - conditionally include based on platform
           ];
 
@@ -341,7 +426,14 @@
           postFixup = ''
             # Create wrapper that sets dashboard path
             wrapProgram $out/bin/exo \
-              --set DASHBOARD_DIR "$out/share/exo/dashboard"
+              --set DASHBOARD_DIR "$out/share/exo/dashboard" \
+              ${pkgs.lib.optionalString (finalAccelerator == "intel") ''
+                --prefix LD_LIBRARY_PATH : "${pkgs.intel-compute-runtime}/lib" \
+                --prefix LD_LIBRARY_PATH : "${pkgs.level-zero}/lib" \
+                --prefix LD_LIBRARY_PATH : "${pkgs.intel-media-driver}/lib" \
+                --set INTEL_GPU_RUNTIME_PATH "${pkgs.intel-compute-runtime}/lib" \
+                --set LEVEL_ZERO_LOADER_PATH "${pkgs.level-zero}/lib/libze_loader.so"
+              ''}
             echo "Wrapper script created"
           '';
 
@@ -409,13 +501,38 @@
               default = "exo";
               description = "Group to run EXO services";
             };
+
+            intelGpuSupport = mkOption {
+              type = types.bool;
+              default = cfg.accelerator == "intel";
+              description = "Enable Intel GPU support and device access";
+            };
+
+            intelGpuDevices = mkOption {
+              type = types.listOf types.str;
+              default = [ "/dev/dri/renderD128" "/dev/dri/card0" ];
+              description = "Intel GPU device paths to allow access to";
+            };
           };
 
           config = mkIf cfg.enable {
+            # Intel GPU hardware configuration
+            hardware.opengl = mkIf cfg.intelGpuSupport {
+              enable = true;
+              driSupport = true;
+              driSupport32Bit = true;
+              extraPackages = with pkgs; [
+                intel-media-driver
+                intel-compute-runtime
+                level-zero
+              ];
+            };
+
             users.users.${cfg.user} = {
               isSystemUser = true;
               group = cfg.group;
               description = "EXO system user";
+              extraGroups = mkIf (cfg.accelerator == "intel") [ "render" "video" ];
             };
 
             users.groups.${cfg.group} = { };
@@ -445,7 +562,20 @@
                 CacheDirectory = "exo";
                 LogsDirectory = "exo";
                 StateDirectory = "exo";
-              };
+              } // (if cfg.accelerator == "intel" then {
+                # Intel GPU device access permissions
+                DeviceAllow = [
+                  "/dev/dri rw"  # Intel GPU devices
+                  "char-drm rw"  # DRM devices
+                ] ++ map (device: "${device} rw") cfg.intelGpuDevices;
+                # Allow access to Intel GPU devices
+                PrivateDevices = false;
+                # Supplementary groups for Intel GPU access
+                SupplementaryGroups = [ "render" "video" ];
+              } else {
+                # Default device restrictions for non-Intel accelerators
+                PrivateDevices = true;
+              });
 
               environment = {
                 EXO_PORT = toString cfg.port;
@@ -463,6 +593,12 @@
                 # Force CPU inference and disable MLX when using CPU accelerator or MLX on Linux
                 EXO_ENGINE = "torch";
                 MLX_DISABLE = "1";
+              } else { }) // (if cfg.accelerator == "intel" then {
+                # Intel GPU specific environment variables
+                INTEL_DEVICE_PLUGINS_PATH = "${pkgs.intel-compute-runtime}/lib/intel-opencl";
+                LEVEL_ZERO_LOADER_PATH = "${pkgs.level-zero}/lib/libze_loader.so";
+                # Enable Intel GPU device access
+                INTEL_GPU_ENABLE = "1";
               } else { });
             };
 
@@ -474,6 +610,10 @@
               "d /var/lib/exo 0755 ${cfg.user} ${cfg.group} -"
               "d /var/log/exo 0755 ${cfg.user} ${cfg.group} -"
               "d /var/cache/exo 0755 ${cfg.user} ${cfg.group} -"
+            ] ++ pkgs.lib.optionals cfg.intelGpuSupport [
+              # Intel GPU cache directories
+              "d /var/cache/exo/intel-gpu 0755 ${cfg.user} ${cfg.group} -"
+              "d /var/lib/exo/intel-gpu 0755 ${cfg.user} ${cfg.group} -"
             ];
           };
         };
@@ -485,6 +625,19 @@
         exo-rocm = mkExoPackage { pkgs = final; system = final.system; accelerator = "rocm"; };
         exo-intel = mkExoPackage { pkgs = final; system = final.system; accelerator = "intel"; };
         exo-mlx = mkExoPackage { pkgs = final; system = final.system; accelerator = "mlx"; };
+        
+        # Smart package selection based on hardware detection
+        exo-auto = 
+          let
+            # Try to detect the best accelerator for the current system
+            autoAccelerator = 
+              if final.stdenv.isDarwin then "mlx"
+              else if final.stdenv.isLinux then
+                # On Linux, default to CPU but provide Intel option
+                "cpu"
+              else "cpu";
+          in
+          mkExoPackage { pkgs = final; system = final.system; accelerator = autoAccelerator; };
       };
     } //
     inputs.flake-utils.lib.eachSystem systems (
@@ -512,6 +665,14 @@
           exo-rocm = mkExoPackage { inherit pkgs system; accelerator = "rocm"; };
           exo-intel = mkExoPackage { inherit pkgs system; accelerator = "intel"; };
           exo-mlx = mkExoPackage { inherit pkgs system; accelerator = "mlx"; };
+          exo-auto = 
+            let
+              autoAccelerator = 
+                if pkgs.stdenv.isDarwin then "mlx"
+                else if pkgs.stdenv.isLinux then "cpu"
+                else "cpu";
+            in
+            mkExoPackage { inherit pkgs system; accelerator = autoAccelerator; };
         };
 
         formatter = treefmtEval.config.build.wrapper;

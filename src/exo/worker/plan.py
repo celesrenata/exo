@@ -78,7 +78,11 @@ def _kill_runner(
             if runner_id == global_runner_id:
                 continue
 
-            if isinstance(all_runners.get(global_runner_id, None), RunnerFailed):
+            peer_status = all_runners.get(global_runner_id, None)
+            if isinstance(peer_status, RunnerFailed):
+                # Don't cascade shutdown during initialization to prevent race condition
+                if isinstance(runner.status, (RunnerIdle, RunnerConnecting)):
+                    continue
                 return Shutdown(
                     instance_id=instance_id,
                     runner_id=runner_id,

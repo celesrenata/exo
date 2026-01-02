@@ -26,7 +26,7 @@ from exo.utils.channels import Sender
 from exo.utils.pydantic_ext import TaggedModel
 
 from .macmon import MacmonMetrics
-from .system_info import get_friendly_name, get_model_and_chip, get_network_interfaces
+from .system_info import get_friendly_name, get_model_and_chip, get_network_interfaces, get_intel_gpu_info
 
 IS_DARWIN = sys.platform == "darwin"
 
@@ -134,7 +134,73 @@ class LinuxSystemMetrics(TaggedModel):
         return cls(system_profile=system_profile, memory=memory, friendly_name=friendly_name)
 
 
-class EngineInformation(TaggedModel):
+class IntelGPUMetrics(TaggedModel):
+    """Intel GPU monitoring metrics"""
+    
+    intel_gpu_available: bool
+    intel_gpu_count: int
+    intel_gpu_memory: int
+    intel_gpu_utilization: float
+    intel_gpu_memory_used: int
+    intel_gpu_temperature: float
+    intel_gpu_power: float
+    ipex_version: str | None
+
+    @classmethod
+    async def gather(cls) -> Self:
+        """Gather Intel GPU metrics"""
+        intel_info = await get_intel_gpu_info()
+        
+        # Get runtime metrics if Intel GPU is available
+        utilization = 0.0
+        memory_used = 0
+        temperature = 0.0
+        power = 0.0
+        
+        if intel_info.get("intel_gpu_available", False):
+            try:
+                import intel_extension_for_pytorch as ipex
+                import torch
+                
+                if hasattr(torch, 'xpu') and torch.xpu.is_available():
+                    device_count = torch.xpu.device_count()
+                    
+                    # Get metrics for first device (primary GPU)
+                    if device_count > 0:
+                        try:
+                            # Get memory usage
+                            memory_stats = torch.xpu.memory_stats(0)
+                            if memory_stats:
+                                memory_used = memory_stats.get("allocated_bytes.all.current", 0)
+                            
+                            # Try to get utilization (this may not be available on all systems)
+                            # Intel GPU utilization monitoring is limited compared to NVIDIA
+                            # We'll set a placeholder value for now
+                            utilization = 0.0
+                            
+                            # Temperature and power monitoring would require additional Intel GPU tools
+                            # These are placeholders for now
+                            temperature = 0.0
+                            power = 0.0
+                            
+                        except Exception:
+                            # If we can't get runtime metrics, use defaults
+                            pass
+                            
+            except ImportError:
+                # IPEX not available
+                pass
+        
+        return cls(
+            intel_gpu_available=intel_info.get("intel_gpu_available", False),
+            intel_gpu_count=intel_info.get("intel_gpu_count", 0),
+            intel_gpu_memory=intel_info.get("intel_gpu_memory", 0),
+            intel_gpu_utilization=utilization,
+            intel_gpu_memory_used=memory_used,
+            intel_gpu_temperature=temperature,
+            intel_gpu_power=power,
+            ipex_version=intel_info.get("ipex_version"),
+        )
     """Engine and inference capability information"""
     
     available_engines: list[str]
@@ -142,18 +208,27 @@ class EngineInformation(TaggedModel):
     mlx_available: bool
     torch_available: bool
     cpu_available: bool
+    ipex_available: bool
+    intel_gpu_count: int
+    intel_gpu_memory: int
 
     @classmethod
     async def gather(cls) -> Self:
         from exo.worker.engines.engine_utils import get_engine_info
+        from exo.utils.info_gatherer.system_info import get_intel_gpu_info
         
         engine_info = get_engine_info()
+        intel_gpu_info = await get_intel_gpu_info()
+        
         return cls(
             available_engines=engine_info.get("available_engines", []),
             selected_engine=engine_info.get("selected_engine", "unknown"),
             mlx_available=engine_info.get("mlx_available", False),
             torch_available=engine_info.get("torch_available", False),
             cpu_available=engine_info.get("cpu_available", False),
+            ipex_available=intel_gpu_info.get("intel_gpu_available", False),
+            intel_gpu_count=intel_gpu_info.get("intel_gpu_count", 0),
+            intel_gpu_memory=intel_gpu_info.get("intel_gpu_memory", 0),
         )
 
 
@@ -188,6 +263,7 @@ GatheredInfo = (
     | MiscData
     | StaticNodeInformation
     | EngineInformation
+    | IntelGPUMetrics
 )
 
 
@@ -199,6 +275,7 @@ class InfoGatherer:
     system_profiler_interval: float | None = 5 if IS_DARWIN else None
     memory_poll_rate: float | None = None if IS_DARWIN else 1
     macmon_interval: float | None = 1 if IS_DARWIN else None
+    intel_gpu_interval: float | None = 2  # Monitor Intel GPU every 2 seconds
     _tg: TaskGroup = field(init=False, default_factory=create_task_group)
 
     async def run(self):
@@ -213,6 +290,7 @@ class InfoGatherer:
             tg.start_soon(self._watch_system_info)
             tg.start_soon(self._monitor_memory_usage)
             tg.start_soon(self._monitor_misc)
+            tg.start_soon(self._monitor_intel_gpu)
 
             nc = await NodeConfig.gather()
             if nc is not None:
@@ -302,6 +380,26 @@ class InfoGatherer:
                 logger.warning(f"Failed to gather Linux system metrics: {e}")
             
             await anyio.sleep(interval)
+
+    async def _monitor_intel_gpu(self):
+        """Monitor Intel GPU metrics periodically."""
+        if self.intel_gpu_interval is None:
+            return
+        
+        # Check if Intel GPU is available before starting monitoring
+        initial_info = await get_intel_gpu_info()
+        if not initial_info.get("intel_gpu_available", False):
+            # No Intel GPU available, skip monitoring
+            return
+        
+        while True:
+            try:
+                metrics = await IntelGPUMetrics.gather()
+                await self.info_sender.send(metrics)
+            except Exception as e:
+                logger.warning(f"Failed to gather Intel GPU metrics: {e}")
+            
+            await anyio.sleep(self.intel_gpu_interval)
 
     async def _monitor_macmon(self, macmon_path: str):
         if self.macmon_interval is None:
