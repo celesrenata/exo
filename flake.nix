@@ -186,6 +186,83 @@
                         cp $out/bin/exo $out/bin/exo-master
                         cp $out/bin/exo $out/bin/exo-worker
             
+                        # Install Rust bindings to the final package
+                        echo "Installing Rust bindings to final package..."
+                        
+                        BINDINGS_INSTALLED=false
+                        
+                        # Check if we have the wheel from rustBindings
+                        if [ -d "${rustBindings}" ]; then
+                          echo "Rust bindings directory found: ${rustBindings}"
+                          ls -la ${rustBindings}/
+                          
+                          for wheel in ${rustBindings}/*.whl; do
+                            if [ -f "$wheel" ]; then
+                              echo "Processing wheel: $wheel"
+                              
+                              # Create a temporary directory for extraction
+                              EXTRACT_DIR=$(mktemp -d)
+                              echo "DEBUG: Extract directory: $EXTRACT_DIR"
+                              cd "$EXTRACT_DIR"
+                              
+                              # Extract wheel and show contents
+                              echo "Extracting wheel..."
+                              ${pkgs.unzip}/bin/unzip -o "$wheel"
+                              echo "Extracted files:"
+                              find . -type f | head -20
+                              
+                              # Copy all extracted files
+                              if [ -d "exo_pyo3_bindings" ]; then
+                                echo "Copying exo_pyo3_bindings directory..."
+                                echo "DEBUG: Source contents:"
+                                ls -la exo_pyo3_bindings/
+                                cp -rv exo_pyo3_bindings $out/lib/python3.13/site-packages/
+                                BINDINGS_INSTALLED=true
+                                echo "DEBUG: Destination contents after copy:"
+                                ls -la $out/lib/python3.13/site-packages/exo_pyo3_bindings/ || echo "Directory not found"
+                              fi
+                              
+                              if [ -d "exo_pyo3_bindings-"*".dist-info" ]; then
+                                echo "Copying dist-info directory..."
+                                cp -rv exo_pyo3_bindings-*.dist-info $out/lib/python3.13/site-packages/
+                              fi
+                              
+                              echo "Final installation contents:"
+                              ls -la $out/lib/python3.13/site-packages/exo_pyo3_bindings/ || echo "Directory not found"
+                              
+                              # Cleanup
+                              rm -rf "$EXTRACT_DIR"
+                              break
+                            fi
+                          done
+                        fi
+                        
+                        # Create stub if bindings weren't installed successfully
+                        if [ "$BINDINGS_INSTALLED" = "false" ]; then
+                          echo "WARNING: No working Rust bindings found"
+                          echo "Creating stub exo_pyo3_bindings module..."
+                          mkdir -p $out/lib/python3.13/site-packages/exo_pyo3_bindings
+                          cat > $out/lib/python3.13/site-packages/exo_pyo3_bindings/__init__.py << 'EOF'
+            # Stub implementation for missing Rust bindings
+            class ConnectionUpdate:
+                pass
+
+            class ConnectionUpdateType:
+                Connected = "Connected"
+                Disconnected = "Disconnected"
+
+            # Add other required classes as stubs
+            __all__ = ["ConnectionUpdate", "ConnectionUpdateType"]
+            EOF
+                          echo "Stub module created successfully"
+                        fi
+                        
+                        # Install dashboard
+                        echo "Installing dashboard..."
+                        mkdir -p $out/share/exo
+                        cp -r ${dashboard} $out/share/exo/dashboard
+                        echo "Dashboard installed successfully"
+
                         echo "📦 INSTALL PHASE END"
                         echo "==================="
           '';
@@ -260,88 +337,16 @@
             echo "======================"
           '';
 
-          postInstall = ''
-            echo "📦 POST-INSTALL PHASE START"
-            echo "==========================="
-            
-            # Install Rust bindings to the final package
-            echo "Installing Rust bindings to final package..."
-            
-            # Check if we have the wheel from rustBindings
-            if [ -d "${rustBindings}" ]; then
-              echo "Rust bindings directory found: ${rustBindings}"
-              ls -la ${rustBindings}/
-              
-              for wheel in ${rustBindings}/*.whl; do
-                if [ -f "$wheel" ]; then
-                  echo "Processing wheel: $wheel"
-                  
-                  # Create a temporary directory for extraction
-                  EXTRACT_DIR=$(mktemp -d)
-                  cd "$EXTRACT_DIR"
-                  
-                  # Extract wheel and show contents
-                  echo "Extracting wheel..."
-                  ${pkgs.unzip}/bin/unzip -o "$wheel"
-                  echo "Extracted files:"
-                  find . -type f | head -20
-                  
-                  # Copy the extracted contents to the final location
-                  mkdir -p $out/lib/python3.13/site-packages
-                  
-                  # Copy all extracted files
-                  if [ -d "exo_pyo3_bindings" ]; then
-                    echo "Copying exo_pyo3_bindings directory..."
-                    cp -rv exo_pyo3_bindings $out/lib/python3.13/site-packages/
-                  fi
-                  
-                  if [ -d "exo_pyo3_bindings-"*".dist-info" ]; then
-                    echo "Copying dist-info directory..."
-                    cp -rv exo_pyo3_bindings-*.dist-info $out/lib/python3.13/site-packages/
-                  fi
-                  
-                  echo "Final installation contents:"
-                  ls -la $out/lib/python3.13/site-packages/exo_pyo3_bindings/ || echo "Directory not found"
-                  
-                  # Cleanup
-                  rm -rf "$EXTRACT_DIR"
-                  break
-                fi
-              done
-            else
-              echo "WARNING: No Rust bindings found at ${rustBindings}"
-              echo "Creating stub exo_pyo3_bindings module..."
-              mkdir -p $out/lib/python3.13/site-packages/exo_pyo3_bindings
-              cat > $out/lib/python3.13/site-packages/exo_pyo3_bindings/__init__.py << 'EOF'
-# Stub implementation for missing Rust bindings
-class ConnectionUpdate:
-    pass
-
-class ConnectionUpdateType:
-    Connected = "Connected"
-    Disconnected = "Disconnected"
-
-# Add other required classes as stubs
-EOF
-            fi
-            
-            # Install dashboard
-            echo "Installing dashboard..."
-            mkdir -p $out/share/exo
-            cp -r ${dashboard} $out/share/exo/dashboard
-            echo "Dashboard installed successfully"
-            
+          postFixup = ''
             # Create wrapper that sets dashboard path
             wrapProgram $out/bin/exo \
-              --set EXO_DASHBOARD_PATH "$out/share/exo/dashboard"
+              --set DASHBOARD_DIR "$out/share/exo/dashboard"
             echo "Wrapper script created"
-            
-            echo "📦 POST-INSTALL PHASE END"
-            echo "========================"
           '';
 
           # Skip tests during build and runtime dependency checking
           doCheck = false;
+          dontUsePythonCatchConflicts = true;
 
           # Override the runtime deps check hook to skip it
           pythonRuntimeDepsCheckHook = pkgs.writeShellScript "skip-runtime-deps-check" ''
