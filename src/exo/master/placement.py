@@ -105,11 +105,11 @@ def place_instance(
     target_instances = dict(deepcopy(current_instances))
 
     if len(selected_cycle) == 1:
-        logger.warning(
-            "You have likely selected jaccl for a single node instance; falling back to MlxRing"
-        )
-
-        command.instance_meta = InstanceMeta.MlxRing
+        if command.instance_meta == InstanceMeta.MlxJaccl:
+            logger.warning(
+                "You have likely selected jaccl for a single node instance; falling back to MlxRing"
+            )
+            command.instance_meta = InstanceMeta.MlxRing
 
     # TODO: Single node instances
     match command.instance_meta:

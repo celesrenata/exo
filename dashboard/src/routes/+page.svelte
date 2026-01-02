@@ -1430,7 +1430,10 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 							<div class="w-2 h-2 border border-exo-yellow/60 rotate-45"></div>
 							<h3 class="text-xs text-exo-yellow font-mono tracking-[0.2em] uppercase">Launch Instance</h3>
 							<div class="flex-1 h-px bg-gradient-to-r from-exo-yellow/30 to-transparent"></div>
-							<span class="text-sm text-white/70 font-mono">{models.length} models</span>
+							<span class="text-sm text-white/70 font-mono">{sortedModels().length} models</span>
+							<span class="text-xs text-exo-yellow/70 font-mono px-2 py-0.5 bg-exo-yellow/10 rounded border border-exo-yellow/30">
+								{selectedInstanceType === 'CpuRing' ? 'CPU' : selectedInstanceType === 'CudaRing' ? 'CUDA' : selectedInstanceType === 'MlxRing' ? 'MLX' : 'MLX'}
+							</span>
 						</div>
 						
 						<!-- Model Dropdown (Custom) -->
