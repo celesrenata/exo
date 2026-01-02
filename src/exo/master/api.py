@@ -548,6 +548,27 @@ class API:
                     elif "mlx" in model_card.tags:
                         instance_meta = "MlxRing"
 
+                    # Determine optimal number of nodes based on model size and available nodes
+                    def calculate_optimal_nodes(model_meta, available_nodes):
+                        """Calculate optimal number of nodes for model distribution."""
+                        model_size_gb = model_meta.storage_size.in_bytes / (1024**3)
+                        
+                        # Simple heuristic: use more nodes for larger models
+                        if model_size_gb > 10:  # Large models (>10GB)
+                            return min(4, available_nodes)  # Use up to 4 nodes
+                        elif model_size_gb > 2:  # Medium models (2-10GB)
+                            return min(2, available_nodes)  # Use up to 2 nodes
+                        else:  # Small models (<2GB)
+                            return 1  # Single node is sufficient
+                    
+                    # Get available nodes count
+                    available_nodes = len(self.state.topology.list_nodes())
+                    optimal_nodes = calculate_optimal_nodes(model_meta, available_nodes)
+                    
+                    logger.info(f"Model size: {model_meta.storage_size.in_bytes / (1024**3):.2f}GB, "
+                              f"Available nodes: {available_nodes}, "
+                              f"Optimal nodes: {optimal_nodes}")
+
                     # Create the instance using place_instance
                     from exo.shared.types.commands import PlaceInstance
                     from exo.shared.types.worker.instances import InstanceMeta
@@ -557,7 +578,7 @@ class API:
                         model_meta=model_meta,
                         sharding=Sharding.Pipeline,
                         instance_meta=InstanceMeta(instance_meta),
-                        min_nodes=1,
+                        min_nodes=optimal_nodes,
                     )
                     await self._send(place_command)
 
