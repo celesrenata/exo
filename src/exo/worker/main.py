@@ -94,6 +94,18 @@ class Worker:
 
     async def run(self):
         logger.info("Starting Worker")
+        
+        # Add engine detection and logging
+        from exo.worker.engines.engine_utils import detect_available_engines, select_best_engine, get_engine_info
+        
+        logger.info("Detecting available inference engines...")
+        available_engines = detect_available_engines()
+        selected_engine = select_best_engine()
+        engine_info = get_engine_info()
+        
+        logger.info(f"Available engines: {available_engines}")
+        logger.info(f"Selected engine: {selected_engine}")
+        logger.info(f"Engine info: {engine_info}")
 
         info_send, info_recv = channel[GatheredInfo]()
         info_gatherer: InfoGatherer = InfoGatherer(info_send)
