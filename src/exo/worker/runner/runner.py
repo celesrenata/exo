@@ -103,6 +103,11 @@ def main(
                         )
                         # Initialize engine (will handle MLX group setup if needed)
                         group = initialize_engine(bound_instance, connect_only=True)
+                        
+                        # For engines that don't need separate connection (like torch/cpu),
+                        # set group to a placeholder to indicate connection is established
+                        if group is None:
+                            group = "connected"  # Placeholder for non-MLX engines
 
                         logger.info("runner connected")
                         current_status = RunnerConnected()
@@ -121,6 +126,11 @@ def main(
                             )
                         )
 
+                        # For actual model loading, we need the full initialization
+                        # Reset group to None for non-MLX engines before full initialization
+                        if group == "connected":
+                            group = None
+                            
                         model, tokenizer, sampler = initialize_engine(bound_instance)
 
                         current_status = RunnerLoaded()
@@ -207,20 +217,23 @@ def main(
                             f"Task {task.__class__.__name__} rejected: "
                             f"current_status={current_status}, "
                             f"group={'present' if group is not None else 'None'}, "
+                            f"group_value={group}, "
                             f"task_details={task}"
                         )
                         
                         # For LoadModel tasks, provide specific guidance
                         if isinstance(task, LoadModel):
                             if isinstance(current_status, RunnerConnected) and group is None:
-                                logger.error("LoadModel rejected: RunnerConnected but no group available")
+                                logger.error("LoadModel rejected: RunnerConnected but no group available - this indicates a ConnectToGroup failure")
                             elif isinstance(current_status, RunnerIdle) and group is not None:
-                                logger.error("LoadModel rejected: RunnerIdle but group is present")
+                                logger.error("LoadModel rejected: RunnerIdle but group is present - unexpected state")
+                            elif isinstance(current_status, RunnerConnected) and group is not None:
+                                logger.error("LoadModel rejected: RunnerConnected with group present - condition should have matched")
                             else:
-                                logger.error(f"LoadModel rejected: Unexpected state combination")
+                                logger.error(f"LoadModel rejected: Unexpected state combination - status={current_status}, group={group}")
                         
                         raise ValueError(
-                            f"Received {task.__class__.__name__} outside of state machine in {current_status=}"
+                            f"Received {task.__class__.__name__} outside of state machine in {current_status=}, group={group}"
                         )
                 event_sender.send(
                     TaskStatusUpdated(
