@@ -92,11 +92,13 @@ class LinuxSystemMetrics(TaggedModel):
     
     system_profile: SystemPerformanceProfile
     memory: MemoryUsage
+    friendly_name: str
 
     @classmethod
-    def gather(cls) -> Self:
+    async def gather(cls) -> Self:
         """Gather Linux system metrics"""
         system_profile = get_linux_system_profile()
+        friendly_name = await get_friendly_name()
         
         # Get memory info using basic file reading since psutil might not be available
         try:
@@ -129,7 +131,7 @@ class LinuxSystemMetrics(TaggedModel):
                 swap_available=0,
             )
         
-        return cls(system_profile=system_profile, memory=memory)
+        return cls(system_profile=system_profile, memory=memory, friendly_name=friendly_name)
 
 
 class EngineInformation(TaggedModel):

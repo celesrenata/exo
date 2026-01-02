@@ -228,6 +228,7 @@ def apply_node_gathered_info(event: NodeGatheredInfo, state: State) -> State:
         case LinuxSystemMetrics():
             profile.system = info.system_profile
             profile.memory = info.memory
+            profile.friendly_name = info.friendly_name
         case MemoryUsage():
             profile.memory = info
         case NodeConfig():
