@@ -931,7 +931,7 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 		}
 
 		// Ring – derive ring order from pipeline shard ranks and pick host IPs from hostsByNode
-		if (instanceTag === 'MlxRingInstance') {
+		if (instanceTag === 'MlxRingInstance' || instanceTag === 'CpuRingInstance' || instanceTag === 'CudaRingInstance') {
 			const ordered = getOrderedRunnerNodes(instance as Record<string, unknown>, 'Pipeline');
 			const hostsByNode = (instance as { hostsByNode?: Record<string, Array<{ ip: string; port: number }>> }).hostsByNode || {};
 			const rows: Array<{ from: string; to: string; ip: string; ifaceLabel: string; missingIface: boolean }> = [];
