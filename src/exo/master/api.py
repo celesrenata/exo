@@ -538,14 +538,17 @@ class API:
 
     async def get_models(self) -> ModelList:
         """Returns list of available models."""
-        from exo.worker.engines.engine_utils import is_model_compatible, select_best_engine
-        
+        from exo.worker.engines.engine_utils import (
+            is_model_compatible,
+            select_best_engine,
+        )
+
         try:
             current_engine = select_best_engine()
         except RuntimeError:
             # No engines available, mark all models as unsupported
             current_engine = None
-        
+
         return ModelList(
             data=[
                 ModelListModel(
@@ -555,7 +558,8 @@ class API:
                     description=card.description,
                     tags=card.tags,
                     storage_size_megabytes=int(card.metadata.storage_size.in_mb),
-                    supports_tensor=current_engine is not None and is_model_compatible(card.model_id, current_engine),
+                    supports_tensor=current_engine is not None
+                    and is_model_compatible(card.model_id, current_engine),
                 )
                 for card in MODEL_CARDS.values()
             ]

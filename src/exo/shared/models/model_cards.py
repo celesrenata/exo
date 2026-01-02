@@ -74,7 +74,6 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
-    
     # MLX-specific models (existing ones)
     # deepseek v3
     # "deepseek-v3-0324:4bit": ModelCard(

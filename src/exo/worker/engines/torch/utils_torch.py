@@ -45,38 +45,40 @@ def initialize_torch(
     Initialize the PyTorch model, tokenizer, and sampler for CPU inference.
     """
     torch.manual_seed(42)
-    
+
     # Set device to CPU
     device = torch.device("cpu")
-    
+
     # Create sampler function
     def sampler(logits: torch.Tensor) -> torch.Tensor:
         """Simple temperature-based sampling."""
         if TEMPERATURE == 0:
             return torch.argmax(logits, dim=-1)
-        
+
         # Apply temperature
         logits = logits / TEMPERATURE
         probs = torch.softmax(logits, dim=-1)
         return torch.multinomial(probs, num_samples=1).squeeze(-1)
-    
+
     logger.info("Created PyTorch CPU sampler")
-    
+
     # For now, only support single device (no distributed inference)
     if len(bound_instance.instance.shard_assignments.node_to_runner) > 1:
-        raise NotImplementedError("Distributed inference not yet supported for PyTorch engine")
-    
+        raise NotImplementedError(
+            "Distributed inference not yet supported for PyTorch engine"
+        )
+
     logger.info(f"Single device CPU inference for {bound_instance.instance}")
     model_path = build_model_path(bound_instance.bound_shard.model_meta.model_id)
-    
+
     start_time = time.perf_counter()
-    
+
     # Load model configuration
     config = AutoConfig.from_pretrained(
         model_path,
         trust_remote_code=TRUST_REMOTE_CODE,
     )
-    
+
     # Load model with CPU device mapping
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
@@ -86,28 +88,28 @@ def initialize_torch(
         trust_remote_code=TRUST_REMOTE_CODE,
         low_cpu_mem_usage=True,
     )
-    
+
     # Load tokenizer
     tokenizer_raw = AutoTokenizer.from_pretrained(
         model_path,
         trust_remote_code=TRUST_REMOTE_CODE,
     )
-    
+
     # Set pad token if not present
     if tokenizer_raw.pad_token is None:
         tokenizer_raw.pad_token = tokenizer_raw.eos_token
-    
+
     tokenizer = TokenizerWrapper(tokenizer_raw)
-    
+
     end_time = time.perf_counter()
     logger.info(f"Time taken to load PyTorch model: {(end_time - start_time):.2f}s")
-    
+
     # Move model to eval mode
     model.eval()
-    
+
     logger.debug(f"Model: {model}")
     logger.info(f"Model loaded on device: {next(model.parameters()).device}")
-    
+
     return cast(Model, model), tokenizer, sampler
 
 
@@ -117,7 +119,7 @@ def apply_chat_template(
 ) -> str:
     """Apply chat template to format messages for generation."""
     messages = chat_task_data.messages
-    
+
     formatted_messages: list[dict[str, Any]] = []
     for message in messages:
         if isinstance(message.content, ChatCompletionMessageText):
@@ -129,12 +131,12 @@ def apply_chat_template(
             message.content = message.content[0].text
         if message.content is None and message.thinking is None:
             continue
-        
+
         # Null values are not valid when applying templates
         formatted_messages.append(
             {k: v for k, v in message.model_dump().items() if v is not None}
         )
-    
+
     try:
         prompt: str = tokenizer.apply_chat_template(
             formatted_messages,
@@ -150,7 +152,7 @@ def apply_chat_template(
             content = msg.get("content", "")
             prompt += f"{role}: {content}\n"
         prompt += "assistant: "
-    
+
     return prompt
 
 
@@ -158,6 +160,7 @@ def check_torch_availability() -> bool:
     """Check if PyTorch is available and working."""
     try:
         import torch
+
         # Test basic tensor operations
         x = torch.tensor([1.0, 2.0, 3.0])
         y = x + 1
@@ -170,7 +173,9 @@ def check_torch_availability() -> bool:
 def get_model_info(model_path: Path) -> dict[str, Any]:
     """Get basic information about the model."""
     try:
-        config = AutoConfig.from_pretrained(model_path, trust_remote_code=TRUST_REMOTE_CODE)
+        config = AutoConfig.from_pretrained(
+            model_path, trust_remote_code=TRUST_REMOTE_CODE
+        )
         return {
             "model_type": getattr(config, "model_type", "unknown"),
             "vocab_size": getattr(config, "vocab_size", 0),
