@@ -89,6 +89,11 @@ async def resolve_model_meta(model_id: str) -> ModelMetadata:
         model_card = MODEL_CARDS[model_id]
         return model_card.metadata
     else:
+        # Try to find by full model_id in case we got the HuggingFace ID instead of short_id
+        for card in MODEL_CARDS.values():
+            if card.model_id == ModelId(model_id):
+                return card.metadata
+        # If not found in MODEL_CARDS, fall back to dynamic resolution
         return await get_model_meta(model_id)
 
 
