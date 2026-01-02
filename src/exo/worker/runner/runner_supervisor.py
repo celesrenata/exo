@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from multiprocessing import Process
-from typing import Optional, Self
+from typing import Optional, Self, Any
 
 import anyio
 from anyio import (
@@ -80,7 +80,7 @@ class RunnerSupervisor:
     _runner_id: str = field(default="", init=False)
     _resources_registered: bool = field(default=False, init=False)
     _shutdown_in_progress: bool = field(default=False, init=False)
-    _health_check_task: Optional[anyio.abc.Task] = field(default=None, init=False)
+    _health_check_task: Optional[Any] = field(default=None, init=False)
 
     @classmethod
     def create(
