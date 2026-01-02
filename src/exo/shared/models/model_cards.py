@@ -59,7 +59,6 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
-    
     # CUDA-compatible models - using working models, engine selection at runtime
     "dialogpt-medium-cuda": ModelCard(
         short_id="dialogpt-medium-cuda",
@@ -106,7 +105,6 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
-    
     # MLX-specific models (existing ones)
     # deepseek v3
     # "deepseek-v3-0324:4bit": ModelCard(
@@ -649,7 +647,6 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
-    
     # IPEX-compatible models (Intel GPU acceleration)
     "distilgpt2-ipex": ModelCard(
         short_id="distilgpt2-ipex",
@@ -726,7 +723,6 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
-    
     # Larger IPEX-compatible models for advanced use cases
     "gpt-j-6b-ipex": ModelCard(
         short_id="gpt-j-6b-ipex",
@@ -773,7 +769,6 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
-    
     # Very large IPEX models for distributed inference
     "gpt-neox-20b-ipex": ModelCard(
         short_id="gpt-neox-20b-ipex",
@@ -790,7 +785,6 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
-    
     # Large CPU models for multi-node sharding
     "llama-3.1-8b-cpu": ModelCard(
         short_id="llama-3.1-8b-cpu",
@@ -808,7 +802,7 @@ MODEL_CARDS: dict[str, ModelCard] = {
         ),
     ),
     "llama-3.1-70b-cpu": ModelCard(
-        short_id="llama-3.1-70b-cpu", 
+        short_id="llama-3.1-70b-cpu",
         model_id=ModelId("meta-llama/Llama-3.1-70B-Instruct"),
         name="Llama 3.1 70B Instruct (CPU)",
         description="""Very large instruction-tuned model requiring distributed inference across multiple nodes.""",
@@ -852,7 +846,6 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
-    
     # Large CUDA models for multi-node sharding
     "llama-3.1-8b-cuda": ModelCard(
         short_id="llama-3.1-8b-cuda",

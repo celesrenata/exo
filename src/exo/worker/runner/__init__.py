@@ -7,15 +7,14 @@ in multiprocessing environments.
 """
 
 from .resource_manager import (
-    ResourceManager,
+    CleanupResult,
     ResourceHandle,
+    ResourceManager,
     ResourceState,
     ResourceType,
-    CleanupResult,
     get_resource_manager,
     reset_resource_manager,
 )
-
 from .shutdown_coordinator import (
     ShutdownCoordinator,
     ShutdownPhase,
@@ -23,16 +22,15 @@ from .shutdown_coordinator import (
     get_shutdown_coordinator,
     reset_shutdown_coordinator,
 )
-
 from .synchronization import (
-    CrossProcessLock,
     CrossProcessEvent,
-    SharedStateManager,
+    CrossProcessLock,
     DeadlockDetector,
-    LockState,
+    EventInfo,
     EventType,
     LockInfo,
-    EventInfo,
+    LockState,
+    SharedStateManager,
     get_deadlock_detector,
     reset_deadlock_detector,
 )
@@ -40,20 +38,18 @@ from .synchronization import (
 __all__ = [
     # Resource Management
     "ResourceManager",
-    "ResourceHandle", 
+    "ResourceHandle",
     "ResourceState",
     "ResourceType",
     "CleanupResult",
     "get_resource_manager",
     "reset_resource_manager",
-    
     # Shutdown Coordination
     "ShutdownCoordinator",
     "ShutdownPhase",
-    "ShutdownState", 
+    "ShutdownState",
     "get_shutdown_coordinator",
     "reset_shutdown_coordinator",
-    
     # Synchronization
     "CrossProcessLock",
     "CrossProcessEvent",

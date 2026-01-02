@@ -72,7 +72,9 @@ async def get_model_and_chip() -> tuple[str, str]:
             )
             model = model_line.split(": ")[1] if model_line else "Unknown Model"
 
-            chip_line = next((line for line in output.split("\n") if "Chip" in line), None)
+            chip_line = next(
+                (line for line in output.split("\n") if "Chip" in line), None
+            )
             chip = chip_line.split(": ")[1] if chip_line else "Unknown Chip"
         except CalledProcessError:
             pass
@@ -85,22 +87,28 @@ async def get_model_and_chip() -> tuple[str, str]:
                     if line.startswith("model name"):
                         chip = line.split(": ")[1].strip()
                         break
-            
+
             # Get system model from DMI
             try:
                 with open("/sys/class/dmi/id/product_name", "r") as f:
                     model = f.read().strip()
-                if not model or model in ["System Product Name", "To be filled by O.E.M."]:
+                if not model or model in [
+                    "System Product Name",
+                    "To be filled by O.E.M.",
+                ]:
                     # Try board name as fallback
                     with open("/sys/class/dmi/id/board_name", "r") as f:
                         board = f.read().strip()
-                    if board and board not in ["System Board Name", "To be filled by O.E.M."]:
+                    if board and board not in [
+                        "System Board Name",
+                        "To be filled by O.E.M.",
+                    ]:
                         model = f"Linux System ({board})"
                     else:
                         model = "Linux System"
             except (FileNotFoundError, PermissionError):
                 model = "Linux System"
-                
+
         except (FileNotFoundError, PermissionError):
             # Fallback to basic Linux info
             model = "Linux System"
@@ -119,49 +127,57 @@ async def get_intel_gpu_info() -> dict[str, Any]:
         "ipex_version": None,
         "intel_gpu_driver_version": None,
     }
-    
+
     try:
         import intel_extension_for_pytorch as ipex
         import torch
-        
+
         info["ipex_version"] = ipex.__version__
-        
-        if hasattr(torch, 'xpu') and torch.xpu.is_available():
+
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
             info["intel_gpu_available"] = True
             info["intel_gpu_count"] = torch.xpu.device_count()
-            
+
             # Get information for each Intel GPU device
             for i in range(info["intel_gpu_count"]):
                 try:
                     props = torch.xpu.get_device_properties(i)
                     device_info = {
                         "device_id": i,
-                        "name": props.name if hasattr(props, 'name') else f"Intel GPU {i}",
-                        "total_memory": props.total_memory if hasattr(props, 'total_memory') else 0,
-                        "max_compute_units": props.max_compute_units if hasattr(props, 'max_compute_units') else 0,
+                        "name": props.name
+                        if hasattr(props, "name")
+                        else f"Intel GPU {i}",
+                        "total_memory": props.total_memory
+                        if hasattr(props, "total_memory")
+                        else 0,
+                        "max_compute_units": props.max_compute_units
+                        if hasattr(props, "max_compute_units")
+                        else 0,
                     }
                     info["intel_gpu_devices"].append(device_info)
-                    
+
                     # Use first device memory as primary memory info
-                    if i == 0 and hasattr(props, 'total_memory'):
+                    if i == 0 and hasattr(props, "total_memory"):
                         info["intel_gpu_memory"] = props.total_memory
-                        
+
                 except Exception:
                     # If we can't get device properties, still record the device exists
-                    info["intel_gpu_devices"].append({
-                        "device_id": i,
-                        "name": f"Intel GPU {i}",
-                        "total_memory": 0,
-                        "max_compute_units": 0,
-                    })
-                    
+                    info["intel_gpu_devices"].append(
+                        {
+                            "device_id": i,
+                            "name": f"Intel GPU {i}",
+                            "total_memory": 0,
+                            "max_compute_units": 0,
+                        }
+                    )
+
     except ImportError:
         # IPEX not available
         pass
     except Exception:
         # Other errors in Intel GPU detection
         pass
-    
+
     # Try to get Intel GPU driver version from system
     if info["intel_gpu_available"]:
         try:
@@ -176,5 +192,5 @@ async def get_intel_gpu_info() -> dict[str, Any]:
         except (CalledProcessError, FileNotFoundError):
             # Driver version detection failed, not critical
             pass
-    
+
     return info

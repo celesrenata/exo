@@ -29,9 +29,14 @@ from loguru import logger
 
 from exo.routing.connection_message import ConnectionMessage, ConnectionMessageType
 from exo.shared.apply import apply
+from exo.shared.constants import (
+    EXO_RUNNER_ENABLE_ENHANCED_LOGGING,
+    EXO_RUNNER_HEALTH_CHECK_INTERVAL,
+    EXO_RUNNER_SHUTDOWN_TIMEOUT,
+    EXO_RUNNER_STARTUP_TIMEOUT,
+)
 from exo.shared.types.commands import ForwarderCommand, RequestEventLog
 from exo.shared.types.common import NodeId, SessionId
-from exo.shared.types.models import ModelId
 from exo.shared.types.events import (
     Event,
     EventId,
@@ -44,6 +49,7 @@ from exo.shared.types.events import (
     TopologyEdgeCreated,
     TopologyEdgeDeleted,
 )
+from exo.shared.types.models import ModelId
 from exo.shared.types.multiaddr import Multiaddr
 from exo.shared.types.state import State
 from exo.shared.types.tasks import (
@@ -72,12 +78,6 @@ from exo.worker.download.download_utils import (
 from exo.worker.download.shard_downloader import RepoDownloadProgress, ShardDownloader
 from exo.worker.plan import plan
 from exo.worker.runner.runner_supervisor import RunnerSupervisor
-from exo.shared.constants import (
-    EXO_RUNNER_SHUTDOWN_TIMEOUT,
-    EXO_RUNNER_HEALTH_CHECK_INTERVAL,
-    EXO_RUNNER_STARTUP_TIMEOUT,
-    EXO_RUNNER_ENABLE_ENHANCED_LOGGING
-)
 
 
 class Worker:
@@ -122,24 +122,30 @@ class Worker:
 
     async def run(self):
         logger.info("Starting Worker")
-        
+
         # Add engine detection and logging
-        from exo.worker.engines.engine_utils import detect_available_engines, select_best_engine, get_engine_info
-        
+        from exo.worker.engines.engine_utils import (
+            detect_available_engines,
+            get_engine_info,
+            select_best_engine,
+        )
+
         logger.info("Detecting available inference engines...")
         available_engines = detect_available_engines()
         selected_engine = select_best_engine()
         engine_info = get_engine_info()
-        
+
         logger.info(f"Available engines: {available_engines}")
         logger.info(f"Selected engine: {selected_engine}")
         logger.info(f"Engine info: {engine_info}")
-        
+
         # Log enhanced runner configuration if enabled
         if EXO_RUNNER_ENABLE_ENHANCED_LOGGING:
             logger.info("Enhanced runner features enabled:")
             logger.info(f"  - Shutdown timeout: {EXO_RUNNER_SHUTDOWN_TIMEOUT}s")
-            logger.info(f"  - Health check interval: {EXO_RUNNER_HEALTH_CHECK_INTERVAL}s")
+            logger.info(
+                f"  - Health check interval: {EXO_RUNNER_HEALTH_CHECK_INTERVAL}s"
+            )
             logger.info(f"  - Startup timeout: {EXO_RUNNER_STARTUP_TIMEOUT}s")
 
         info_send, info_recv = channel[GatheredInfo]()

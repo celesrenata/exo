@@ -63,7 +63,7 @@ class NodePerformanceProfile(CamelCaseModel):
     network_interfaces: Sequence[NetworkInterfaceInfo] = []
     tb_interfaces: Sequence[TBIdentifier] = []
     system: SystemPerformanceProfile = SystemPerformanceProfile()
-    
+
     # Engine information
     available_engines: list[str] = []
     selected_engine: str = "unknown"

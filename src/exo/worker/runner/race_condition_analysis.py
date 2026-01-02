@@ -5,12 +5,13 @@ This module provides tools to analyze and reproduce the multiprocessing race con
 that occurs during runner shutdown in multi-node EXO instances.
 """
 
-import time
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import List, Optional
+
 from loguru import logger
 
 
@@ -35,35 +36,37 @@ class RaceConditionEvent:
 
 class RaceConditionDetector:
     """Detects and logs race conditions in multiprocessing operations"""
-    
+
     def __init__(self):
         self.events: List[RaceConditionEvent] = []
         self.lock = threading.Lock()
         self.monitoring = False
-    
+
     def start_monitoring(self):
         """Start monitoring for race conditions"""
         self.monitoring = True
         logger.info("Race condition monitoring started")
-    
+
     def stop_monitoring(self):
         """Stop monitoring and return collected events"""
         self.monitoring = False
-        logger.info(f"Race condition monitoring stopped. Collected {len(self.events)} events")
+        logger.info(
+            f"Race condition monitoring stopped. Collected {len(self.events)} events"
+        )
         return self.events.copy()
-    
+
     def log_race_condition(
         self,
         event_type: RaceConditionType,
         resource_name: str,
         operation: str,
         error_message: str,
-        stack_trace: Optional[str] = None
+        stack_trace: Optional[str] = None,
     ):
         """Log a detected race condition"""
         if not self.monitoring:
             return
-            
+
         event = RaceConditionEvent(
             timestamp=datetime.now(),
             event_type=event_type,
@@ -72,13 +75,15 @@ class RaceConditionDetector:
             resource_name=resource_name,
             operation=operation,
             error_message=error_message,
-            stack_trace=stack_trace
+            stack_trace=stack_trace,
         )
-        
+
         with self.lock:
             self.events.append(event)
-        
-        logger.warning(f"Race condition detected: {event_type.value} on {resource_name} during {operation}")
+
+        logger.warning(
+            f"Race condition detected: {event_type.value} on {resource_name} during {operation}"
+        )
 
 
 # Global detector instance
@@ -87,14 +92,13 @@ race_detector = RaceConditionDetector()
 
 def instrument_queue_operations():
     """Instrument multiprocessing queue operations to detect race conditions"""
-    import multiprocessing
     from multiprocessing.queues import Queue
-    
+
     # Store original methods
     original_put = Queue.put
     original_get = Queue.get
     original_close = Queue.close
-    
+
     def instrumented_put(self, obj, block=True, timeout=None):
         try:
             return original_put(self, obj, block, timeout)
@@ -105,10 +109,10 @@ def instrument_queue_operations():
                     f"Queue_{id(self)}",
                     "put",
                     str(e),
-                    traceback.format_exc()
+                    traceback.format_exc(),
                 )
             raise
-    
+
     def instrumented_get(self, block=True, timeout=None):
         try:
             return original_get(self, block, timeout)
@@ -117,16 +121,16 @@ def instrument_queue_operations():
                 race_detector.log_race_condition(
                     RaceConditionType.QUEUE_CLOSED_DURING_GET,
                     f"Queue_{id(self)}",
-                    "get", 
+                    "get",
                     str(e),
-                    traceback.format_exc()
+                    traceback.format_exc(),
                 )
             raise
-    
+
     def instrumented_close(self):
         logger.debug(f"Closing queue {id(self)} from {threading.current_thread().name}")
         return original_close(self)
-    
+
     # Monkey patch the methods
     Queue.put = instrumented_put
     Queue.get = instrumented_get
@@ -135,7 +139,7 @@ def instrument_queue_operations():
 
 def create_race_condition_reproducer():
     """Create a script that reproduces the race condition for testing"""
-    
+
     reproducer_script = '''
 import multiprocessing as mp
 import time
@@ -210,26 +214,26 @@ def reproduce_race_condition():
 if __name__ == "__main__":
     reproduce_race_condition()
 '''
-    
+
     return reproducer_script
 
 
 def analyze_shutdown_timing():
     """Analyze the timing of shutdown operations to identify race windows"""
-    
+
     timing_data = {
-        'runner_shutdown_start': None,
-        'queue_close_start': None,
-        'queue_close_complete': None,
-        'process_join_start': None,
-        'process_join_complete': None,
-        'cleanup_complete': None
+        "runner_shutdown_start": None,
+        "queue_close_start": None,
+        "queue_close_complete": None,
+        "process_join_start": None,
+        "process_join_complete": None,
+        "cleanup_complete": None,
     }
-    
+
     def log_timing_event(event_name: str):
         timing_data[event_name] = time.time()
         logger.debug(f"Timing event: {event_name} at {timing_data[event_name]}")
-    
+
     return log_timing_event, timing_data
 
 
@@ -237,15 +241,15 @@ def get_queue_state_info(queue):
     """Get diagnostic information about a multiprocessing queue"""
     try:
         info = {
-            'queue_id': id(queue),
-            'approximate_size': queue.qsize() if hasattr(queue, 'qsize') else 'unknown',
-            'is_closed': getattr(queue, '_closed', 'unknown'),
-            'thread_info': threading.current_thread().name,
-            'process_info': os.getpid()
+            "queue_id": id(queue),
+            "approximate_size": queue.qsize() if hasattr(queue, "qsize") else "unknown",
+            "is_closed": getattr(queue, "_closed", "unknown"),
+            "thread_info": threading.current_thread().name,
+            "process_info": os.getpid(),
         }
         return info
     except Exception as e:
-        return {'error': str(e)}
+        return {"error": str(e)}
 
 
 # Import required modules

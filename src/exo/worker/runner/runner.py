@@ -47,6 +47,7 @@ from exo.worker.runner.bootstrap import logger
 try:
     from exo.worker.engines.mlx.utils_mlx import mlx_force_oom
 except ImportError:
+
     def mlx_force_oom():
         """Fallback function when MLX is not available"""
         raise RuntimeError("MLX not available - cannot force OOM")

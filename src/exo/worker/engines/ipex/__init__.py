@@ -7,8 +7,10 @@ from transformers import PreTrainedTokenizer
 # IPEX-specific error classes for comprehensive error handling
 class IPEXEngineError(Exception):
     """Base exception for IPEX engine errors."""
-    
-    def __init__(self, message: str, device_id: int | None = None, error_code: str | None = None):
+
+    def __init__(
+        self, message: str, device_id: int | None = None, error_code: str | None = None
+    ):
         self.device_id = device_id
         self.error_code = error_code
         super().__init__(message)
@@ -16,9 +18,13 @@ class IPEXEngineError(Exception):
 
 class IPEXDriverError(IPEXEngineError):
     """Intel GPU driver not available or incompatible."""
-    
-    def __init__(self, message: str = "Intel GPU driver not available or incompatible", 
-                 driver_version: str | None = None, required_version: str | None = None):
+
+    def __init__(
+        self,
+        message: str = "Intel GPU driver not available or incompatible",
+        driver_version: str | None = None,
+        required_version: str | None = None,
+    ):
         self.driver_version = driver_version
         self.required_version = required_version
         super().__init__(message, error_code="DRIVER_ERROR")
@@ -26,10 +32,14 @@ class IPEXDriverError(IPEXEngineError):
 
 class IPEXMemoryError(IPEXEngineError):
     """Intel GPU memory allocation failed."""
-    
-    def __init__(self, message: str = "Intel GPU memory allocation failed", 
-                 device_id: int | None = None, requested_memory: int | None = None, 
-                 available_memory: int | None = None):
+
+    def __init__(
+        self,
+        message: str = "Intel GPU memory allocation failed",
+        device_id: int | None = None,
+        requested_memory: int | None = None,
+        available_memory: int | None = None,
+    ):
         self.requested_memory = requested_memory
         self.available_memory = available_memory
         super().__init__(message, device_id=device_id, error_code="MEMORY_ERROR")
@@ -37,36 +47,51 @@ class IPEXMemoryError(IPEXEngineError):
 
 class IPEXInitializationError(IPEXEngineError):
     """IPEX engine initialization failed."""
-    
-    def __init__(self, message: str = "IPEX engine initialization failed", 
-                 component: str | None = None):
+
+    def __init__(
+        self,
+        message: str = "IPEX engine initialization failed",
+        component: str | None = None,
+    ):
         self.component = component
         super().__init__(message, error_code="INIT_ERROR")
 
 
 class IPEXModelLoadError(IPEXEngineError):
     """IPEX model loading failed."""
-    
-    def __init__(self, message: str = "IPEX model loading failed", 
-                 model_path: str | None = None, device_id: int | None = None):
+
+    def __init__(
+        self,
+        message: str = "IPEX model loading failed",
+        model_path: str | None = None,
+        device_id: int | None = None,
+    ):
         self.model_path = model_path
         super().__init__(message, device_id=device_id, error_code="MODEL_LOAD_ERROR")
 
 
 class IPEXInferenceError(IPEXEngineError):
     """IPEX inference execution failed."""
-    
-    def __init__(self, message: str = "IPEX inference execution failed", 
-                 device_id: int | None = None, step: str | None = None):
+
+    def __init__(
+        self,
+        message: str = "IPEX inference execution failed",
+        device_id: int | None = None,
+        step: str | None = None,
+    ):
         self.step = step
         super().__init__(message, device_id=device_id, error_code="INFERENCE_ERROR")
 
 
 class IPEXDistributedError(IPEXEngineError):
     """IPEX distributed inference failed."""
-    
-    def __init__(self, message: str = "IPEX distributed inference failed", 
-                 rank: int | None = None, world_size: int | None = None):
+
+    def __init__(
+        self,
+        message: str = "IPEX distributed inference failed",
+        rank: int | None = None,
+        world_size: int | None = None,
+    ):
         self.rank = rank
         self.world_size = world_size
         super().__init__(message, error_code="DISTRIBUTED_ERROR")

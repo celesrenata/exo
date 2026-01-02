@@ -2,8 +2,8 @@
 
 from typing import Any, Callable
 
-from exo.shared.types.worker.instances import BoundInstance
 from exo.shared.constants import EXO_RUNNER_ENABLE_ENHANCED_LOGGING
+from exo.shared.types.worker.instances import BoundInstance
 
 
 def initialize_engine(
@@ -27,7 +27,9 @@ def initialize_engine(
     engine_type = select_best_engine()
 
     if EXO_RUNNER_ENABLE_ENHANCED_LOGGING:
-        logger.info(f"Enhanced engine initialization: {engine_type} (connect_only={connect_only})")
+        logger.info(
+            f"Enhanced engine initialization: {engine_type} (connect_only={connect_only})"
+        )
 
     if connect_only:
         logger.info(f"Connecting to {engine_type} engine")
@@ -47,19 +49,22 @@ def initialize_engine(
         return initialize_mlx(bound_instance)
 
     elif engine_type == "ipex":
-        from exo.worker.engines.ipex.utils_ipex import initialize_ipex
         from exo.worker.engines.ipex import IPEXEngineError
-        from exo.worker.engines.ipex.utils_ipex import handle_ipex_fallback
+        from exo.worker.engines.ipex.utils_ipex import (
+            handle_ipex_fallback,
+            initialize_ipex,
+        )
 
         try:
             return initialize_ipex(bound_instance)
         except IPEXEngineError as e:
             logger.error(f"IPEX engine initialization failed: {e}")
             handle_ipex_fallback(e, "torch")
-            
+
             # Fallback to torch engine
             logger.info("Falling back to torch engine")
             from exo.worker.engines.torch.utils_torch import initialize_torch
+
             return initialize_torch(bound_instance)
 
     elif engine_type in ["torch", "cpu"]:
@@ -95,8 +100,8 @@ def warmup_engine(model: Any, tokenizer: Any, sampler: Callable) -> int:
         return warmup_inference(model, tokenizer, sampler)
 
     elif engine_type == "ipex":
-        from exo.worker.engines.ipex.generator.generate import warmup_inference
         from exo.worker.engines.ipex import IPEXEngineError
+        from exo.worker.engines.ipex.generator.generate import warmup_inference
         from exo.worker.engines.ipex.utils_ipex import handle_ipex_fallback
 
         try:
@@ -104,10 +109,13 @@ def warmup_engine(model: Any, tokenizer: Any, sampler: Callable) -> int:
         except IPEXEngineError as e:
             logger.error(f"IPEX warmup failed: {e}")
             handle_ipex_fallback(e, "torch")
-            
+
             # Fallback to torch warmup
             logger.info("Falling back to torch warmup")
-            from exo.worker.engines.torch.generator.generate import warmup_inference as torch_warmup
+            from exo.worker.engines.torch.generator.generate import (
+                warmup_inference as torch_warmup,
+            )
+
             return torch_warmup(model, tokenizer, sampler)
 
     elif engine_type in ["torch", "cpu"]:
@@ -148,8 +156,8 @@ def generate_with_engine(
         return mlx_generate(model, tokenizer, sampler, task)
 
     elif engine_type == "ipex":
-        from exo.worker.engines.ipex.generator.generate import ipex_generate
         from exo.worker.engines.ipex import IPEXEngineError
+        from exo.worker.engines.ipex.generator.generate import ipex_generate
         from exo.worker.engines.ipex.utils_ipex import handle_ipex_fallback
 
         try:
@@ -157,10 +165,11 @@ def generate_with_engine(
         except IPEXEngineError as e:
             logger.error(f"IPEX generation failed: {e}")
             handle_ipex_fallback(e, "torch")
-            
+
             # Fallback to torch generation
             logger.info("Falling back to torch generation")
             from exo.worker.engines.torch.generator.generate import torch_generate
+
             return torch_generate(model, tokenizer, sampler, task)
 
     elif engine_type in ["torch", "cpu"]:

@@ -270,7 +270,12 @@ class API:
 
         instance_combinations: list[tuple[Sharding, InstanceMeta, int]] = []
         for sharding in (Sharding.Pipeline, Sharding.Tensor):
-            for instance_meta in (InstanceMeta.MlxRing, InstanceMeta.MlxJaccl, InstanceMeta.CpuRing, InstanceMeta.CudaRing):
+            for instance_meta in (
+                InstanceMeta.MlxRing,
+                InstanceMeta.MlxJaccl,
+                InstanceMeta.CpuRing,
+                InstanceMeta.CudaRing,
+            ):
                 instance_combinations.extend(
                     [
                         (sharding, instance_meta, i)
@@ -517,22 +522,24 @@ class API:
             if instance.shard_assignments.model_id == payload.model:
                 matching_instance = instance
                 break
-        
+
         if not matching_instance:
             # No instance for the requested model - try to create one automatically
-            logger.info(f"No instance found for model {payload.model}, attempting to create one...")
-            
+            logger.info(
+                f"No instance found for model {payload.model}, attempting to create one..."
+            )
+
             try:
                 # Try to find the model in our model cards to get the right instance type
                 from exo.shared.models.model_cards import MODEL_CARDS
-                
+
                 # Find a model card that matches the requested model
                 model_card = None
                 for card in MODEL_CARDS.values():
                     if card.model_id == payload.model:
                         model_card = card
                         break
-                
+
                 if model_card:
                     # Determine instance type based on model tags
                     instance_meta = "CpuRing"  # Default to CPU
@@ -540,12 +547,12 @@ class API:
                         instance_meta = "CudaRing"
                     elif "mlx" in model_card.tags:
                         instance_meta = "MlxRing"
-                    
+
                     # Create the instance using place_instance
                     from exo.shared.types.commands import PlaceInstance
                     from exo.shared.types.worker.instances import InstanceMeta
                     from exo.shared.types.worker.shards import Sharding
-                    
+
                     place_command = PlaceInstance(
                         model_meta=model_meta,
                         sharding=Sharding.Pipeline,
@@ -553,31 +560,36 @@ class API:
                         min_nodes=1,
                     )
                     await self._send(place_command)
-                    
+
                     # Wait a moment for the instance to be created
                     import asyncio
+
                     await asyncio.sleep(1)
-                    
+
                     # Check if the instance was created
                     for instance in self.state.instances.values():
                         if instance.shard_assignments.model_id == payload.model:
                             matching_instance = instance
-                            logger.info(f"Successfully created instance for model {payload.model}")
+                            logger.info(
+                                f"Successfully created instance for model {payload.model}"
+                            )
                             break
-                
+
                 if not matching_instance:
                     await self._trigger_notify_user_to_download_model(payload.model)
                     raise HTTPException(
-                        status_code=404, 
-                        detail=f"Could not create instance for model {payload.model}. Please create an instance manually in the dashboard."
+                        status_code=404,
+                        detail=f"Could not create instance for model {payload.model}. Please create an instance manually in the dashboard.",
                     )
-                    
+
             except Exception as e:
-                logger.error(f"Failed to auto-create instance for model {payload.model}: {e}")
+                logger.error(
+                    f"Failed to auto-create instance for model {payload.model}: {e}"
+                )
                 await self._trigger_notify_user_to_download_model(payload.model)
                 raise HTTPException(
-                    status_code=404, 
-                    detail=f"No instance found for model {payload.model}. Please create an instance in the dashboard first."
+                    status_code=404,
+                    detail=f"No instance found for model {payload.model}. Please create an instance in the dashboard first.",
                 )
 
         command = ChatCompletion(

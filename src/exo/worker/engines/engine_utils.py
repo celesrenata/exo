@@ -13,9 +13,9 @@ def detect_intel_gpu() -> bool:
     try:
         import intel_extension_for_pytorch as ipex
         import torch
-        
+
         # Check for Intel GPU devices
-        if hasattr(torch, 'xpu') and torch.xpu.is_available():
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
             device_count = torch.xpu.device_count()
             if device_count > 0:
                 # Test basic tensor operations on Intel GPU
@@ -168,6 +168,7 @@ def get_engine_info() -> dict[str, any]:
     if info["ipex_available"]:
         try:
             from exo.worker.engines.ipex.utils_ipex import get_intel_gpu_info
+
             intel_info = get_intel_gpu_info()
             info.update(intel_info)
         except ImportError:

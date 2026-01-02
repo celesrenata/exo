@@ -60,11 +60,11 @@
           '';
 
           # Automatic accelerator selection based on hardware (best effort)
-          autoAccelerator = 
+          autoAccelerator =
             if accelerator != "cpu" then accelerator
             else if pkgs.stdenv.isDarwin then "mlx"
             else if pkgs.stdenv.isLinux then
-              # Default to CPU on Linux, but allow Intel GPU detection at runtime
+            # Default to CPU on Linux, but allow Intel GPU detection at runtime
               "cpu"
             else "cpu";
 
@@ -211,8 +211,7 @@
             intel-media-driver
             intel-compute-runtime
             level-zero
-            # Intel GPU development libraries
-            intel-media-sdk
+            # Note: intel-media-sdk removed due to security vulnerabilities
           ];
 
           buildPhase = ''
@@ -565,8 +564,8 @@
               } // (if cfg.accelerator == "intel" then {
                 # Intel GPU device access permissions
                 DeviceAllow = [
-                  "/dev/dri rw"  # Intel GPU devices
-                  "char-drm rw"  # DRM devices
+                  "/dev/dri rw" # Intel GPU devices
+                  "char-drm rw" # DRM devices
                 ] ++ map (device: "${device} rw") cfg.intelGpuDevices;
                 # Allow access to Intel GPU devices
                 PrivateDevices = false;
@@ -625,15 +624,15 @@
         exo-rocm = mkExoPackage { pkgs = final; system = final.system; accelerator = "rocm"; };
         exo-intel = mkExoPackage { pkgs = final; system = final.system; accelerator = "intel"; };
         exo-mlx = mkExoPackage { pkgs = final; system = final.system; accelerator = "mlx"; };
-        
+
         # Smart package selection based on hardware detection
-        exo-auto = 
+        exo-auto =
           let
             # Try to detect the best accelerator for the current system
-            autoAccelerator = 
+            autoAccelerator =
               if final.stdenv.isDarwin then "mlx"
               else if final.stdenv.isLinux then
-                # On Linux, default to CPU but provide Intel option
+              # On Linux, default to CPU but provide Intel option
                 "cpu"
               else "cpu";
           in
@@ -665,9 +664,9 @@
           exo-rocm = mkExoPackage { inherit pkgs system; accelerator = "rocm"; };
           exo-intel = mkExoPackage { inherit pkgs system; accelerator = "intel"; };
           exo-mlx = mkExoPackage { inherit pkgs system; accelerator = "mlx"; };
-          exo-auto = 
+          exo-auto =
             let
-              autoAccelerator = 
+              autoAccelerator =
                 if pkgs.stdenv.isDarwin then "mlx"
                 else if pkgs.stdenv.isLinux then "cpu"
                 else "cpu";
