@@ -67,6 +67,11 @@
               uv
               ruff
               basedpyright
+              
+              # PYTHON PACKAGES
+              python313Packages.torch
+              python313Packages.transformers
+              python313Packages.huggingface-hub
 
               # RUST
               ((fenixToolchain system).withComponents [

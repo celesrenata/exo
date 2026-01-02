@@ -33,11 +33,12 @@ from exo.shared.types.worker.runners import (
     RunnerWarmingUp,
 )
 from exo.utils.channels import ClosedResourceError, MpReceiver, MpSender
-from exo.worker.engines.mlx.generator.generate import mlx_generate, warmup_inference
-from exo.worker.engines.mlx.utils_mlx import (
-    initialize_mlx,
-    mlx_force_oom,
+from exo.worker.engines.engine_init import (
+    generate_with_engine,
+    initialize_engine,
+    warmup_engine,
 )
+from exo.worker.engines.mlx.utils_mlx import mlx_force_oom
 from exo.worker.runner.bootstrap import logger
 
 
@@ -89,7 +90,7 @@ def main(
                             )
                         )
 
-                        model, tokenizer, sampler = initialize_mlx(bound_instance)
+                        model, tokenizer, sampler = initialize_engine(bound_instance)
 
                         current_status = RunnerLoaded()
                         logger.info("runner loaded")
@@ -111,11 +112,10 @@ def main(
                         )
 
                         logger.info(f"warming up inference for instance: {instance}")
-                        toks = warmup_inference(
+                        toks = warmup_engine(
                             model=model,
                             tokenizer=tokenizer,
                             sampler=sampler,
-                            # kv_prefix_cache=kv_prefix_cache,  # supply for warmup-time prefix caching
                         )
                         logger.info(f"warmed up by generating {toks} tokens")
                         logger.info(
@@ -145,8 +145,8 @@ def main(
                         assert task_params.messages[0].content is not None
                         _check_for_debug_prompts(task_params.messages[0].content)
 
-                        # Generate responses using the actual MLX generation
-                        for response in mlx_generate(
+                        # Generate responses using the selected engine
+                        for response in generate_with_engine(
                             model=model,
                             tokenizer=tokenizer,
                             sampler=sampler,
