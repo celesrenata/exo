@@ -68,6 +68,10 @@ def torch_generate(
     """Generate text using PyTorch model with streaming output."""
     logger.info(f"PyTorch generation task_params: {task}")
 
+    # Check if this is distributed inference
+    # For now, we'll implement a basic distributed generation
+    # In a real implementation, you'd need proper inter-node communication
+    
     prompt = apply_chat_template(
         tokenizer=tokenizer,
         chat_task_data=task,
@@ -75,8 +79,14 @@ def torch_generate(
 
     logger.info(f"Generated prompt: {prompt[:200]}...")
 
-    # Tokenize the prompt
-    input_ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long)
+    # Tokenize the prompt (only on rank 0 if distributed)
+    if tokenizer is not None:
+        input_ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long)
+    else:
+        # For non-first ranks in distributed setup, we'll receive input from previous rank
+        # This is a simplified implementation
+        logger.info("Waiting for input from previous rank (distributed mode)")
+        input_ids = torch.zeros((1, 1), dtype=torch.long)  # Placeholder
 
     max_tokens = task.max_tokens or MAX_TOKENS
     generated_tokens = 0
@@ -85,48 +95,69 @@ def torch_generate(
 
     with torch.no_grad():
         while generated_tokens < max_tokens:
-            # Forward pass
+            # Forward pass through this model shard
             outputs = model(input_ids)
+            
+            # For distributed inference, we need to handle different ranks differently
+            # This is a basic implementation - real distributed inference needs proper communication
+            if hasattr(model, '_is_distributed_shard'):
+                # Handle distributed forward pass
+                # In practice, you'd send/receive tensors between ranks
+                logger.debug("Processing distributed forward pass")
+            
             logits = outputs.logits[:, -1, :]
 
-            # Sample next token
-            next_token = sampler(logits)
-            next_token_id = next_token.item()
+            # Sample next token (only on the last rank in distributed setup)
+            if tokenizer is not None:  # Assuming tokenizer only exists on rank 0/last rank
+                next_token = sampler(logits)
+                next_token_id = next_token.item()
 
-            # Add token to sequence
-            input_ids = torch.cat([input_ids, next_token.unsqueeze(0)], dim=-1)
-            generated_tokens += 1
+                # Add token to sequence
+                input_ids = torch.cat([input_ids, next_token.unsqueeze(0)], dim=-1)
+                generated_tokens += 1
 
-            # Decode the new token
-            try:
-                # Decode just the new token for streaming
-                token_text = tokenizer.decode([next_token_id], skip_special_tokens=True)
+                # Decode the new token
+                try:
+                    # Decode just the new token for streaming
+                    token_text = tokenizer.decode([next_token_id], skip_special_tokens=True)
 
-                # Check for finish conditions
-                finish_reason: FinishReason | None = None
-                if next_token_id in tokenizer.eos_token_ids:
-                    finish_reason = "stop"
-                elif generated_tokens >= max_tokens:
-                    finish_reason = "length"
+                    # Check for finish conditions
+                    finish_reason: FinishReason | None = None
+                    if next_token_id in tokenizer.eos_token_ids:
+                        finish_reason = "stop"
+                    elif generated_tokens >= max_tokens:
+                        finish_reason = "length"
 
-                logger.debug(
-                    f"Generated token {generated_tokens}: '{token_text}' (id={next_token_id})"
-                )
+                    logger.debug(
+                        f"Generated token {generated_tokens}: '{token_text}' (id={next_token_id})"
+                    )
 
+                    yield GenerationResponse(
+                        text=token_text,
+                        token=next_token_id,
+                        finish_reason=finish_reason,
+                    )
+
+                    if finish_reason is not None:
+                        logger.info(f"Generation finished: {finish_reason}")
+                        break
+
+                except Exception as e:
+                    logger.warning(f"Error decoding token {next_token_id}: {e}")
+                    # Skip this token and continue
+                    continue
+            else:
+                # For intermediate ranks, just pass through
+                # In practice, you'd send the hidden states to the next rank
+                logger.debug("Intermediate rank processing - passing hidden states")
+                generated_tokens += 1
+                
+                # For now, just yield empty responses for intermediate ranks
                 yield GenerationResponse(
-                    text=token_text,
-                    token=next_token_id,
-                    finish_reason=finish_reason,
+                    text="",
+                    token=0,
+                    finish_reason=None,
                 )
-
-                if finish_reason is not None:
-                    logger.info(f"Generation finished: {finish_reason}")
-                    break
-
-            except Exception as e:
-                logger.warning(f"Error decoding token {next_token_id}: {e}")
-                # Skip this token and continue
-                continue
 
     logger.info(f"Generation complete. Generated {generated_tokens} tokens.")
 

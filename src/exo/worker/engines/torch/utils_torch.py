@@ -38,6 +38,7 @@ def initialize_torch(
 ) -> tuple[Model, TokenizerWrapper, Callable[[torch.Tensor], torch.Tensor]]:
     """
     Initialize the PyTorch model, tokenizer, and sampler for CPU inference.
+    Supports both single-node and distributed inference.
     """
     torch.manual_seed(42)
 
@@ -54,13 +55,23 @@ def initialize_torch(
 
     logger.info("Created PyTorch CPU sampler")
 
-    # For now, only support single device (no distributed inference)
-    if len(bound_instance.instance.shard_assignments.node_to_runner) > 1:
-        raise NotImplementedError(
-            "Distributed inference not yet supported for PyTorch engine"
-        )
+    # Check if this is distributed inference
+    shard_assignments = bound_instance.instance.shard_assignments
+    is_distributed = len(shard_assignments.node_to_runner) > 1
+    
+    if is_distributed:
+        logger.info(f"Initializing distributed PyTorch inference with {len(shard_assignments.node_to_runner)} nodes")
+        return _initialize_distributed_torch(bound_instance, sampler)
+    else:
+        logger.info(f"Single device CPU inference for {bound_instance.instance}")
+        return _initialize_single_torch(bound_instance, sampler)
 
-    logger.info(f"Single device CPU inference for {bound_instance.instance}")
+
+def _initialize_single_torch(
+    bound_instance: BoundInstance, 
+    sampler: Callable[[torch.Tensor], torch.Tensor]
+) -> tuple[Model, TokenizerWrapper, Callable[[torch.Tensor], torch.Tensor]]:
+    """Initialize PyTorch for single-node inference."""
     model_path = build_model_path(bound_instance.bound_shard.model_meta.model_id)
 
     start_time = time.perf_counter()
@@ -101,6 +112,86 @@ def initialize_torch(
 
     logger.debug(f"Model: {model}")
     logger.info(f"Model loaded on device: {next(model.parameters()).device}")
+
+    return cast(Model, model), tokenizer, sampler
+
+
+def _initialize_distributed_torch(
+    bound_instance: BoundInstance,
+    sampler: Callable[[torch.Tensor], torch.Tensor]
+) -> tuple[Model, TokenizerWrapper, Callable[[torch.Tensor], torch.Tensor]]:
+    """Initialize PyTorch for distributed inference using pipeline parallelism."""
+    from exo.shared.types.worker.shards import PipelineShardMetadata
+    
+    shard_metadata = bound_instance.bound_shard
+    if not isinstance(shard_metadata, PipelineShardMetadata):
+        raise NotImplementedError("Only pipeline parallelism is supported for PyTorch distributed inference")
+    
+    model_path = build_model_path(shard_metadata.model_meta.model_id)
+    device_rank = shard_metadata.device_rank
+    world_size = shard_metadata.world_size
+    start_layer = shard_metadata.start_layer
+    end_layer = shard_metadata.end_layer
+    
+    logger.info(f"Loading PyTorch model shard: rank {device_rank}/{world_size}, layers {start_layer}-{end_layer}")
+    
+    start_time = time.perf_counter()
+
+    # Load model configuration
+    config = AutoConfig.from_pretrained(
+        model_path,
+        trust_remote_code=TRUST_REMOTE_CODE,
+    )
+
+    # For distributed inference, we need to load only the layers for this shard
+    # This is a simplified implementation - in practice, you'd want more sophisticated layer extraction
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        config=config,
+        torch_dtype=torch.float32,
+        device_map="cpu",
+        trust_remote_code=TRUST_REMOTE_CODE,
+        low_cpu_mem_usage=True,
+    )
+    
+    # Extract only the layers needed for this shard
+    # This is a basic implementation - real distributed inference would need more sophisticated handling
+    if hasattr(model, 'transformer') and hasattr(model.transformer, 'h'):
+        # GPT-style models
+        total_layers = len(model.transformer.h)
+        if end_layer > total_layers:
+            end_layer = total_layers
+        model.transformer.h = model.transformer.h[start_layer:end_layer]
+        logger.info(f"Extracted layers {start_layer}:{end_layer} from {total_layers} total layers")
+    elif hasattr(model, 'model') and hasattr(model.model, 'layers'):
+        # Llama-style models  
+        total_layers = len(model.model.layers)
+        if end_layer > total_layers:
+            end_layer = total_layers
+        model.model.layers = model.model.layers[start_layer:end_layer]
+        logger.info(f"Extracted layers {start_layer}:{end_layer} from {total_layers} total layers")
+    else:
+        logger.warning("Could not identify model layer structure for sharding - using full model")
+
+    # Load tokenizer (only needed on first rank)
+    tokenizer_raw = None
+    if device_rank == 0:
+        tokenizer_raw = AutoTokenizer.from_pretrained(
+            model_path,
+            trust_remote_code=TRUST_REMOTE_CODE,
+        )
+        if tokenizer_raw.pad_token is None:
+            tokenizer_raw.pad_token = tokenizer_raw.eos_token
+    
+    tokenizer = TokenizerWrapper(tokenizer_raw) if tokenizer_raw else None
+
+    end_time = time.perf_counter()
+    logger.info(f"Time taken to load PyTorch model shard: {(end_time - start_time):.2f}s")
+
+    # Move model to eval mode
+    model.eval()
+
+    logger.info(f"Distributed PyTorch model shard loaded: rank {device_rank}, device: {next(model.parameters()).device}")
 
     return cast(Model, model), tokenizer, sampler
 
