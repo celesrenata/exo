@@ -74,6 +74,39 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
+    
+    # CUDA-compatible models (PyTorch/Transformers with CUDA acceleration)
+    "llama-3.2-1b-cuda": ModelCard(
+        short_id="llama-3.2-1b-cuda",
+        model_id=ModelId("meta-llama/Llama-3.2-1B-Instruct"),
+        name="Llama 3.2 1B (CUDA)",
+        description="""Llama 3.2 1B optimized for CUDA inference using PyTorch/Transformers.""",
+        tags=["cuda", "small"],
+        metadata=ModelMetadata(
+            model_id=ModelId("meta-llama/Llama-3.2-1B-Instruct"),
+            pretty_name="Llama 3.2 1B (CUDA)",
+            storage_size=Memory.from_gb(3),
+            n_layers=16,
+            hidden_size=2048,
+            supports_tensor=True,
+        ),
+    ),
+    "qwen2.5-0.5b-cuda": ModelCard(
+        short_id="qwen2.5-0.5b-cuda",
+        model_id=ModelId("Qwen/Qwen2.5-0.5B-Instruct"),
+        name="Qwen2.5 0.5B (CUDA)",
+        description="""Qwen2.5 0.5B optimized for CUDA inference using PyTorch/Transformers.""",
+        tags=["cuda", "tiny"],
+        metadata=ModelMetadata(
+            model_id=ModelId("Qwen/Qwen2.5-0.5B-Instruct"),
+            pretty_name="Qwen2.5 0.5B (CUDA)",
+            storage_size=Memory.from_gb(1),
+            n_layers=24,
+            hidden_size=896,
+            supports_tensor=True,
+        ),
+    ),
+    
     # MLX-specific models (existing ones)
     # deepseek v3
     # "deepseek-v3-0324:4bit": ModelCard(

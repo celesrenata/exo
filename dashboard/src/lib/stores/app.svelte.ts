@@ -172,7 +172,7 @@ export interface PlacementPreviewResponse {
 
 interface RawStateResponse {
 	topology?: RawTopology;
-	instances?: Record<string, { MlxRingInstance?: Instance; MlxIbvInstance?: Instance; MlxJacclInstance?: Instance }>;
+	instances?: Record<string, { MlxRingInstance?: Instance; MlxIbvInstance?: Instance; MlxJacclInstance?: Instance; CpuRingInstance?: Instance; CudaRingInstance?: Instance }>;
 	runners?: Record<string, unknown>;
 	downloads?: Record<string, unknown[]>;
 	nodeProfiles?: RawNodeProfiles;
@@ -627,6 +627,8 @@ class AppStore {
 		let instanceType: string | null = null;
 		if (instanceTag === 'MlxRingInstance') instanceType = 'MLX Ring';
 		else if (instanceTag === 'MlxIbvInstance' || instanceTag === 'MlxJacclInstance') instanceType = 'MLX RDMA';
+		else if (instanceTag === 'CpuRingInstance') instanceType = 'CPU Ring';
+		else if (instanceTag === 'CudaRingInstance') instanceType = 'CUDA Ring';
 
 		let sharding: string | null = null;
 		const inst = instance as { shardAssignments?: { runnerToShard?: Record<string, unknown> } };

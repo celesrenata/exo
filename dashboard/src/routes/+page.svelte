@@ -49,7 +49,7 @@ const sidebarVisible = $derived(chatSidebarVisible());
 	// Instance launch state
 	let models = $state<Array<{id: string, name?: string, storage_size_megabytes?: number}>>([]);
 	let selectedSharding = $state<'Pipeline' | 'Tensor'>('Pipeline');
-	type InstanceMeta = 'MlxRing' | 'MlxIbv' | 'MlxJaccl';
+	type InstanceMeta = 'MlxRing' | 'MlxIbv' | 'MlxJaccl' | 'CpuRing' | 'CudaRing';
 	
 	let selectedInstanceType = $state<InstanceMeta>('MlxRing');
 	let selectedMinNodes = $state<number>(1);
@@ -183,7 +183,13 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 	const matchesSelectedRuntime = (runtime: InstanceMeta): boolean =>
 		selectedInstanceType === 'MlxRing'
 			? runtime === 'MlxRing'
-			: runtime === 'MlxIbv' || runtime === 'MlxJaccl';
+			: selectedInstanceType === 'MlxIbv'
+			? runtime === 'MlxIbv' || runtime === 'MlxJaccl'
+			: selectedInstanceType === 'CpuRing'
+			? runtime === 'CpuRing'
+			: selectedInstanceType === 'CudaRing'
+			? runtime === 'CudaRing'
+			: false;
 
 	// Helper to check if a model can be launched (has valid placement with >= minNodes)
 	function canModelFit(modelId: string): boolean {
@@ -226,20 +232,43 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 		return modelSizeGB <= availableMemoryGB();
 	}
 	
+	// Helper to check if a model is compatible with the selected instance type
+	const isModelCompatible = (model: {id: string, tags?: string[]}) => {
+		const tags = model.tags || [];
+		
+		switch (selectedInstanceType) {
+			case 'CpuRing':
+				// CPU Ring should show CPU-optimized models
+				return tags.includes('cpu');
+			case 'CudaRing':
+				// CUDA Ring should show CUDA-optimized models (or CPU models as fallback)
+				return tags.includes('cuda') || tags.includes('cpu');
+			case 'MlxRing':
+			case 'MlxIbv':
+			case 'MlxJaccl':
+				// MLX instance types should show MLX-optimized models (no cpu/cuda tags)
+				return !tags.includes('cpu') && !tags.includes('cuda');
+			default:
+				return true;
+		}
+	};
+
 	// Sorted models for dropdown - biggest first, unrunnable at the end
 	const sortedModels = $derived(() => {
-		return [...models].sort((a, b) => {
-			// First: models that have enough memory come before those that don't
-			const aCanFit = hasEnoughMemory(a);
-			const bCanFit = hasEnoughMemory(b);
-			if (aCanFit && !bCanFit) return -1;
-			if (!aCanFit && bCanFit) return 1;
-			
-			// Then: sort by size (biggest first)
-			const aSize = getModelSizeGB(a);
-			const bSize = getModelSizeGB(b);
-			return bSize - aSize;
-		});
+		return [...models]
+			.filter(isModelCompatible) // Filter by instance type compatibility
+			.sort((a, b) => {
+				// First: models that have enough memory come before those that don't
+				const aCanFit = hasEnoughMemory(a);
+				const bCanFit = hasEnoughMemory(b);
+				if (aCanFit && !bCanFit) return -1;
+				if (!aCanFit && bCanFit) return 1;
+				
+				// Then: sort by size (biggest first)
+				const aSize = getModelSizeGB(a);
+				const bSize = getModelSizeGB(b);
+				return bSize - aSize;
+			});
 	});
 	
 	// Compute model tags (FASTEST, BIGGEST)
@@ -756,6 +785,8 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 		let instanceType = 'Unknown';
 		if (instanceTag === 'MlxRingInstance') instanceType = 'MLX Ring';
 		else if (instanceTag === 'MlxIbvInstance' || instanceTag === 'MlxJacclInstance') instanceType = 'MLX RDMA';
+		else if (instanceTag === 'CpuRingInstance') instanceType = 'CPU Ring';
+		else if (instanceTag === 'CudaRingInstance') instanceType = 'CUDA Ring';
 		
 		const inst = instance as { 
 			shardAssignments?: { 
@@ -1524,7 +1555,7 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 							<!-- Instance Type -->
 							<div>
 								<div class="text-xs text-white/70 font-mono mb-2">Instance Type:</div>
-								<div class="flex gap-2">
+								<div class="flex gap-2 flex-wrap">
 									<button 
 										onclick={() => selectedInstanceType = 'MlxRing'}
 										class="flex items-center gap-2 py-2 px-4 text-sm font-mono border rounded transition-all duration-200 cursor-pointer {selectedInstanceType === 'MlxRing' ? 'bg-transparent text-exo-yellow border-exo-yellow' : 'bg-transparent text-white/70 border-exo-medium-gray/50 hover:border-exo-yellow/50'}"
@@ -1546,6 +1577,28 @@ function toggleInstanceDownloadDetails(nodeId: string): void {
 											{/if}
 										</span>
 										MLX RDMA
+									</button>
+									<button 
+										onclick={() => selectedInstanceType = 'CpuRing'}
+										class="flex items-center gap-2 py-2 px-4 text-sm font-mono border rounded transition-all duration-200 cursor-pointer {selectedInstanceType === 'CpuRing' ? 'bg-transparent text-exo-yellow border-exo-yellow' : 'bg-transparent text-white/70 border-exo-medium-gray/50 hover:border-exo-yellow/50'}"
+									>
+										<span class="w-4 h-4 rounded-full border-2 flex items-center justify-center {selectedInstanceType === 'CpuRing' ? 'border-exo-yellow' : 'border-exo-medium-gray'}">
+											{#if selectedInstanceType === 'CpuRing'}
+												<span class="w-2 h-2 rounded-full bg-exo-yellow"></span>
+											{/if}
+										</span>
+										CPU Ring
+									</button>
+									<button 
+										onclick={() => selectedInstanceType = 'CudaRing'}
+										class="flex items-center gap-2 py-2 px-4 text-sm font-mono border rounded transition-all duration-200 cursor-pointer {selectedInstanceType === 'CudaRing' ? 'bg-transparent text-exo-yellow border-exo-yellow' : 'bg-transparent text-white/70 border-exo-medium-gray/50 hover:border-exo-yellow/50'}"
+									>
+										<span class="w-4 h-4 rounded-full border-2 flex items-center justify-center {selectedInstanceType === 'CudaRing' ? 'border-exo-yellow' : 'border-exo-medium-gray'}">
+											{#if selectedInstanceType === 'CudaRing'}
+												<span class="w-2 h-2 rounded-full bg-exo-yellow"></span>
+											{/if}
+										</span>
+										CUDA Ring
 									</button>
 								</div>
 							</div>
