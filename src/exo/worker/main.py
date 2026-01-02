@@ -10,6 +10,7 @@ from exo.routing.connection_message import ConnectionMessage, ConnectionMessageT
 from exo.shared.apply import apply
 from exo.shared.types.commands import ForwarderCommand, RequestEventLog
 from exo.shared.types.common import NodeId, SessionId
+from exo.shared.types.models import ModelId
 from exo.shared.types.events import (
     Event,
     EventId,
@@ -81,7 +82,7 @@ class Worker:
         self.out_for_delivery: dict[EventId, ForwarderEvent] = {}
 
         self.state: State = State()
-        self.download_status: dict[ShardMetadata, DownloadProgress] = {}
+        self.download_status: dict[ModelId, DownloadProgress] = {}
         self.runners: dict[RunnerId, RunnerSupervisor] = {}
         self._tg: TaskGroup = create_task_group()
 
@@ -200,7 +201,7 @@ class Worker:
                         progress = DownloadPending(
                             shard_metadata=shard, node_id=self.node_id
                         )
-                        self.download_status[shard] = progress
+                        self.download_status[shard.model_meta.model_id] = progress
                         await self.event_sender.send(
                             NodeDownloadProgress(download_progress=progress)
                         )
@@ -213,7 +214,7 @@ class Worker:
                         progress = DownloadCompleted(
                             shard_metadata=shard, node_id=self.node_id
                         )
-                        self.download_status[shard] = progress
+                        self.download_status[shard.model_meta.model_id] = progress
                         await self.event_sender.send(
                             NodeDownloadProgress(download_progress=progress)
                         )
@@ -343,7 +344,7 @@ class Worker:
                 initial_progress
             ),
         )
-        self.download_status[task.shard_metadata] = status
+        self.download_status[task.shard_metadata.model_meta.model_id] = status
         self.event_sender.send_nowait(NodeDownloadProgress(download_progress=status))
 
         last_progress_time = 0.0
@@ -357,7 +358,7 @@ class Worker:
             nonlocal last_progress_time
             if progress.status == "complete":
                 status = DownloadCompleted(shard_metadata=shard, node_id=self.node_id)
-                self.download_status[shard] = status
+                self.download_status[shard.model_meta.model_id] = status
                 # Footgun!
                 self.event_sender.send_nowait(
                     NodeDownloadProgress(download_progress=status)
@@ -378,7 +379,7 @@ class Worker:
                         progress
                     ),
                 )
-                self.download_status[shard] = status
+                self.download_status[shard.model_meta.model_id] = status
                 self.event_sender.send_nowait(
                     NodeDownloadProgress(download_progress=status)
                 )
