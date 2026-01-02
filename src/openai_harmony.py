@@ -4,7 +4,7 @@ This is a temporary workaround until the full dependency is available.
 """
 
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 
 class HarmonyEncodingName(Enum):
