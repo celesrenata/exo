@@ -68,6 +68,33 @@ def select_best_engine() -> EngineType:
         raise RuntimeError("No inference engines available. Please install MLX (Apple Silicon) or PyTorch.")
 
 
+def is_model_compatible(model_id: str, engine_type: EngineType) -> bool:
+    """Check if a model is compatible with a specific engine."""
+    model_id_lower = model_id.lower()
+    
+    if engine_type == "mlx":
+        # MLX models are from mlx-community
+        return "mlx-community/" in model_id_lower
+    elif engine_type in ["torch", "cpu"]:
+        # CPU/PyTorch models are standard HuggingFace models (not mlx-community)
+        return "mlx-community/" not in model_id_lower
+    
+    return False
+
+
+def get_compatible_models(available_models: list[str]) -> list[str]:
+    """Filter models based on available engines."""
+    selected_engine = select_best_engine()
+    compatible = []
+    
+    for model_id in available_models:
+        if is_model_compatible(model_id, selected_engine):
+            compatible.append(model_id)
+    
+    logger.info(f"Found {len(compatible)} models compatible with {selected_engine} engine")
+    return compatible
+
+
 def get_engine_info() -> dict[str, any]:
     """Get information about available engines."""
     info = {
