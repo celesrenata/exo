@@ -30,6 +30,8 @@ from exo.shared.types.worker.instances import (
     InstanceMeta,
     MlxJacclInstance,
     MlxRingInstance,
+    CpuRingInstance,
+    CudaRingInstance,
 )
 
 
@@ -143,6 +145,50 @@ def place_instance(
                     hosts_by_node[node.node_id] = []
             
             target_instances[instance_id] = MlxRingInstance(
+                instance_id=instance_id,
+                shard_assignments=shard_assignments,
+                hosts_by_node=hosts_by_node,
+                ephemeral_port=ephemeral_port,
+            )
+        case InstanceMeta.CpuRing:
+            hosts: list[Host] = get_hosts_from_subgraph(cycle_digraph)
+            ephemeral_port = random_ephemeral_port()
+            
+            # Create hosts_by_node mapping
+            hosts_by_node = {}
+            for i, node in enumerate(selected_cycle):
+                if i < len(hosts):
+                    hosts_by_node[node.node_id] = [Host(
+                        ip=hosts[i].ip,
+                        port=ephemeral_port,
+                    )]
+                else:
+                    # Fallback for nodes without specific hosts
+                    hosts_by_node[node.node_id] = []
+            
+            target_instances[instance_id] = CpuRingInstance(
+                instance_id=instance_id,
+                shard_assignments=shard_assignments,
+                hosts_by_node=hosts_by_node,
+                ephemeral_port=ephemeral_port,
+            )
+        case InstanceMeta.CudaRing:
+            hosts: list[Host] = get_hosts_from_subgraph(cycle_digraph)
+            ephemeral_port = random_ephemeral_port()
+            
+            # Create hosts_by_node mapping
+            hosts_by_node = {}
+            for i, node in enumerate(selected_cycle):
+                if i < len(hosts):
+                    hosts_by_node[node.node_id] = [Host(
+                        ip=hosts[i].ip,
+                        port=ephemeral_port,
+                    )]
+                else:
+                    # Fallback for nodes without specific hosts
+                    hosts_by_node[node.node_id] = []
+            
+            target_instances[instance_id] = CudaRingInstance(
                 instance_id=instance_id,
                 shard_assignments=shard_assignments,
                 hosts_by_node=hosts_by_node,

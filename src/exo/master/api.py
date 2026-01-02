@@ -270,7 +270,7 @@ class API:
 
         instance_combinations: list[tuple[Sharding, InstanceMeta, int]] = []
         for sharding in (Sharding.Pipeline, Sharding.Tensor):
-            for instance_meta in (InstanceMeta.MlxRing, InstanceMeta.MlxJaccl):
+            for instance_meta in (InstanceMeta.MlxRing, InstanceMeta.MlxJaccl, InstanceMeta.CpuRing, InstanceMeta.CudaRing):
                 instance_combinations.extend(
                     [
                         (sharding, instance_meta, i)

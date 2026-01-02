@@ -14,6 +14,8 @@ class InstanceId(Id):
 class InstanceMeta(str, Enum):
     MlxRing = "MlxRing"
     MlxJaccl = "MlxJaccl"
+    CpuRing = "CpuRing"
+    CudaRing = "CudaRing"
 
 
 class BaseInstance(TaggedModel):
@@ -34,8 +36,18 @@ class MlxJacclInstance(BaseInstance):
     jaccl_coordinators: dict[NodeId, str]
 
 
+class CpuRingInstance(BaseInstance):
+    hosts_by_node: dict[NodeId, list[Host]]
+    ephemeral_port: int
+
+
+class CudaRingInstance(BaseInstance):
+    hosts_by_node: dict[NodeId, list[Host]]
+    ephemeral_port: int
+
+
 # TODO: Single node instance
-Instance = MlxRingInstance | MlxJacclInstance
+Instance = MlxRingInstance | MlxJacclInstance | CpuRingInstance | CudaRingInstance
 
 
 class BoundInstance(CamelCaseModel):
