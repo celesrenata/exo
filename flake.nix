@@ -115,7 +115,7 @@
         python.pkgs.buildPythonApplication rec {
           pname = "exo-${accelerator}";
           version = "0.1.0";
-          format = "pyproject";
+          format = "other";  # Not a standard setuptools package
           
           src = ./.;
           
@@ -152,6 +152,43 @@
             python.pkgs.pip
             python.pkgs.build
           ];
+          
+          buildPhase = ''
+            echo "🔨 BUILD PHASE START"
+            echo "==================="
+            
+            # Install the Python package
+            python -m pip install --no-deps --no-build-isolation --target $out/lib/python3.13/site-packages .
+            
+            echo "🔨 BUILD PHASE END"
+            echo "=================="
+          '';
+          
+          installPhase = ''
+            echo "📦 INSTALL PHASE START"
+            echo "======================"
+            
+            # Create bin directory and scripts
+            mkdir -p $out/bin
+            
+            # Create the main exo script
+            cat > $out/bin/exo << 'EOF'
+#!/usr/bin/env python3
+import sys
+sys.path.insert(0, "$out/lib/python3.13/site-packages")
+from exo.main import main
+if __name__ == "__main__":
+    main()
+EOF
+            chmod +x $out/bin/exo
+            
+            # Create exo-master and exo-worker scripts (they all point to main)
+            cp $out/bin/exo $out/bin/exo-master
+            cp $out/bin/exo $out/bin/exo-worker
+            
+            echo "📦 INSTALL PHASE END"
+            echo "==================="
+          '';
           
           propagatedBuildInputs = with python.pkgs; [
             aiofiles
@@ -232,8 +269,18 @@
             for wheel in ${rustBindings}/*.whl; do
               if [ -f "$wheel" ]; then
                 echo "Installing wheel to final location: $wheel"
-                python -m pip install --no-deps --no-build-isolation --target $out/lib/python3.13/site-packages "$wheel"
+                
+                # Extract wheel manually to ensure .so file is included
+                cd $TMPDIR
+                ${pkgs.unzip}/bin/unzip -o "$wheel"
+                
+                # Copy the extracted contents to the final location
+                mkdir -p $out/lib/python3.13/site-packages
+                cp -r exo_pyo3_bindings $out/lib/python3.13/site-packages/
+                cp -r exo_pyo3_bindings-*.dist-info $out/lib/python3.13/site-packages/
+                
                 echo "Rust bindings installed to final package"
+                ls -la $out/lib/python3.13/site-packages/exo_pyo3_bindings/
                 break
               fi
             done
