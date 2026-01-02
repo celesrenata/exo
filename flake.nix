@@ -171,6 +171,11 @@
             tiktoken
             hypercorn
             openai-harmony
+            # PyTorch and ML dependencies for CPU inference
+            torch
+            transformers
+            tokenizers
+            safetensors
           ] ++ pkgs.lib.optionals (accelerator == "cuda") [
             # CUDA packages would go here
           ] ++ pkgs.lib.optionals (accelerator == "rocm") [
