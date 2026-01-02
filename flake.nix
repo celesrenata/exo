@@ -298,6 +298,7 @@
             transformers
             tokenizers
             safetensors
+            accelerate
           ] ++ pkgs.lib.optionals (accelerator == "cuda") [
             # CUDA packages would go here
           ] ++ pkgs.lib.optionals (accelerator == "rocm") [
