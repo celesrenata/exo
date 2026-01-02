@@ -19,6 +19,7 @@ from exo.shared.types.memory import Memory
 from exo.shared.types.profiling import (
     MemoryUsage,
     NetworkInterfaceInfo,
+    SystemPerformanceProfile,
 )
 from exo.shared.types.thunderbolt import TBConnection, TBConnectivity, TBIdentifier
 from exo.utils.channels import Sender
@@ -28,6 +29,10 @@ from .macmon import MacmonMetrics
 from .system_info import get_friendly_name, get_model_and_chip, get_network_interfaces
 
 IS_DARWIN = sys.platform == "darwin"
+
+# Import Linux monitoring for non-macOS systems
+if not IS_DARWIN:
+    from .linux_monitor import get_linux_system_profile
 
 
 class StaticNodeInformation(TaggedModel):
@@ -82,6 +87,51 @@ class MiscData(TaggedModel):
         return cls(friendly_name=await get_friendly_name())
 
 
+class LinuxSystemMetrics(TaggedModel):
+    """Linux system metrics similar to MacmonMetrics"""
+    
+    system_profile: SystemPerformanceProfile
+    memory: MemoryUsage
+
+    @classmethod
+    def gather(cls) -> Self:
+        """Gather Linux system metrics"""
+        system_profile = get_linux_system_profile()
+        
+        # Get memory info using basic file reading since psutil might not be available
+        try:
+            with open("/proc/meminfo", "r") as f:
+                meminfo = {}
+                for line in f:
+                    if ":" in line:
+                        key, value = line.split(":", 1)
+                        # Extract numeric value (remove 'kB' suffix and convert to bytes)
+                        value_str = value.strip().split()[0]
+                        meminfo[key.strip()] = int(value_str) * 1024  # Convert kB to bytes
+            
+            ram_total = meminfo.get("MemTotal", 0)
+            ram_available = meminfo.get("MemAvailable", meminfo.get("MemFree", 0))
+            swap_total = meminfo.get("SwapTotal", 0) 
+            swap_free = meminfo.get("SwapFree", 0)
+            
+            memory = MemoryUsage.from_bytes(
+                ram_total=ram_total,
+                ram_available=ram_available,
+                swap_total=swap_total,
+                swap_available=swap_free,
+            )
+        except Exception:
+            # Fallback to default values if reading fails
+            memory = MemoryUsage.from_bytes(
+                ram_total=0,
+                ram_available=0,
+                swap_total=0,
+                swap_available=0,
+            )
+        
+        return cls(system_profile=system_profile, memory=memory)
+
+
 class EngineInformation(TaggedModel):
     """Engine and inference capability information"""
     
@@ -127,6 +177,7 @@ async def _gather_iface_map() -> dict[str, str] | None:
 
 GatheredInfo = (
     MacmonMetrics
+    | LinuxSystemMetrics
     | MemoryUsage
     | NodeNetworkInterfaces
     | MacTBIdentifiers
@@ -152,6 +203,9 @@ class InfoGatherer:
         async with self._tg as tg:
             if (macmon_path := shutil.which("macmon")) is not None:
                 tg.start_soon(self._monitor_macmon, macmon_path)
+            elif not IS_DARWIN:
+                # Use Linux system monitoring when macmon is not available
+                tg.start_soon(self._monitor_linux_system)
             if IS_DARWIN:
                 tg.start_soon(self._monitor_system_profiler)
             tg.start_soon(self._watch_system_info)
@@ -229,6 +283,23 @@ class InfoGatherer:
                 old_nics = nics
                 await self.info_sender.send(NodeNetworkInterfaces(ifaces=nics))
             await anyio.sleep(self.interface_watcher_interval)
+
+    async def _monitor_linux_system(self):
+        """Monitor Linux system metrics when macmon is not available."""
+        if IS_DARWIN:
+            return
+        
+        # Use the same interval as macmon
+        interval = self.macmon_interval or 1.0
+        
+        while True:
+            try:
+                metrics = LinuxSystemMetrics.gather()
+                await self.info_sender.send(metrics)
+            except Exception as e:
+                logger.warning(f"Failed to gather Linux system metrics: {e}")
+            
+            await anyio.sleep(interval)
 
     async def _monitor_macmon(self, macmon_path: str):
         if self.macmon_interval is None:

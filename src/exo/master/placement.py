@@ -128,16 +128,25 @@ def place_instance(
             )
         case InstanceMeta.MlxRing:
             hosts: list[Host] = get_hosts_from_subgraph(cycle_digraph)
+            ephemeral_port = random_ephemeral_port()
+            
+            # Create hosts_by_node mapping
+            hosts_by_node = {}
+            for i, node in enumerate(selected_cycle):
+                if i < len(hosts):
+                    hosts_by_node[node.node_id] = [Host(
+                        ip=hosts[i].ip,
+                        port=ephemeral_port,
+                    )]
+                else:
+                    # Fallback for nodes without specific hosts
+                    hosts_by_node[node.node_id] = []
+            
             target_instances[instance_id] = MlxRingInstance(
                 instance_id=instance_id,
                 shard_assignments=shard_assignments,
-                hosts=[
-                    Host(
-                        ip=host.ip,
-                        port=random_ephemeral_port(),
-                    )
-                    for host in hosts
-                ],
+                hosts_by_node=hosts_by_node,
+                ephemeral_port=ephemeral_port,
             )
 
     return target_instances

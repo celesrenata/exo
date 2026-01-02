@@ -34,6 +34,7 @@ from exo.shared.types.worker.instances import Instance, InstanceId
 from exo.shared.types.worker.runners import RunnerId, RunnerStatus
 from exo.utils.info_gatherer.info_gatherer import (
     EngineInformation,
+    LinuxSystemMetrics,
     MacmonMetrics,
     MacTBConnections,
     MacTBIdentifiers,
@@ -222,6 +223,9 @@ def apply_node_gathered_info(event: NodeGatheredInfo, state: State) -> State:
     # TODO: should be broken up into individual events instead of this monster
     match info:
         case MacmonMetrics():
+            profile.system = info.system_profile
+            profile.memory = info.memory
+        case LinuxSystemMetrics():
             profile.system = info.system_profile
             profile.memory = info.memory
         case MemoryUsage():
