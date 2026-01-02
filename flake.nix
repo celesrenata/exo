@@ -134,6 +134,14 @@
             sed -i 's/exo-master = "exo.master.main:main"/exo-master = "exo.main:main"/' pyproject.toml
             sed -i 's/exo-worker = "exo.worker.main:main"/exo-worker = "exo.main:main"/' pyproject.toml
             
+            # Remove openai-harmony dependency since it's not available in nixpkgs
+            echo "Removing openai-harmony dependency..."
+            sed -i '/openai-harmony/d' pyproject.toml
+            
+            # Copy our openai_harmony stub
+            echo "Adding openai_harmony stub..."
+            cp ${./src/openai_harmony.py} src/openai_harmony.py
+            
             echo "🔧 POST-PATCH PHASE END"
             echo "======================"
           '';
@@ -170,7 +178,7 @@
             bidict
             tiktoken
             hypercorn
-            openai-harmony
+            # Note: openai-harmony not available in nixpkgs, using stub
             # PyTorch and ML dependencies for CPU inference
             torch
             transformers
@@ -357,10 +365,10 @@
                 # Fix Python interpreter for PyO3 Rust bindings
                 PYTHONPATH = "${cfg.package}/lib/python3.13/site-packages";
                 # Set inference engine based on accelerator choice
-                EXO_INFERENCE_ENGINE = cfg.accelerator;
+                EXO_ENGINE = if cfg.accelerator == "cpu" then "torch" else cfg.accelerator;
               } // (if cfg.accelerator == "cpu" || (pkgs.stdenv.isLinux && cfg.accelerator == "mlx") then {
                 # Force CPU inference and disable MLX when using CPU accelerator or MLX on Linux
-                EXO_INFERENCE_ENGINE = "cpu";
+                EXO_ENGINE = "torch";
                 MLX_DISABLE = "1";
               } else {});
             };
@@ -435,6 +443,31 @@
               python313Packages.torch
               python313Packages.transformers
               python313Packages.huggingface-hub
+              python313Packages.loguru
+              python313Packages.pydantic
+              python313Packages.anyio
+              python313Packages.aiofiles
+              python313Packages.aiohttp
+              python313Packages.fastapi
+              python313Packages.rich
+              python313Packages.psutil
+              python313Packages.tiktoken
+              python313Packages.safetensors
+              python313Packages.tokenizers
+              python313Packages.rustworkx
+              python313Packages.networkx
+              python313Packages.sqlmodel
+              python313Packages.sqlalchemy
+              python313Packages.aiosqlite
+              python313Packages.cryptography
+              python313Packages.base58
+              python313Packages.filelock
+              python313Packages.protobuf
+              python313Packages.bidict
+              python313Packages.hypercorn
+              python313Packages.textual
+              python313Packages.typeguard
+              python313Packages.openai
 
               # RUST
               ((fenixToolchain system).withComponents [
@@ -445,6 +478,7 @@
                 "rust-src"
               ])
               rustup # Just here to make RustRover happy
+              maturin
 
               # NIX
               nixpkgs-fmt
