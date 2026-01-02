@@ -13,42 +13,27 @@ class ModelCard(CamelCaseModel):
 
 
 MODEL_CARDS: dict[str, ModelCard] = {
-    # CPU-compatible models (PyTorch/Transformers)
+    # CPU-compatible models (PyTorch/Transformers) - using working models for now
     "llama-3.2-1b-cpu": ModelCard(
         short_id="llama-3.2-1b-cpu",
-        model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),  # Use community version
+        model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),  # Working model, engine will be CPU
         name="Llama 3.2 1B (CPU)",
-        description="""Llama 3.2 1B optimized for CPU inference using PyTorch/Transformers.""",
+        description="""Llama 3.2 1B for CPU inference - will use CPU engine at runtime.""",
         tags=["cpu", "small"],
         metadata=ModelMetadata(
             model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),
             pretty_name="Llama 3.2 1B (CPU)",
-            storage_size=Memory.from_gb(3),
+            storage_size=Memory.from_gb(1),
             n_layers=16,
             hidden_size=2048,
             supports_tensor=True,
         ),
     ),
-    "llama-3.2-3b-cpu": ModelCard(
-        short_id="llama-3.2-3b-cpu",
-        model_id=ModelId("mlx-community/Llama-3.2-3B-Instruct-4bit"),  # Use community version
-        name="Llama 3.2 3B (CPU)",
-        description="""Llama 3.2 3B optimized for CPU inference using PyTorch/Transformers.""",
-        tags=["cpu", "medium"],
-        metadata=ModelMetadata(
-            model_id=ModelId("mlx-community/Llama-3.2-3B-Instruct-4bit"),
-            pretty_name="Llama 3.2 3B (CPU)",
-            storage_size=Memory.from_gb(6),
-            n_layers=28,
-            hidden_size=3072,
-            supports_tensor=True,
-        ),
-    ),
     "qwen2.5-0.5b-cpu": ModelCard(
         short_id="qwen2.5-0.5b-cpu",
-        model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),  # Use community version
+        model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),  # Working model, engine will be CPU
         name="Qwen2.5 0.5B (CPU)",
-        description="""Qwen2.5 0.5B optimized for CPU inference using PyTorch/Transformers.""",
+        description="""Qwen2.5 0.5B for CPU inference - will use CPU engine at runtime.""",
         tags=["cpu", "tiny"],
         metadata=ModelMetadata(
             model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),
@@ -59,33 +44,18 @@ MODEL_CARDS: dict[str, ModelCard] = {
             supports_tensor=True,
         ),
     ),
-    "qwen2.5-1.5b-cpu": ModelCard(
-        short_id="qwen2.5-1.5b-cpu",
-        model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),  # Use community version
-        name="Qwen2.5 1.5B (CPU)",
-        description="""Qwen2.5 1.5B optimized for CPU inference using PyTorch/Transformers.""",
-        tags=["cpu", "small"],
-        metadata=ModelMetadata(
-            model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),
-            pretty_name="Qwen2.5 1.5B (CPU)",
-            storage_size=Memory.from_gb(3),
-            n_layers=28,
-            hidden_size=1536,
-            supports_tensor=True,
-        ),
-    ),
     
-    # CUDA-compatible models (PyTorch/Transformers with CUDA acceleration)
+    # CUDA-compatible models - using working models, engine selection at runtime
     "llama-3.2-1b-cuda": ModelCard(
         short_id="llama-3.2-1b-cuda",
-        model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),  # Use community version
+        model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),  # Working model, engine will be CUDA
         name="Llama 3.2 1B (CUDA)",
-        description="""Llama 3.2 1B optimized for CUDA inference using PyTorch/Transformers.""",
+        description="""Llama 3.2 1B for CUDA inference - will use CUDA engine at runtime.""",
         tags=["cuda", "small"],
         metadata=ModelMetadata(
             model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),
             pretty_name="Llama 3.2 1B (CUDA)",
-            storage_size=Memory.from_gb(3),
+            storage_size=Memory.from_gb(1),
             n_layers=16,
             hidden_size=2048,
             supports_tensor=True,
@@ -93,9 +63,9 @@ MODEL_CARDS: dict[str, ModelCard] = {
     ),
     "qwen2.5-0.5b-cuda": ModelCard(
         short_id="qwen2.5-0.5b-cuda",
-        model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),  # Use community version
+        model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),  # Working model, engine will be CUDA
         name="Qwen2.5 0.5B (CUDA)",
-        description="""Qwen2.5 0.5B optimized for CUDA inference using PyTorch/Transformers.""",
+        description="""Qwen2.5 0.5B for CUDA inference - will use CUDA engine at runtime.""",
         tags=["cuda", "tiny"],
         metadata=ModelMetadata(
             model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),
