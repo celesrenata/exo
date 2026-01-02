@@ -328,7 +328,7 @@
                 Type = "simple";
                 User = cfg.user;
                 Group = cfg.group;
-                ExecStart = "${cfg.package}/bin/exo";
+                ExecStart = "${cfg.package}/bin/exo --verbose";
                 Restart = "always";
                 RestartSec = "10";
                 
