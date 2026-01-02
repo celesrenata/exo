@@ -1,3 +1,24 @@
+"""
+EXO Worker Implementation
+
+This module implements the worker component of the EXO distributed inference system
+with enhanced runner management, race condition fixes, and improved error handling.
+
+The worker is responsible for:
+- Managing runner processes with enhanced lifecycle management
+- Coordinating with the master for task distribution
+- Handling model downloads and shard management
+- Providing health monitoring and recovery mechanisms
+- Preventing race conditions during shutdown
+
+Enhanced Features:
+- Three-phase shutdown coordination
+- Resource lifecycle management
+- Enhanced error handling and recovery
+- Health monitoring and automatic recovery
+- Configurable timeouts and retry mechanisms
+"""
+
 from datetime import datetime, timezone
 from random import random
 
@@ -51,6 +72,12 @@ from exo.worker.download.download_utils import (
 from exo.worker.download.shard_downloader import RepoDownloadProgress, ShardDownloader
 from exo.worker.plan import plan
 from exo.worker.runner.runner_supervisor import RunnerSupervisor
+from exo.shared.constants import (
+    EXO_RUNNER_SHUTDOWN_TIMEOUT,
+    EXO_RUNNER_HEALTH_CHECK_INTERVAL,
+    EXO_RUNNER_STARTUP_TIMEOUT,
+    EXO_RUNNER_ENABLE_ENHANCED_LOGGING
+)
 
 
 class Worker:
@@ -107,6 +134,13 @@ class Worker:
         logger.info(f"Available engines: {available_engines}")
         logger.info(f"Selected engine: {selected_engine}")
         logger.info(f"Engine info: {engine_info}")
+        
+        # Log enhanced runner configuration if enabled
+        if EXO_RUNNER_ENABLE_ENHANCED_LOGGING:
+            logger.info("Enhanced runner features enabled:")
+            logger.info(f"  - Shutdown timeout: {EXO_RUNNER_SHUTDOWN_TIMEOUT}s")
+            logger.info(f"  - Health check interval: {EXO_RUNNER_HEALTH_CHECK_INTERVAL}s")
+            logger.info(f"  - Startup timeout: {EXO_RUNNER_STARTUP_TIMEOUT}s")
 
         info_send, info_recv = channel[GatheredInfo]()
         info_gatherer: InfoGatherer = InfoGatherer(info_send)
@@ -233,7 +267,7 @@ class Worker:
                         self._handle_shard_download_process(task, initial_progress)
                 case Shutdown(runner_id=runner_id):
                     try:
-                        with fail_after(3):
+                        with fail_after(EXO_RUNNER_SHUTDOWN_TIMEOUT):
                             await self.runners.pop(runner_id).start_task(task)
                     except TimeoutError:
                         await self.event_sender.send(
@@ -326,6 +360,7 @@ class Worker:
         runner = RunnerSupervisor.create(
             bound_instance=task.bound_instance,
             event_sender=self.event_sender.clone(),
+            initialize_timeout=EXO_RUNNER_STARTUP_TIMEOUT,
         )
         self.runners[task.bound_instance.bound_runner_id] = runner
         self._tg.start_soon(runner.run)

@@ -1,3 +1,24 @@
+"""
+EXO Main Entry Point
+
+This module provides the main entry point for the EXO distributed inference system.
+It includes enhanced runner management with race condition fixes and improved error handling.
+
+Enhanced Features:
+- Configurable timeouts for runner operations
+- Enhanced logging and monitoring
+- Improved error handling and recovery
+- Race condition prevention in multi-node scenarios
+
+Environment Variables:
+- EXO_RUNNER_SHUTDOWN_TIMEOUT: Timeout for runner shutdown (default: 60.0s)
+- EXO_RUNNER_HEALTH_CHECK_INTERVAL: Health check interval (default: 30.0s)
+- EXO_RUNNER_STARTUP_TIMEOUT: Startup timeout (default: 30.0s)
+- EXO_RUNNER_CLEANUP_TIMEOUT: Cleanup timeout (default: 15.0s)
+- EXO_RUNNER_MAX_STARTUP_RETRIES: Max startup retries (default: 3)
+- EXO_RUNNER_ENABLE_ENHANCED_LOGGING: Enable enhanced logging (default: true)
+"""
+
 import argparse
 import multiprocessing as mp
 import os

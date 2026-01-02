@@ -1,8 +1,9 @@
-"""Engine initialization that supports multiple backends."""
+"""Engine initialization that supports multiple backends with enhanced error handling."""
 
 from typing import Any, Callable
 
 from exo.shared.types.worker.instances import BoundInstance
+from exo.shared.constants import EXO_RUNNER_ENABLE_ENHANCED_LOGGING
 
 
 def initialize_engine(
@@ -24,6 +25,9 @@ def initialize_engine(
     from exo.worker.runner.bootstrap import logger
 
     engine_type = select_best_engine()
+
+    if EXO_RUNNER_ENABLE_ENHANCED_LOGGING:
+        logger.info(f"Enhanced engine initialization: {engine_type} (connect_only={connect_only})")
 
     if connect_only:
         logger.info(f"Connecting to {engine_type} engine")
@@ -80,6 +84,9 @@ def warmup_engine(model: Any, tokenizer: Any, sampler: Callable) -> int:
 
     engine_type = select_best_engine()
 
+    if EXO_RUNNER_ENABLE_ENHANCED_LOGGING:
+        logger.info(f"Enhanced engine warmup: {engine_type}")
+
     logger.info(f"Warming up {engine_type} engine")
 
     if engine_type == "mlx":
@@ -129,6 +136,9 @@ def generate_with_engine(
     from exo.worker.runner.bootstrap import logger
 
     engine_type = select_best_engine()
+
+    if EXO_RUNNER_ENABLE_ENHANCED_LOGGING:
+        logger.debug(f"Enhanced engine generation: {engine_type}")
 
     logger.info(f"Generating with {engine_type} engine")
 
