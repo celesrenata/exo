@@ -270,17 +270,35 @@
               if [ -f "$wheel" ]; then
                 echo "Installing wheel to final location: $wheel"
                 
-                # Extract wheel manually to ensure .so file is included
-                cd $TMPDIR
+                # Create a temporary directory for extraction
+                EXTRACT_DIR=$(mktemp -d)
+                cd "$EXTRACT_DIR"
+                
+                # Extract wheel and show contents
+                echo "Extracting wheel..."
                 ${pkgs.unzip}/bin/unzip -o "$wheel"
+                echo "Wheel contents:"
+                find . -type f -name "*.so" -o -name "*.py" -o -name "*.pyi" | head -20
                 
                 # Copy the extracted contents to the final location
                 mkdir -p $out/lib/python3.13/site-packages
-                cp -r exo_pyo3_bindings $out/lib/python3.13/site-packages/
-                cp -r exo_pyo3_bindings-*.dist-info $out/lib/python3.13/site-packages/
                 
-                echo "Rust bindings installed to final package"
+                # Copy all extracted files
+                if [ -d "exo_pyo3_bindings" ]; then
+                  echo "Copying exo_pyo3_bindings directory..."
+                  cp -rv exo_pyo3_bindings $out/lib/python3.13/site-packages/
+                fi
+                
+                if [ -d "exo_pyo3_bindings-"*".dist-info" ]; then
+                  echo "Copying dist-info directory..."
+                  cp -rv exo_pyo3_bindings-*.dist-info $out/lib/python3.13/site-packages/
+                fi
+                
+                echo "Final installation contents:"
                 ls -la $out/lib/python3.13/site-packages/exo_pyo3_bindings/
+                
+                # Cleanup
+                rm -rf "$EXTRACT_DIR"
                 break
               fi
             done
