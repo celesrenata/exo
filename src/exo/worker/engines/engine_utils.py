@@ -30,7 +30,7 @@ def detect_available_engines() -> list[EngineType]:
 
         # Test basic tensor operations
         x = torch.tensor([1.0, 2.0, 3.0])
-        y = x + 1
+        _ = x + 1  # Test tensor operations
         available.append("torch")
         logger.info("PyTorch engine available")
     except ImportError:

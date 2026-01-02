@@ -1,5 +1,3 @@
-import json
-import os
 import time
 from pathlib import Path
 from typing import Any, Callable, cast
@@ -9,12 +7,9 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    PreTrainedModel,
-    PreTrainedTokenizer,
 )
 
 from exo.shared.types.api import ChatCompletionMessageText
-from exo.shared.types.common import Host
 from exo.shared.types.memory import Memory
 from exo.shared.types.tasks import ChatCompletionTaskParams
 from exo.shared.types.worker.instances import BoundInstance
@@ -45,9 +40,6 @@ def initialize_torch(
     Initialize the PyTorch model, tokenizer, and sampler for CPU inference.
     """
     torch.manual_seed(42)
-
-    # Set device to CPU
-    device = torch.device("cpu")
 
     # Create sampler function
     def sampler(logits: torch.Tensor) -> torch.Tensor:
@@ -163,7 +155,7 @@ def check_torch_availability() -> bool:
 
         # Test basic tensor operations
         x = torch.tensor([1.0, 2.0, 3.0])
-        y = x + 1
+        _ = x + 1  # Test tensor operations
         return True
     except Exception as e:
         logger.error(f"PyTorch not available: {e}")

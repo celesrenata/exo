@@ -13,12 +13,6 @@ from hypercorn.asyncio import serve  # pyright: ignore[reportUnknownVariableType
 from hypercorn.config import Config
 from hypercorn.typing import ASGIFramework
 from loguru import logger
-from openai_harmony import (  # pyright: ignore[reportMissingTypeStubs]
-    HarmonyEncodingName,
-    Role,
-    StreamableParser,
-    load_harmony_encoding,
-)
 
 from exo.master.placement import place_instance as get_instance_placements
 from exo.shared.apply import apply
@@ -63,6 +57,12 @@ from exo.utils.banner import print_startup_banner
 from exo.utils.channels import Receiver, Sender, channel
 from exo.utils.dashboard_path import find_dashboard
 from exo.utils.event_buffer import OrderedBuffer
+from openai_harmony import (  # pyright: ignore[reportMissingTypeStubs]
+    HarmonyEncodingName,
+    Role,
+    StreamableParser,
+    load_harmony_encoding,
+)
 
 encoding = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
 

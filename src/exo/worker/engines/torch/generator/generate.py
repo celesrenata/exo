@@ -1,13 +1,12 @@
-from typing import Any, Callable, Generator, cast
+from typing import Callable, Generator
 
 import torch
-from transformers import PreTrainedModel
 
 from exo.shared.types.api import ChatCompletionMessage, FinishReason
 from exo.shared.types.tasks import ChatCompletionTaskParams
 from exo.shared.types.worker.runner_response import GenerationResponse
 from exo.worker.engines.torch import Model, TokenizerWrapper
-from exo.worker.engines.torch.utils_torch import apply_chat_template, MAX_TOKENS
+from exo.worker.engines.torch.utils_torch import MAX_TOKENS, apply_chat_template
 from exo.worker.runner.bootstrap import logger
 
 
@@ -78,7 +77,6 @@ def torch_generate(
 
     # Tokenize the prompt
     input_ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long)
-    original_length = input_ids.shape[1]
 
     max_tokens = task.max_tokens or MAX_TOKENS
     generated_tokens = 0

@@ -12,18 +12,18 @@ from anyio import (
     sleep_forever,
 )
 from anyio.abc import TaskGroup
-from exo_pyo3_bindings import (
-    AllQueuesFullError,
-    Keypair,
-    NetworkingHandle,
-    NoPeersSubscribedToTopicError,
-)
 from filelock import FileLock
 from loguru import logger
 
 from exo.shared.constants import EXO_NODE_ID_KEYPAIR
 from exo.utils.channels import Receiver, Sender, channel
 from exo.utils.pydantic_ext import CamelCaseModel
+from exo_pyo3_bindings import (
+    AllQueuesFullError,
+    Keypair,
+    NetworkingHandle,
+    NoPeersSubscribedToTopicError,
+)
 
 from .connection_message import ConnectionMessage
 from .topics import CONNECTION_MESSAGES, PublishPolicy, TypedTopic

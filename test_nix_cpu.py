@@ -3,8 +3,8 @@
 Test the CPU engine from the Nix-built package.
 """
 
-import sys
 import os
+import sys
 
 # Add the Nix package to Python path
 nix_package_path = "/nix/store/6vdnghr98pwywhyhyr68hi1x1aja9l9p-exo-cpu-0.1.0/lib/python3.13/site-packages"
@@ -65,10 +65,6 @@ def test_cpu_engine():
         # Test engine components
         print("\n3. Testing Engine Components...")
         from exo.worker.engines.torch.utils_torch import check_torch_availability
-        from exo.worker.engines.torch.generator.generate import (
-            warmup_inference,
-            torch_generate,
-        )
 
         torch_available = check_torch_availability()
         print(f"   Torch available: {torch_available}")

@@ -1,7 +1,7 @@
 from typing import Any, Protocol
 
 import torch
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedTokenizer
 
 
 class Model(Protocol):
