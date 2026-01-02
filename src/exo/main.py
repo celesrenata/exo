@@ -212,7 +212,18 @@ class Node:
 def main():
     args = Args.parse()
 
-    mp.set_start_method("spawn")
+    # TEMPORARY FIX: Use fork instead of spawn to prevent process explosion
+    # The spawn method was causing a fork bomb in the systemd environment
+    try:
+        mp.set_start_method("fork")
+    except RuntimeError:
+        # If fork is not available, try forkserver as fallback
+        try:
+            mp.set_start_method("forkserver")
+        except RuntimeError:
+            # Last resort: use spawn but with limited process creation
+            mp.set_start_method("spawn")
+    
     # TODO: Refactor the current verbosity system
     logger_setup(EXO_LOG, args.verbosity)
     logger.info("Starting EXO")
