@@ -16,12 +16,12 @@ MODEL_CARDS: dict[str, ModelCard] = {
     # CPU-compatible models (PyTorch/Transformers)
     "llama-3.2-1b-cpu": ModelCard(
         short_id="llama-3.2-1b-cpu",
-        model_id=ModelId("meta-llama/Llama-3.2-1B-Instruct"),
+        model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),  # Use community version
         name="Llama 3.2 1B (CPU)",
         description="""Llama 3.2 1B optimized for CPU inference using PyTorch/Transformers.""",
         tags=["cpu", "small"],
         metadata=ModelMetadata(
-            model_id=ModelId("meta-llama/Llama-3.2-1B-Instruct"),
+            model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),
             pretty_name="Llama 3.2 1B (CPU)",
             storage_size=Memory.from_gb(3),
             n_layers=16,
@@ -31,12 +31,12 @@ MODEL_CARDS: dict[str, ModelCard] = {
     ),
     "llama-3.2-3b-cpu": ModelCard(
         short_id="llama-3.2-3b-cpu",
-        model_id=ModelId("meta-llama/Llama-3.2-3B-Instruct"),
+        model_id=ModelId("mlx-community/Llama-3.2-3B-Instruct-4bit"),  # Use community version
         name="Llama 3.2 3B (CPU)",
         description="""Llama 3.2 3B optimized for CPU inference using PyTorch/Transformers.""",
         tags=["cpu", "medium"],
         metadata=ModelMetadata(
-            model_id=ModelId("meta-llama/Llama-3.2-3B-Instruct"),
+            model_id=ModelId("mlx-community/Llama-3.2-3B-Instruct-4bit"),
             pretty_name="Llama 3.2 3B (CPU)",
             storage_size=Memory.from_gb(6),
             n_layers=28,
@@ -46,12 +46,12 @@ MODEL_CARDS: dict[str, ModelCard] = {
     ),
     "qwen2.5-0.5b-cpu": ModelCard(
         short_id="qwen2.5-0.5b-cpu",
-        model_id=ModelId("Qwen/Qwen2.5-0.5B-Instruct"),
+        model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),  # Use community version
         name="Qwen2.5 0.5B (CPU)",
         description="""Qwen2.5 0.5B optimized for CPU inference using PyTorch/Transformers.""",
         tags=["cpu", "tiny"],
         metadata=ModelMetadata(
-            model_id=ModelId("Qwen/Qwen2.5-0.5B-Instruct"),
+            model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),
             pretty_name="Qwen2.5 0.5B (CPU)",
             storage_size=Memory.from_gb(1),
             n_layers=24,
@@ -61,12 +61,12 @@ MODEL_CARDS: dict[str, ModelCard] = {
     ),
     "qwen2.5-1.5b-cpu": ModelCard(
         short_id="qwen2.5-1.5b-cpu",
-        model_id=ModelId("Qwen/Qwen2.5-1.5B-Instruct"),
+        model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),  # Use community version
         name="Qwen2.5 1.5B (CPU)",
         description="""Qwen2.5 1.5B optimized for CPU inference using PyTorch/Transformers.""",
         tags=["cpu", "small"],
         metadata=ModelMetadata(
-            model_id=ModelId("Qwen/Qwen2.5-1.5B-Instruct"),
+            model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),
             pretty_name="Qwen2.5 1.5B (CPU)",
             storage_size=Memory.from_gb(3),
             n_layers=28,
@@ -78,12 +78,12 @@ MODEL_CARDS: dict[str, ModelCard] = {
     # CUDA-compatible models (PyTorch/Transformers with CUDA acceleration)
     "llama-3.2-1b-cuda": ModelCard(
         short_id="llama-3.2-1b-cuda",
-        model_id=ModelId("meta-llama/Llama-3.2-1B-Instruct"),
+        model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),  # Use community version
         name="Llama 3.2 1B (CUDA)",
         description="""Llama 3.2 1B optimized for CUDA inference using PyTorch/Transformers.""",
         tags=["cuda", "small"],
         metadata=ModelMetadata(
-            model_id=ModelId("meta-llama/Llama-3.2-1B-Instruct"),
+            model_id=ModelId("mlx-community/Llama-3.2-1B-Instruct-4bit"),
             pretty_name="Llama 3.2 1B (CUDA)",
             storage_size=Memory.from_gb(3),
             n_layers=16,
@@ -93,12 +93,12 @@ MODEL_CARDS: dict[str, ModelCard] = {
     ),
     "qwen2.5-0.5b-cuda": ModelCard(
         short_id="qwen2.5-0.5b-cuda",
-        model_id=ModelId("Qwen/Qwen2.5-0.5B-Instruct"),
+        model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),  # Use community version
         name="Qwen2.5 0.5B (CUDA)",
         description="""Qwen2.5 0.5B optimized for CUDA inference using PyTorch/Transformers.""",
         tags=["cuda", "tiny"],
         metadata=ModelMetadata(
-            model_id=ModelId("Qwen/Qwen2.5-0.5B-Instruct"),
+            model_id=ModelId("mlx-community/Qwen3-0.6B-4bit"),
             pretty_name="Qwen2.5 0.5B (CUDA)",
             storage_size=Memory.from_gb(1),
             n_layers=24,
