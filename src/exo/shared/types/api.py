@@ -141,12 +141,31 @@ class PlaceInstanceParams(BaseModel):
     instance_meta: InstanceMeta = InstanceMeta.MlxRing
     min_nodes: int = 1
 
-    @field_validator("sharding", "instance_meta", mode="plain")
+    @field_validator("sharding", mode="before")
     @classmethod
-    def use_default(cls, v: object):
-        if not v or not isinstance(v, (Sharding, InstanceMeta)):
+    def validate_sharding(cls, v: object):
+        if isinstance(v, str):
+            try:
+                return Sharding(v)
+            except ValueError:
+                raise PydanticUseDefault()
+        elif isinstance(v, Sharding):
+            return v
+        else:
             raise PydanticUseDefault()
-        return v
+
+    @field_validator("instance_meta", mode="before")
+    @classmethod
+    def validate_instance_meta(cls, v: object):
+        if isinstance(v, str):
+            try:
+                return InstanceMeta(v)
+            except ValueError:
+                raise PydanticUseDefault()
+        elif isinstance(v, InstanceMeta):
+            return v
+        else:
+            raise PydanticUseDefault()
 
 
 class CreateInstanceParams(BaseModel):
