@@ -707,6 +707,7 @@
               python313Packages.tiktoken
               python313Packages.safetensors
               python313Packages.tokenizers
+              python313Packages.accelerate
               python313Packages.rustworkx
               python313Packages.networkx
               python313Packages.sqlmodel

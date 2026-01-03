@@ -12,6 +12,7 @@ from exo.shared.types.events import (
 from exo.shared.types.tasks import (
     ChatCompletion,
     ConnectToGroup,
+    DownloadModel,
     LoadModel,
     Shutdown,
     StartWarmup,
@@ -112,6 +113,46 @@ def main(
                         logger.info("runner connected")
                         current_status = RunnerConnected()
 
+                    case DownloadModel(shard_metadata=shard_metadata) if isinstance(
+                        current_status, (RunnerIdle, RunnerConnected, RunnerFailed)
+                    ):
+                        logger.info(f"Downloading model: {shard_metadata.model_meta.model_id}")
+                        
+                        try:
+                            import asyncio
+                            from exo.worker.download.download_utils import download_shard
+                            
+                            def on_progress(shard, progress):
+                                logger.debug(f"Download progress: {progress.completed_files}/{progress.total_files} files, {progress.downloaded_bytes}/{progress.total_bytes}")
+                            
+                            # Download the model using asyncio.run since we're in a sync context
+                            model_path, download_progress = asyncio.run(download_shard(
+                                shard_metadata,
+                                on_progress=on_progress
+                            ))
+                            
+                            logger.info(f"Model downloaded successfully to: {model_path}")
+                            
+                        except Exception as e:
+                            logger.error(f"Model download failed: {e}")
+                            logger.opt(exception=e).error("Full model download error traceback")
+                            
+                            # Send failed status with detailed error message
+                            current_status = RunnerFailed(error_message=f"Model download failed: {str(e)}")
+                            event_sender.send(
+                                RunnerStatusUpdated(
+                                    runner_id=runner_id, runner_status=current_status
+                                )
+                            )
+                            
+                            # Send task failure
+                            event_sender.send(
+                                TaskStatusUpdated(
+                                    task_id=task.task_id, task_status=TaskStatus.Failed
+                                )
+                            )
+                            continue
+
                     # we load the model if it's connected with a group, or idle without a group. we should never tell a model to connect if it doesn't need to
                     case LoadModel() if (
                         isinstance(current_status, RunnerConnected)
@@ -130,8 +171,30 @@ def main(
                         # Reset group to None for non-MLX engines before full initialization
                         if group == "connected":
                             group = None
+                        
+                        try:
+                            logger.info(f"Initializing engine for model: {bound_instance.bound_shard.model_meta.model_id}")
+                            model, tokenizer, sampler = initialize_engine(bound_instance)
+                            logger.info("Engine initialization completed successfully")
+                        except Exception as e:
+                            logger.error(f"Model loading failed: {e}")
+                            logger.opt(exception=e).error("Full model loading error traceback")
                             
-                        model, tokenizer, sampler = initialize_engine(bound_instance)
+                            # Send failed status with detailed error message
+                            current_status = RunnerFailed(error_message=f"Model loading failed: {str(e)}")
+                            event_sender.send(
+                                RunnerStatusUpdated(
+                                    runner_id=runner_id, runner_status=current_status
+                                )
+                            )
+                            
+                            # Send task failure
+                            event_sender.send(
+                                TaskStatusUpdated(
+                                    task_id=task.task_id, task_status=TaskStatus.Failed
+                                )
+                            )
+                            continue
 
                         current_status = RunnerLoaded()
                         logger.info("runner loaded")
