@@ -580,7 +580,7 @@
                 EXO_PORT = toString cfg.port;
                 # Set cache and log directories to writable locations
                 XDG_CACHE_HOME = "/var/cache/exo";
-                XDG_DATA_HOME = "/var/lib/exo";
+                XDG_DATA_HOME = "/var/lib";
                 HOME = "/var/lib/exo";
                 # Set dashboard directory for the application to find
                 DASHBOARD_DIR = "${cfg.package}/share/exo/dashboard";
