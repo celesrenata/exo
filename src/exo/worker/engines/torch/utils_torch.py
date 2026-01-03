@@ -173,17 +173,15 @@ def _initialize_distributed_torch(
     else:
         logger.warning("Could not identify model layer structure for sharding - using full model")
 
-    # Load tokenizer (only needed on first rank)
-    tokenizer_raw = None
-    if device_rank == 0:
-        tokenizer_raw = AutoTokenizer.from_pretrained(
-            model_path,
-            trust_remote_code=TRUST_REMOTE_CODE,
-        )
-        if tokenizer_raw.pad_token is None:
-            tokenizer_raw.pad_token = tokenizer_raw.eos_token
+    # Load tokenizer (needed on all ranks for warmup and generation)
+    tokenizer_raw = AutoTokenizer.from_pretrained(
+        model_path,
+        trust_remote_code=TRUST_REMOTE_CODE,
+    )
+    if tokenizer_raw.pad_token is None:
+        tokenizer_raw.pad_token = tokenizer_raw.eos_token
     
-    tokenizer = TokenizerWrapper(tokenizer_raw) if tokenizer_raw else None
+    tokenizer = TokenizerWrapper(tokenizer_raw)
 
     end_time = time.perf_counter()
     logger.info(f"Time taken to load PyTorch model shard: {(end_time - start_time):.2f}s")
