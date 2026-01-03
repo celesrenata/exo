@@ -3,7 +3,8 @@ from itertools import count
 from math import inf
 from os import PathLike
 from pathlib import Path
-from typing import cast
+from typing import cast, Dict, Any, Optional
+import asyncio
 
 from anyio import (
     BrokenResourceError,
@@ -29,16 +30,14 @@ from .connection_message import ConnectionMessage
 from .topics import CONNECTION_MESSAGES, PublishPolicy, TypedTopic
 
 
-# A significant current limitation of the TopicRouter is that it is not capable
-# of preventing feedback, as it does not ask for a system id so cannot tell
-# which message is coming/going to which system.
-# This is currently only relevant for Election
 class TopicRouter[T: CamelCaseModel]:
     def __init__(
         self,
         topic: TypedTopic[T],
         networking_sender: Sender[tuple[str, bytes]],
         max_buffer_size: float = inf,
+        enable_retry: bool = False,
+        max_retries: int = 3
     ):
         self.topic: TypedTopic[T] = topic
         self.senders: set[Sender[T]] = set()
@@ -46,6 +45,16 @@ class TopicRouter[T: CamelCaseModel]:
         self.receiver: Receiver[T] = recv
         self._sender: Sender[T] = send
         self.networking_sender: Sender[tuple[str, bytes]] = networking_sender
+        self.enable_retry = enable_retry
+        self.max_retries = max_retries
+        
+        # Basic statistics
+        self.stats = {
+            "messages_sent": 0,
+            "messages_received": 0,
+            "send_failures": 0,
+            "retries": 0
+        }
 
     async def run(self):
         logger.debug(f"Topic Router {self.topic} ready to send")
@@ -86,24 +95,73 @@ class TopicRouter[T: CamelCaseModel]:
         self.senders -= to_clear
 
     async def publish_bytes(self, data: bytes):
-        await self.publish(self.topic.deserialize(data))
+        try:
+            await self.publish(self.topic.deserialize(data))
+            self.stats["messages_received"] += 1
+        except Exception as e:
+            logger.error(f"Error publishing bytes on topic {self.topic.topic}: {e}")
+            raise
 
     def new_sender(self) -> Sender[T]:
         return self._sender.clone()
 
     async def _send_out(self, item: T):
-        logger.trace(f"TopicRouter {self.topic.topic} sending {item}")
-        await self.networking_sender.send(
-            (str(self.topic.topic), self.topic.serialize(item))
-        )
+        """Send item with optional retry logic."""
+        if not self.enable_retry:
+            # Original behavior
+            logger.trace(f"TopicRouter {self.topic.topic} sending {item}")
+            await self.networking_sender.send(
+                (str(self.topic.topic), self.topic.serialize(item))
+            )
+            self.stats["messages_sent"] += 1
+            return
+        
+        # Enhanced behavior with retry logic
+        retry_count = 0
+        while retry_count <= self.max_retries:
+            try:
+                logger.trace(f"TopicRouter {self.topic.topic} sending {item} (attempt {retry_count + 1})")
+                await self.networking_sender.send(
+                    (str(self.topic.topic), self.topic.serialize(item))
+                )
+                self.stats["messages_sent"] += 1
+                return  # Success
+                
+            except (NoPeersSubscribedToTopicError, AllQueuesFullError):
+                # These are expected errors, don't retry
+                return
+                
+            except Exception as e:
+                retry_count += 1
+                self.stats["retries"] += 1
+                
+                if retry_count <= self.max_retries:
+                    # Exponential backoff
+                    backoff_time = min(0.1 * (2 ** (retry_count - 1)), 2.0)
+                    logger.warning(
+                        f"Failed to send message on topic {self.topic.topic}, "
+                        f"retrying in {backoff_time}s (attempt {retry_count}/{self.max_retries + 1}): {e}"
+                    )
+                    await asyncio.sleep(backoff_time)
+                else:
+                    logger.error(
+                        f"Failed to send message on topic {self.topic.topic} "
+                        f"after {self.max_retries + 1} attempts: {e}"
+                    )
+                    self.stats["send_failures"] += 1
+                    break
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get router statistics."""
+        return self.stats.copy()
 
 
 class Router:
     @classmethod
-    def create(cls, identity: Keypair) -> "Router":
-        return cls(handle=NetworkingHandle(identity))
+    def create(cls, identity: Keypair, enable_reliability: bool = False) -> "Router":
+        return cls(handle=NetworkingHandle(identity), enable_reliability=enable_reliability)
 
-    def __init__(self, handle: NetworkingHandle):
+    def __init__(self, handle: NetworkingHandle, enable_reliability: bool = False):
         self.topic_routers: dict[str, TopicRouter[CamelCaseModel]] = {}
         send, recv = channel[tuple[str, bytes]]()
         self.networking_receiver: Receiver[tuple[str, bytes]] = recv
@@ -111,6 +169,15 @@ class Router:
         self._tmp_networking_sender: Sender[tuple[str, bytes]] | None = send
         self._id_count = count()
         self._tg: TaskGroup | None = None
+        self.enable_reliability = enable_reliability
+        
+        # Router-level statistics
+        self.router_stats = {
+            "total_topics": 0,
+            "total_messages_routed": 0,
+            "routing_errors": 0,
+            "reliability_enabled": enable_reliability
+        }
 
     async def register_topic[T: CamelCaseModel](self, topic: TypedTopic[T]):
         assert self._tg is None, "Attempted to register topic after setup time"
@@ -119,9 +186,18 @@ class Router:
             self._tmp_networking_sender = None
         else:
             send = self.networking_receiver.clone_sender()
-        router = TopicRouter[T](topic, send)
+        
+        # Create router with reliability features if enabled
+        router = TopicRouter[T](
+            topic, 
+            send,
+            enable_retry=self.enable_reliability,
+            max_retries=3 if self.enable_reliability else 0
+        )
+        
         self.topic_routers[topic.topic] = cast(TopicRouter[CamelCaseModel], router)
         await self._networking_subscribe(str(topic.topic))
+        self.router_stats["total_topics"] += 1
 
     def sender[T: CamelCaseModel](self, topic: TypedTopic[T]) -> Sender[T]:
         router = self.topic_routers.get(topic.topic, None)
@@ -175,14 +251,22 @@ class Router:
 
     async def _networking_recv(self):
         while True:
-            topic, data = await self._net.gossipsub_recv()
-            logger.trace(f"Received message on {topic} with payload {data}")
-            if topic not in self.topic_routers:
-                logger.warning(f"Received message on unknown or inactive topic {topic}")
-                continue
+            try:
+                topic, data = await self._net.gossipsub_recv()
+                logger.trace(f"Received message on {topic} with payload {data}")
+                if topic not in self.topic_routers:
+                    logger.warning(f"Received message on unknown or inactive topic {topic}")
+                    continue
 
-            router = self.topic_routers[topic]
-            await router.publish_bytes(data)
+                router = self.topic_routers[topic]
+                await router.publish_bytes(data)
+                self.router_stats["total_messages_routed"] += 1
+                
+            except Exception as e:
+                logger.error(f"Error in networking receive: {e}")
+                self.router_stats["routing_errors"] += 1
+                # Continue processing other messages
+                await asyncio.sleep(0.1)
 
     async def _networking_recv_connection_messages(self):
         while True:
@@ -207,6 +291,31 @@ class Router:
                 # Need to fix that ASAP.
                 except (NoPeersSubscribedToTopicError, AllQueuesFullError):
                     pass
+                except Exception as e:
+                    logger.error(f"Error publishing message on {topic}: {e}")
+                    self.router_stats["routing_errors"] += 1
+    
+    def get_router_statistics(self) -> Dict[str, Any]:
+        """Get comprehensive router statistics."""
+        stats = {
+            "router": self.router_stats.copy(),
+            "topics": {}
+        }
+        
+        # Add per-topic statistics
+        for topic_name, router in self.topic_routers.items():
+            stats["topics"][topic_name] = router.get_statistics()
+        
+        return stats
+    
+    def reset_statistics(self):
+        """Reset all statistics counters."""
+        for key in self.router_stats:
+            if isinstance(self.router_stats[key], (int, float)):
+                self.router_stats[key] = 0
+        
+        for router in self.topic_routers.values():
+            router.stats = {k: 0 for k in router.stats}
 
 
 def get_node_id_keypair(

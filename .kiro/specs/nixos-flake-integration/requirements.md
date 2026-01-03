@@ -14,10 +14,21 @@ This document specifies the requirements for integrating the EXO distributed AI 
 - **Service_Discovery**: Automatic detection and registration of cluster nodes and services
 - **Tensor_Parallelism**: Technique for splitting AI model computation across multiple devices
 
+- **EXO_System**: The distributed AI inference system consisting of master, worker, API, and networking components
+- **NixOS_Flake**: A Nix flake that provides reproducible package definitions and system configurations
+- **K3s_Integration**: Integration with the existing nixos-k3s-configs repository for Kubernetes orchestration
+- **Bonded_Network**: Network interface bonding for increased bandwidth and redundancy
+- **System_Service**: A systemd service that runs as part of the NixOS system
+- **Hardware_Accelerator**: GPU or other specialized hardware for AI inference (CUDA, ROCm, MLX on Apple Silicon)
+- **Dynamic_Driver_Detection**: Automatic detection and configuration of available hardware drivers
+- **Dashboard_Component**: The web-based user interface for cluster management
+- **Rust_Bindings**: The compiled Rust networking and system components
+
 ## Requirements
 
 ### Requirement 1
 
+<<<<<<< HEAD
 **User Story:** As a NixOS system administrator, I want to install EXO through a flake import, so that I can easily manage and update the distributed AI inference system.
 
 #### Acceptance Criteria
@@ -111,3 +122,98 @@ This document specifies the requirements for integrating the EXO distributed AI 
 3. THE EXO_System SHALL configure firewall rules only for required communication ports
 4. THE EXO_System SHALL store data in appropriate system directories with correct permissions
 5. WHERE network isolation is required, THE EXO_System SHALL support network namespace configuration
+=======
+**User Story:** As a NixOS system administrator, I want to import the EXO flake into my system configuration, so that I can deploy distributed AI inference capabilities across my infrastructure.
+
+#### Acceptance Criteria
+
+1. WHEN the flake is imported into a NixOS configuration, THE NixOS_Flake SHALL provide all necessary packages and dependencies
+2. WHEN the flake is evaluated, THE NixOS_Flake SHALL support both x86_64-linux and aarch64-linux architectures
+3. WHEN the system is built, THE NixOS_Flake SHALL include all Python dependencies, Rust bindings, and Node.js dashboard components
+4. WHEN the flake is imported, THE NixOS_Flake SHALL provide configuration options for service customization
+5. WHERE MLX support is available, THE NixOS_Flake SHALL include Apple Silicon optimizations
+
+### Requirement 2
+
+**User Story:** As a DevOps engineer, I want the EXO system to integrate with my existing K3s cluster configuration, so that I can orchestrate AI workloads alongside my containerized applications.
+
+#### Acceptance Criteria
+
+1. WHEN integrated with nixos-k3s-configs, THE EXO_System SHALL utilize existing bonded network interfaces
+2. WHEN K3s is present, THE EXO_System SHALL register as a cluster service discoverable by Kubernetes
+3. WHEN network topology changes occur, THE EXO_System SHALL automatically adapt to new node configurations
+4. WHEN multiple nodes are configured, THE EXO_System SHALL coordinate with K3s networking policies
+5. WHERE RDMA over Thunderbolt is available, THE EXO_System SHALL configure high-speed interconnects
+
+### Requirement 3
+
+**User Story:** As a system administrator, I want EXO to run as a proper systemd service, so that it starts automatically and integrates with system monitoring and logging.
+
+#### Acceptance Criteria
+
+1. WHEN the system boots, THE System_Service SHALL start automatically after network interfaces are available
+2. WHEN the service starts, THE System_Service SHALL create necessary runtime directories and permissions
+3. WHEN the service runs, THE System_Service SHALL log to systemd journal with appropriate log levels
+4. WHEN the service fails, THE System_Service SHALL restart automatically with exponential backoff
+5. WHERE configuration changes occur, THE System_Service SHALL reload gracefully without data loss
+
+### Requirement 4
+
+**User Story:** As a machine learning engineer, I want the system to automatically detect and utilize available GPU drivers, so that I can leverage hardware acceleration without manual configuration.
+
+#### Acceptance Criteria
+
+1. WHEN NVIDIA GPUs are present, THE Dynamic_Driver_Detection SHALL configure CUDA support automatically
+2. WHEN AMD GPUs are present, THE Dynamic_Driver_Detection SHALL configure ROCm support automatically
+3. WHEN Intel Arc GPUs are present, THE Dynamic_Driver_Detection SHALL configure IPEX support automatically  
+4. WHEN Apple Silicon is detected, THE Dynamic_Driver_Detection SHALL enable MLX acceleration
+5. WHEN no GPU is available, THE Dynamic_Driver_Detection SHALL configure CPU-only inference
+6. WHERE multiple accelerators exist, THE Dynamic_Driver_Detection SHALL prioritize based on capability
+
+### Requirement 5
+
+**User Story:** As a network administrator, I want EXO to utilize bonded network interfaces for high-bandwidth model distribution, so that large models can be efficiently shared across cluster nodes.
+
+#### Acceptance Criteria
+
+1. WHEN existing bonded interfaces are detected, THE Bonded_Network SHALL utilize all available bandwidth
+2. WHEN network interfaces fail, THE Bonded_Network SHALL maintain connectivity through remaining interfaces
+3. WHEN RDMA is available, THE Bonded_Network SHALL configure low-latency communication
+4. WHEN multiple network paths exist, THE Bonded_Network SHALL load balance traffic appropriately
+5. WHERE Thunderbolt 5 is present, THE Bonded_Network SHALL enable RDMA over Thunderbolt
+
+### Requirement 6
+
+**User Story:** As a cluster operator, I want the dashboard and API to be accessible through standard web interfaces, so that I can monitor and manage the AI cluster through familiar tools.
+
+#### Acceptance Criteria
+
+1. WHEN the service starts, THE Dashboard_Component SHALL be accessible on the configured port
+2. WHEN API requests are made, THE Dashboard_Component SHALL provide OpenAI-compatible endpoints
+3. WHEN the web interface is accessed, THE Dashboard_Component SHALL display real-time cluster topology
+4. WHEN model operations occur, THE Dashboard_Component SHALL show progress and status information
+5. WHERE SSL certificates are configured, THE Dashboard_Component SHALL support HTTPS connections
+
+### Requirement 7
+
+**User Story:** As a package maintainer, I want the flake to properly handle all build dependencies and cross-compilation requirements, so that the system builds reliably across different architectures and environments.
+
+#### Acceptance Criteria
+
+1. WHEN building on x86_64-linux, THE NixOS_Flake SHALL compile all Rust components with appropriate optimizations
+2. WHEN building on aarch64-linux, THE NixOS_Flake SHALL handle cross-compilation requirements
+3. WHEN Python dependencies are resolved, THE NixOS_Flake SHALL pin all versions for reproducibility
+4. WHEN Node.js components are built, THE NixOS_Flake SHALL include the compiled dashboard assets
+5. WHERE native dependencies exist, THE NixOS_Flake SHALL provide appropriate system libraries
+
+### Requirement 8
+
+**User Story:** As a security administrator, I want the service to run with minimal privileges and proper isolation, so that the AI inference system does not compromise system security.
+
+#### Acceptance Criteria
+
+1. WHEN the service runs, THE System_Service SHALL operate under a dedicated system user
+2. WHEN file access is required, THE System_Service SHALL have access only to necessary directories
+3. WHEN network access is needed, THE System_Service SHALL bind only to configured interfaces
+4. WHEN GPU access is required, THE System_Service SHALL have minimal device permissions
+5. WHERE sensitive data exists, THE System_Service SHALL protect model files and configuration

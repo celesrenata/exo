@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import Field
 
@@ -6,6 +7,7 @@ from exo.shared.topology import SocketConnection
 from exo.shared.types.chunks import GenerationChunk
 from exo.shared.types.common import CommandId, Id, NodeId, SessionId
 from exo.shared.types.tasks import Task, TaskId, TaskStatus
+from exo.shared.types.validation import ValidationResult, CorruptionReport
 from exo.shared.types.worker.downloads import DownloadProgress
 from exo.shared.types.worker.instances import Instance, InstanceId
 from exo.shared.types.worker.runners import RunnerId, RunnerStatus
@@ -94,6 +96,12 @@ class NodeDownloadProgress(BaseEvent):
 class ChunkGenerated(BaseEvent):
     command_id: CommandId
     chunk: GenerationChunk
+    # Validation metadata
+    validation_result: Optional[ValidationResult] = None
+    corruption_report: Optional[CorruptionReport] = None
+    device_rank: int = Field(default=0)
+    generation_timestamp: Optional[datetime] = None
+    sequence_position: int = Field(default=0)
 
 
 class TopologyEdgeCreated(BaseEvent):

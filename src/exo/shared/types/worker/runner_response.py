@@ -1,5 +1,10 @@
+from typing import Optional, TYPE_CHECKING
+
 from exo.shared.types.api import FinishReason
 from exo.utils.pydantic_ext import TaggedModel
+
+if TYPE_CHECKING:
+    from exo.shared.types.validation import EnhancedTokenChunk
 
 
 class BaseRunnerResponse(TaggedModel):
@@ -15,6 +20,7 @@ class GenerationResponse(BaseRunnerResponse):
     token: int
     # logprobs: list[float] | None = None # too big. we can change to be top-k
     finish_reason: FinishReason | None = None
+    enhanced_token: Optional['EnhancedTokenChunk'] = None  # Forward reference to avoid circular import
 
 
 class FinishedResponse(BaseRunnerResponse):

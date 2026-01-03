@@ -1,4 +1,6 @@
 import time
+import asyncio
+from typing import List, Any, Optional
 
 from exo.shared.types.api import ChatCompletionMessageText
 from exo.shared.types.chunks import TokenChunk
@@ -19,6 +21,10 @@ from exo.shared.types.tasks import (
     Task,
     TaskStatus,
 )
+from exo.shared.types.validation import (
+    EnhancedTokenChunk, CorruptionType, 
+    FailureMode, ValidationStatus
+)
 from exo.shared.types.worker.instances import BoundInstance
 from exo.shared.types.worker.runner_response import (
     GenerationResponse,
@@ -36,6 +42,9 @@ from exo.shared.types.worker.runners import (
     RunnerStatus,
     RunnerWarmingUp,
 )
+from exo.shared.validation.corruption_detector import CorruptionDetector
+from exo.shared.validation.recovery_manager import RecoveryManager
+from exo.shared.validation.fallback_coordinator import FallbackCoordinator
 from exo.utils.channels import ClosedResourceError, MpReceiver, MpSender
 from exo.worker.engines.engine_init import (
     generate_with_engine,
@@ -64,6 +73,17 @@ def main(
         bound_instance.bound_runner_id,
         bound_instance.bound_shard,
     )
+    
+    # Initialize validation and recovery components
+    corruption_detector = CorruptionDetector()
+    recovery_manager = RecoveryManager()
+    fallback_coordinator = FallbackCoordinator()
+    
+    # Track corruption events for fallback decisions
+    corruption_count = 0
+    consecutive_corruptions = 0
+    max_consecutive_corruptions = 5
+    
     try:
         logger.info("hello from the runner")
         if getattr(shard_metadata, "immediate_exception", False):
@@ -263,16 +283,89 @@ def main(
                                             ChunkGenerated(
                                                 command_id=command_id,
                                                 chunk=TokenChunk(
+                                                    corruption_type=enhanced_token.validation_result.error_type or CorruptionType.ENCODING_CORRUPTION,
+                                                    affected_range=(enhanced_token.sequence_position, enhanced_token.sequence_position),
+                                                    severity=enhanced_token.validation_result.error_details.severity,
+                                                    recovery_possible=enhanced_token.validation_result.error_details.recoverable,
+                                                    details=enhanced_token.validation_result.error_details.message
+                                                )
+                                                fallback_coordinator.report_corruption_event(corruption_report)
+                                            
+                                            # Attempt recovery
+                                            failure_mode = _determine_failure_mode(enhanced_token)
+                                            try:
+                                                # Since we're not in an async context, we need to run the async recovery
+                                                import asyncio
+                                                recovery_result = asyncio.run(recovery_manager.recover_from_corruption(failure_mode))
+                                                
+                                                # Report recovery result to fallback coordinator
+                                                fallback_coordinator.report_recovery_failure(recovery_result)
+                                                
+                                                if recovery_result.success:
+                                                    logger.info(f"Recovery successful: {recovery_result.details}")
+                                                    consecutive_corruptions = 0  # Reset consecutive count on successful recovery
+                                                else:
+                                                    logger.error(f"Recovery failed: {recovery_result.error_message}")
+                                                    
+                                                    # Check if we should trigger fallback
+                                                    if consecutive_corruptions >= max_consecutive_corruptions:
+                                                        logger.error(f"Too many consecutive corruptions ({consecutive_corruptions}), triggering fallback")
+                                                        generation_successful = False
+                                                        break
+                                            except Exception as recovery_error:
+                                                logger.error(f"Recovery attempt failed with exception: {recovery_error}")
+                                                if consecutive_corruptions >= max_consecutive_corruptions:
+                                                    generation_successful = False
+                                                    break
+                                        else:
+                                            # Reset consecutive corruption count on valid token
+                                            consecutive_corruptions = 0
+                                        
+                                        # Add to sequence for potential batch validation
+                                        if enhanced_token:
+                                            tokens_in_sequence.append(enhanced_token)
+                                        
+                                        # Send event only for device rank 0 (as before)
+                                        if shard_metadata.device_rank == 0:
+                                            # Create enhanced event with validation metadata
+                                            if enhanced_token:
+                                                enhanced_event = _create_enhanced_chunk_event(
+                                                    command_id, response, enhanced_token, shard_metadata
+                                                )
+                                            else:
+                                                # Fallback to basic event if no enhanced token
+                                                chunk = TokenChunk(
                                                     idx=response.token,
                                                     model=shard_metadata.model_meta.model_id,
                                                     text=response.text,
                                                     token_id=response.token,
                                                     finish_reason=response.finish_reason,
-                                                ),
-                                            )
-                                        )
-                                    # case TokenizedResponse():
-                                    # TODO: something here ig
+                                                )
+                                                enhanced_event = ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=chunk
+                                                )
+                                            
+                                            event_sender.send(enhanced_event)
+                                        # case TokenizedResponse():
+                                        # TODO: something here ig
+                            
+                            # Perform batch validation on the complete sequence
+                            if tokens_in_sequence and generation_successful:
+                                sequence_reports = corruption_detector.detect_token_corruption(tokens_in_sequence)
+                                if sequence_reports:
+                                    logger.warning(f"Sequence-level corruption detected: {len(sequence_reports)} issues found")
+                                    for report in sequence_reports:
+                                        logger.warning(f"Sequence corruption: {report.details}")
+                        
+                        except Exception as e:
+                            logger.error(f"Generation failed with exception: {e}")
+                            generation_successful = False
+                            
+                            # Attempt recovery from generation failure
+                            recovery_result = asyncio.run(recovery_manager.recover_from_corruption(FailureMode.PIPELINE_FAILURE))
+                            if not recovery_result.success:
+                                logger.error("Failed to recover from generation failure")
 
                         current_status = RunnerReady()
                         logger.info("runner ready")
@@ -362,6 +455,74 @@ def main(
 EXO_RUNNER_MUST_FAIL = "EXO RUNNER MUST FAIL"
 EXO_RUNNER_MUST_OOM = "EXO RUNNER MUST OOM"
 EXO_RUNNER_MUST_TIMEOUT = "EXO RUNNER MUST TIMEOUT"
+
+
+def _determine_failure_mode(enhanced_token: EnhancedTokenChunk) -> FailureMode:
+    """Determine the failure mode based on the enhanced token's validation result."""
+    if not enhanced_token.validation_result or not enhanced_token.validation_result.error_details:
+        return FailureMode.TOKEN_CORRUPTION
+    
+    error_type = enhanced_token.validation_result.error_details.error_type
+    
+    if error_type == CorruptionType.ENCODING_CORRUPTION:
+        return FailureMode.ENCODING_ERROR
+    elif error_type == CorruptionType.CHECKSUM_MISMATCH:
+        return FailureMode.COMMUNICATION_FAILURE
+    elif error_type == CorruptionType.SEQUENCE_CORRUPTION:
+        return FailureMode.SYNCHRONIZATION_FAILURE
+    else:
+        return FailureMode.TOKEN_CORRUPTION
+
+
+def _create_enhanced_chunk_event(
+    command_id: str, 
+    response: GenerationResponse, 
+    enhanced_token: Optional[EnhancedTokenChunk],
+    shard_metadata: Any
+) -> ChunkGenerated:
+    """Create an enhanced ChunkGenerated event with validation metadata."""
+    # Create the basic chunk
+    chunk = TokenChunk(
+        idx=response.token,
+        model=shard_metadata.model_meta.model_id,
+        text=response.text,
+        token_id=response.token,
+        finish_reason=response.finish_reason,
+    )
+    
+    # Create the enhanced event with validation metadata
+    return ChunkGenerated(
+        command_id=command_id,
+        chunk=chunk,
+        validation_result=enhanced_token.validation_result if enhanced_token else None,
+        corruption_report=None,  # Could be populated from corruption detector
+        device_rank=shard_metadata.device_rank,
+        generation_timestamp=enhanced_token.generation_timestamp if enhanced_token else None,
+        sequence_position=enhanced_token.sequence_position if enhanced_token else 0
+    )
+
+
+def _create_enhanced_chunk_from_response(response: GenerationResponse, enhanced_token: EnhancedTokenChunk) -> TokenChunk:
+    """Create a TokenChunk for events, optionally enhanced with validation metadata."""
+    if enhanced_token:
+        # Create an enhanced TokenChunk that includes validation information
+        # For now, we'll use the standard TokenChunk but could extend this
+        return TokenChunk(
+            idx=response.token,
+            model=enhanced_token.model,
+            text=response.text,
+            token_id=response.token,
+            finish_reason=response.finish_reason,
+        )
+    else:
+        # Fallback to standard TokenChunk
+        return TokenChunk(
+            idx=response.token,
+            model="unknown",  # This should be filled from shard_metadata
+            text=response.text,
+            token_id=response.token,
+            finish_reason=response.finish_reason,
+        )
 
 
 def _check_for_debug_prompts(
