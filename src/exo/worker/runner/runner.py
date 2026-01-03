@@ -135,6 +135,11 @@ def main(
 
                         current_status = RunnerLoaded()
                         logger.info("runner loaded")
+                        event_sender.send(
+                            RunnerStatusUpdated(
+                                runner_id=runner_id, runner_status=current_status
+                            )
+                        )
                     case StartWarmup() if isinstance(current_status, RunnerLoaded):
                         assert model
                         assert tokenizer
@@ -159,6 +164,11 @@ def main(
                         )
                         current_status = RunnerReady()
                         logger.info("runner ready")
+                        event_sender.send(
+                            RunnerStatusUpdated(
+                                runner_id=runner_id, runner_status=current_status
+                            )
+                        )
                     case ChatCompletion(
                         task_params=task_params, command_id=command_id
                     ) if isinstance(current_status, RunnerReady):
@@ -203,6 +213,11 @@ def main(
 
                         current_status = RunnerReady()
                         logger.info("runner ready")
+                        event_sender.send(
+                            RunnerStatusUpdated(
+                                runner_id=runner_id, runner_status=current_status
+                            )
+                        )
                     case Shutdown():
                         logger.info("runner shutting down")
                         event_sender.send(
