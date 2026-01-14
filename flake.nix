@@ -43,7 +43,29 @@
 
       flake.packages = inputs.nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-darwin" "aarch64-linux" ] (system:
         let
-          pkgs = import inputs.nixpkgs { inherit system; };
+          # Create overlay to pin anyio to 4.11.0 globally
+          anyioOverlay = final: prev: {
+            python313 = prev.python313.override {
+              packageOverrides = pself: psuper: {
+                anyio = psuper.anyio.overridePythonAttrs (old: rec {
+                  version = "4.11.0";
+                  src = prev.fetchPypi {
+                    pname = "anyio";
+                    inherit version;
+                    hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
+                  };
+                  postPatch = (old.postPatch or "") + ''
+                    sed -i '/def test_bad_init_value/,/pytest.raises.*CapacityLimiter.*0/d' tests/test_synchronization.py
+                  '';
+                });
+              };
+            };
+          };
+
+          pkgs = import inputs.nixpkgs {
+            inherit system;
+            overlays = [ anyioOverlay ];
+          };
           python = pkgs.python313;
           fenixToolchain = inputs.fenix.packages.${system}.latest;
 
@@ -142,18 +164,7 @@
               psutil
               loguru
               textual
-              (anyio.overridePythonAttrs (old: rec {
-                version = "4.11.0";
-                src = pkgs.fetchPypi {
-                  pname = "anyio";
-                  inherit version;
-                  hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
-                };
-                # Patch the failing test - CapacityLimiter now allows 0 in Python 3.13
-                postPatch = (old.postPatch or "") + ''
-                  sed -i '/def test_bad_init_value/,/pytest.raises.*CapacityLimiter.*0/d' tests/test_synchronization.py
-                '';
-              }))
+              anyio
               bidict
               tiktoken
               hypercorn
