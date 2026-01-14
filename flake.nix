@@ -51,8 +51,9 @@
             enable = mkEnableOption "EXO distributed AI inference system";
 
             package = mkOption {
-              type = types.package;
-              description = "EXO package to use (must be provided by user)";
+              type = types.nullOr types.package;
+              default = null;
+              description = "EXO package to use (must be provided by user or built separately)";
             };
 
             accelerator = mkOption {
@@ -87,6 +88,13 @@
           };
 
           config = mkIf cfg.enable {
+            assertions = [
+              {
+                assertion = cfg.package != null;
+                message = "services.exo.package must be set to a valid EXO package";
+              }
+            ];
+
             users.users.${cfg.user} = {
               isSystemUser = true;
               group = cfg.group;
