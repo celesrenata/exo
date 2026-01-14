@@ -142,7 +142,14 @@
               psutil
               loguru
               textual
-              anyio
+              (anyio.overridePythonAttrs (old: rec {
+                version = "4.11.0";
+                src = pkgs.fetchPypi {
+                  pname = "anyio";
+                  inherit version;
+                  hash = "sha256-JyLu+6RDbRQKcJzKLzwpvRcz8CtW0+1xNwqyIuJ+bNs=";
+                };
+              }))
               bidict
               tiktoken
               hypercorn
