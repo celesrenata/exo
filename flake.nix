@@ -168,6 +168,7 @@
               bidict
               tiktoken
               hypercorn
+              openai-harmony
             ];
 
             postInstall = ''
