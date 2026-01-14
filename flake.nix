@@ -41,6 +41,55 @@
         inputs.treefmt-nix.flakeModule
       ];
 
+      flake.packages = inputs.nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-darwin" "aarch64-linux" ] (system:
+        let
+          pkgs = import inputs.nixpkgs { inherit system; };
+          python = pkgs.python313;
+        in
+        {
+          default = python.pkgs.buildPythonApplication {
+            pname = "exo";
+            version = "0.1.0";
+            format = "pyproject";
+            src = inputs.self;
+
+            nativeBuildInputs = with pkgs; [
+              python.pkgs.setuptools
+              python.pkgs.wheel
+            ];
+
+            propagatedBuildInputs = with python.pkgs; [
+              aiofiles
+              aiohttp
+              typeguard
+              pydantic
+              base58
+              cryptography
+              fastapi
+              filelock
+              aiosqlite
+              networkx
+              protobuf
+              rich
+              rustworkx
+              sqlmodel
+              sqlalchemy
+              greenlet
+              huggingface-hub
+              psutil
+              loguru
+              textual
+              anyio
+              bidict
+              tiktoken
+              hypercorn
+            ];
+
+            pythonImportsCheck = [ "exo" ];
+          };
+        }
+      );
+
       flake.nixosModules.default = { config, lib, pkgs, ... }:
         with lib;
         let
@@ -52,8 +101,8 @@
 
             package = mkOption {
               type = types.nullOr types.package;
-              default = null;
-              description = "EXO package to use (must be provided by user or built separately)";
+              default = inputs.self.packages.${pkgs.system}.default or null;
+              description = "EXO package to use (defaults to flake package if available)";
             };
 
             accelerator = mkOption {
