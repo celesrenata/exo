@@ -147,7 +147,7 @@
                 src = pkgs.fetchPypi {
                   pname = "anyio";
                   inherit version;
-                  hash = "sha256-JyLu+6RDbRQKcJzKLzwpvRcz8CtW0+1xNwqyIuJ+bNs=";
+                  hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
                 };
               }))
               bidict
