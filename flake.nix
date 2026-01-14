@@ -55,6 +55,12 @@
               description = "EXO package to use (must be provided by user)";
             };
 
+            accelerator = mkOption {
+              type = types.enum [ "cpu" "cuda" "rocm" "intel" "mlx" ];
+              default = "cpu";
+              description = "Hardware accelerator to use (for compatibility, not used by module)";
+            };
+
             port = mkOption {
               type = types.port;
               default = 52415;
