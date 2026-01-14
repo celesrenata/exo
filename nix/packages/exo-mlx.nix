@@ -113,8 +113,8 @@ stdenv.mkDerivation rec {
 
   nativeBuildInputs = [ makeWrapper ];
 
-  buildInputs = [ 
-    exo-python 
+  buildInputs = [
+    exo-python
     mlxEnv
   ] ++ lib.optionals stdenv.isDarwin [
     darwin.apple_sdk.frameworks.Metal
@@ -220,7 +220,7 @@ stdenv.mkDerivation rec {
     license = licenses.asl20;
     maintainers = [ ];
     platforms = platforms.darwin;
-    
+
     # Additional metadata for hardware requirements
     longDescription = ''
       EXO MLX variant provides GPU acceleration for Apple Silicon Macs using

@@ -37,7 +37,7 @@ class TopicRouter[T: CamelCaseModel]:
         networking_sender: Sender[tuple[str, bytes]],
         max_buffer_size: float = inf,
         enable_retry: bool = False,
-        max_retries: int = 3
+        max_retries: int = 3,
     ):
         self.topic: TypedTopic[T] = topic
         self.senders: set[Sender[T]] = set()
@@ -47,13 +47,13 @@ class TopicRouter[T: CamelCaseModel]:
         self.networking_sender: Sender[tuple[str, bytes]] = networking_sender
         self.enable_retry = enable_retry
         self.max_retries = max_retries
-        
+
         # Basic statistics
         self.stats = {
             "messages_sent": 0,
             "messages_received": 0,
             "send_failures": 0,
-            "retries": 0
+            "retries": 0,
         }
 
     async def run(self):
@@ -115,26 +115,28 @@ class TopicRouter[T: CamelCaseModel]:
             )
             self.stats["messages_sent"] += 1
             return
-        
+
         # Enhanced behavior with retry logic
         retry_count = 0
         while retry_count <= self.max_retries:
             try:
-                logger.trace(f"TopicRouter {self.topic.topic} sending {item} (attempt {retry_count + 1})")
+                logger.trace(
+                    f"TopicRouter {self.topic.topic} sending {item} (attempt {retry_count + 1})"
+                )
                 await self.networking_sender.send(
                     (str(self.topic.topic), self.topic.serialize(item))
                 )
                 self.stats["messages_sent"] += 1
                 return  # Success
-                
+
             except (NoPeersSubscribedToTopicError, AllQueuesFullError):
                 # These are expected errors, don't retry
                 return
-                
+
             except Exception as e:
                 retry_count += 1
                 self.stats["retries"] += 1
-                
+
                 if retry_count <= self.max_retries:
                     # Exponential backoff
                     backoff_time = min(0.1 * (2 ** (retry_count - 1)), 2.0)
@@ -150,7 +152,7 @@ class TopicRouter[T: CamelCaseModel]:
                     )
                     self.stats["send_failures"] += 1
                     break
-    
+
     def get_statistics(self) -> Dict[str, Any]:
         """Get router statistics."""
         return self.stats.copy()
@@ -159,7 +161,9 @@ class TopicRouter[T: CamelCaseModel]:
 class Router:
     @classmethod
     def create(cls, identity: Keypair, enable_reliability: bool = False) -> "Router":
-        return cls(handle=NetworkingHandle(identity), enable_reliability=enable_reliability)
+        return cls(
+            handle=NetworkingHandle(identity), enable_reliability=enable_reliability
+        )
 
     def __init__(self, handle: NetworkingHandle, enable_reliability: bool = False):
         self.topic_routers: dict[str, TopicRouter[CamelCaseModel]] = {}
@@ -170,13 +174,13 @@ class Router:
         self._id_count = count()
         self._tg: TaskGroup | None = None
         self.enable_reliability = enable_reliability
-        
+
         # Router-level statistics
         self.router_stats = {
             "total_topics": 0,
             "total_messages_routed": 0,
             "routing_errors": 0,
-            "reliability_enabled": enable_reliability
+            "reliability_enabled": enable_reliability,
         }
 
     async def register_topic[T: CamelCaseModel](self, topic: TypedTopic[T]):
@@ -186,15 +190,15 @@ class Router:
             self._tmp_networking_sender = None
         else:
             send = self.networking_receiver.clone_sender()
-        
+
         # Create router with reliability features if enabled
         router = TopicRouter[T](
-            topic, 
+            topic,
             send,
             enable_retry=self.enable_reliability,
-            max_retries=3 if self.enable_reliability else 0
+            max_retries=3 if self.enable_reliability else 0,
         )
-        
+
         self.topic_routers[topic.topic] = cast(TopicRouter[CamelCaseModel], router)
         await self._networking_subscribe(str(topic.topic))
         self.router_stats["total_topics"] += 1
@@ -255,13 +259,15 @@ class Router:
                 topic, data = await self._net.gossipsub_recv()
                 logger.trace(f"Received message on {topic} with payload {data}")
                 if topic not in self.topic_routers:
-                    logger.warning(f"Received message on unknown or inactive topic {topic}")
+                    logger.warning(
+                        f"Received message on unknown or inactive topic {topic}"
+                    )
                     continue
 
                 router = self.topic_routers[topic]
                 await router.publish_bytes(data)
                 self.router_stats["total_messages_routed"] += 1
-                
+
             except Exception as e:
                 logger.error(f"Error in networking receive: {e}")
                 self.router_stats["routing_errors"] += 1
@@ -294,26 +300,23 @@ class Router:
                 except Exception as e:
                     logger.error(f"Error publishing message on {topic}: {e}")
                     self.router_stats["routing_errors"] += 1
-    
+
     def get_router_statistics(self) -> Dict[str, Any]:
         """Get comprehensive router statistics."""
-        stats = {
-            "router": self.router_stats.copy(),
-            "topics": {}
-        }
-        
+        stats = {"router": self.router_stats.copy(), "topics": {}}
+
         # Add per-topic statistics
         for topic_name, router in self.topic_routers.items():
             stats["topics"][topic_name] = router.get_statistics()
-        
+
         return stats
-    
+
     def reset_statistics(self):
         """Reset all statistics counters."""
         for key in self.router_stats:
             if isinstance(self.router_stats[key], (int, float)):
                 self.router_stats[key] = 0
-        
+
         for router in self.topic_routers.values():
             router.stats = {k: 0 for k in router.stats}
 

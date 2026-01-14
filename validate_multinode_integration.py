@@ -31,7 +31,7 @@ try:
     from exo.worker.runner.resource_manager import get_resource_manager
     from exo.worker.runner.shutdown_coordinator import get_shutdown_coordinator
 except ImportError as e:
-    print(f"❌ Import error: {e}")
+    print("❌ Import error: {e}")
     print("Make sure you're running this from the EXO root directory")
     sys.exit(1)
 
@@ -47,9 +47,9 @@ class IntegrationValidator:
         """Log test result."""
         status = "✓ PASS" if success else "✗ FAIL"
         self.test_results[test_name] = success
-        print(f"{status}: {test_name}")
+        print("{status}: {test_name}")
         if message:
-            print(f"    {message}")
+            print("    {message}")
 
     def test_component_imports(self) -> bool:
         """Test that all new components can be imported."""
@@ -396,10 +396,10 @@ class IntegrationValidator:
                     result = test_func()
 
                 if not result:
-                    print(f"\n❌ Test suite '{test_name}' failed!")
+                    print("\n❌ Test suite '{test_name}' failed!")
 
             except Exception as e:
-                print(f"\n❌ Test suite '{test_name}' failed with exception: {e}")
+                print("\n❌ Test suite '{test_name}' failed with exception: {e}")
                 self.test_results[test_name] = False
 
         return self.print_summary()
@@ -415,8 +415,8 @@ class IntegrationValidator:
         passed = sum(1 for result in self.test_results.values() if result)
         total = len(self.test_results)
 
-        print(f"Tests passed: {passed}/{total}")
-        print(f"Duration: {duration:.2f} seconds")
+        print("Tests passed: {passed}/{total}")
+        print("Duration: {duration:.2f} seconds")
         print()
 
         # Group results by test suite
@@ -431,7 +431,7 @@ class IntegrationValidator:
                 current_suite = suite_name
 
             status = "✓" if result else "✗"
-            print(f"  {status} {test_name}")
+            print("  {status} {test_name}")
 
         print()
 
@@ -439,7 +439,7 @@ class IntegrationValidator:
             print("🎉 ALL TESTS PASSED! Multi-node integration is working correctly.")
             return True
         else:
-            print(f"❌ {total - passed} tests failed. Please check the integration.")
+            print("❌ {total - passed} tests failed. Please check the integration.")
             return False
 
 
@@ -458,5 +458,5 @@ if __name__ == "__main__":
         print("\n⚠️  Validation interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"\n💥 Validation failed with unexpected error: {e}")
+        print("\n💥 Validation failed with unexpected error: {e}")
         sys.exit(1)

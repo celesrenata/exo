@@ -7,16 +7,17 @@
 
 let
   # Helper function to create test derivations
-  mkTest = name: script: pkgs.runCommand "test-${name}" {
-    nativeBuildInputs = [ 
-      pkgs.bash 
-      pkgs.coreutils 
-      pkgs.pciutils 
-      pkgs.kmod
-      pkgs.util-linux
-      pkgs.jq
-    ];
-  } ''
+  mkTest = name: script: pkgs.runCommand "test-${name}"
+    {
+      nativeBuildInputs = [
+        pkgs.bash
+        pkgs.coreutils
+        pkgs.pciutils
+        pkgs.kmod
+        pkgs.util-linux
+        pkgs.jq
+      ];
+    } ''
     set -euo pipefail
     
     echo "=== ${name} Hardware Test ==="
@@ -412,6 +413,7 @@ let
     echo "Driver configuration tests completed"
   '';
 
-in {
+in
+{
   inherit gpu-detection-tests hardware-acceleration-tests fallback-scenario-tests driver-configuration-tests;
 }

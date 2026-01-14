@@ -22,8 +22,10 @@ from exo.shared.types.tasks import (
     TaskStatus,
 )
 from exo.shared.types.validation import (
-    EnhancedTokenChunk, CorruptionType, 
-    FailureMode, ValidationStatus
+    EnhancedTokenChunk,
+    CorruptionType,
+    FailureMode,
+    ValidationStatus,
 )
 from exo.shared.types.worker.instances import BoundInstance
 from exo.shared.types.worker.runner_response import (
@@ -73,17 +75,17 @@ def main(
         bound_instance.bound_runner_id,
         bound_instance.bound_shard,
     )
-    
+
     # Initialize validation and recovery components
     corruption_detector = CorruptionDetector()
     recovery_manager = RecoveryManager()
     fallback_coordinator = FallbackCoordinator()
-    
+
     # Track corruption events for fallback decisions
     corruption_count = 0
     consecutive_corruptions = 0
     max_consecutive_corruptions = 5
-    
+
     try:
         logger.info("hello from the runner")
         if getattr(shard_metadata, "immediate_exception", False):
@@ -124,7 +126,7 @@ def main(
                         )
                         # Initialize engine (will handle MLX group setup if needed)
                         group = initialize_engine(bound_instance, connect_only=True)
-                        
+
                         # For engines that don't need separate connection (like torch/cpu),
                         # set group to a placeholder to indicate connection is established
                         if group is None:
@@ -136,35 +138,46 @@ def main(
                     case DownloadModel(shard_metadata=shard_metadata) if isinstance(
                         current_status, (RunnerIdle, RunnerConnected, RunnerFailed)
                     ):
-                        logger.info(f"Downloading model: {shard_metadata.model_meta.model_id}")
-                        
+                        logger.info(
+                            f"Downloading model: {shard_metadata.model_meta.model_id}"
+                        )
+
                         try:
                             import asyncio
-                            from exo.worker.download.download_utils import download_shard
-                            
+                            from exo.worker.download.download_utils import (
+                                download_shard,
+                            )
+
                             def on_progress(shard, progress):
-                                logger.debug(f"Download progress: {progress.completed_files}/{progress.total_files} files, {progress.downloaded_bytes}/{progress.total_bytes}")
-                            
+                                logger.debug(
+                                    f"Download progress: {progress.completed_files}/{progress.total_files} files, {progress.downloaded_bytes}/{progress.total_bytes}"
+                                )
+
                             # Download the model using asyncio.run since we're in a sync context
-                            model_path, download_progress = asyncio.run(download_shard(
-                                shard_metadata,
-                                on_progress=on_progress
-                            ))
-                            
-                            logger.info(f"Model downloaded successfully to: {model_path}")
-                            
+                            model_path, download_progress = asyncio.run(
+                                download_shard(shard_metadata, on_progress=on_progress)
+                            )
+
+                            logger.info(
+                                f"Model downloaded successfully to: {model_path}"
+                            )
+
                         except Exception as e:
                             logger.error(f"Model download failed: {e}")
-                            logger.opt(exception=e).error("Full model download error traceback")
-                            
+                            logger.opt(exception=e).error(
+                                "Full model download error traceback"
+                            )
+
                             # Send failed status with detailed error message
-                            current_status = RunnerFailed(error_message=f"Model download failed: {str(e)}")
+                            current_status = RunnerFailed(
+                                error_message=f"Model download failed: {str(e)}"
+                            )
                             event_sender.send(
                                 RunnerStatusUpdated(
                                     runner_id=runner_id, runner_status=current_status
                                 )
                             )
-                            
+
                             # Send task failure
                             event_sender.send(
                                 TaskStatusUpdated(
@@ -178,7 +191,9 @@ def main(
                         isinstance(current_status, RunnerConnected)
                         and group is not None
                     ) or (isinstance(current_status, RunnerIdle) and group is None):
-                        logger.debug(f"LoadModel accepted: status={current_status}, group={'present' if group is not None else 'None'}")
+                        logger.debug(
+                            f"LoadModel accepted: status={current_status}, group={'present' if group is not None else 'None'}"
+                        )
                         current_status = RunnerLoading()
                         logger.info("runner loading")
                         event_sender.send(
@@ -191,23 +206,31 @@ def main(
                         # Reset group to None for non-MLX engines before full initialization
                         if group == "connected":
                             group = None
-                        
+
                         try:
-                            logger.info(f"Initializing engine for model: {bound_instance.bound_shard.model_meta.model_id}")
-                            model, tokenizer, sampler = initialize_engine(bound_instance)
+                            logger.info(
+                                f"Initializing engine for model: {bound_instance.bound_shard.model_meta.model_id}"
+                            )
+                            model, tokenizer, sampler = initialize_engine(
+                                bound_instance
+                            )
                             logger.info("Engine initialization completed successfully")
                         except Exception as e:
                             logger.error(f"Model loading failed: {e}")
-                            logger.opt(exception=e).error("Full model loading error traceback")
-                            
+                            logger.opt(exception=e).error(
+                                "Full model loading error traceback"
+                            )
+
                             # Send failed status with detailed error message
-                            current_status = RunnerFailed(error_message=f"Model loading failed: {str(e)}")
+                            current_status = RunnerFailed(
+                                error_message=f"Model loading failed: {str(e)}"
+                            )
                             event_sender.send(
                                 RunnerStatusUpdated(
                                     runner_id=runner_id, runner_status=current_status
                                 )
                             )
-                            
+
                             # Send task failure
                             event_sender.send(
                                 TaskStatusUpdated(
@@ -284,11 +307,11 @@ def main(
                                                 command_id=command_id,
                                                 chunk=TokenChunk(
                                                     text=response.text,
-                                                    tokens=response.tokens
-                                                )
+                                                    tokens=response.tokens,
+                                                ),
                                             )
                                         )
-                        
+
                         current_status = RunnerReady()
                         logger.info("runner ready")
                         event_sender.send(
@@ -313,32 +336,49 @@ def main(
                             f"group_value={group}, "
                             f"task_details={task}"
                         )
-                        
+
                         # For LoadModel tasks, provide specific guidance
                         if isinstance(task, LoadModel):
-                            if isinstance(current_status, RunnerConnected) and group is None:
-                                logger.error("LoadModel rejected: RunnerConnected but no group available - this indicates a ConnectToGroup failure")
-                            elif isinstance(current_status, RunnerIdle) and group is not None:
-                                logger.error("LoadModel rejected: RunnerIdle but group is present - unexpected state")
-                            elif isinstance(current_status, RunnerConnected) and group is not None:
-                                logger.error("LoadModel rejected: RunnerConnected with group present - condition should have matched")
+                            if (
+                                isinstance(current_status, RunnerConnected)
+                                and group is None
+                            ):
+                                logger.error(
+                                    "LoadModel rejected: RunnerConnected but no group available - this indicates a ConnectToGroup failure"
+                                )
+                            elif (
+                                isinstance(current_status, RunnerIdle)
+                                and group is not None
+                            ):
+                                logger.error(
+                                    "LoadModel rejected: RunnerIdle but group is present - unexpected state"
+                                )
+                            elif (
+                                isinstance(current_status, RunnerConnected)
+                                and group is not None
+                            ):
+                                logger.error(
+                                    "LoadModel rejected: RunnerConnected with group present - condition should have matched"
+                                )
                             else:
-                                logger.error(f"LoadModel rejected: Unexpected state combination - status={current_status}, group={group}")
-                        
+                                logger.error(
+                                    f"LoadModel rejected: Unexpected state combination - status={current_status}, group={group}"
+                                )
+
                         # Instead of crashing with ValueError, gracefully reject the task
                         error_message = f"Task {task.__class__.__name__} rejected due to invalid state transition: current_status={current_status}, group={group}"
                         logger.warning(f"Gracefully rejecting task: {error_message}")
-                        
+
                         # Brief delay to allow for potential state synchronization
                         time.sleep(0.1)
-                        
+
                         # Send task failure status instead of crashing
                         event_sender.send(
                             TaskStatusUpdated(
                                 task_id=task.task_id, task_status=TaskStatus.Failed
                             )
                         )
-                        
+
                         # Continue processing instead of crashing - skip to next task
                         continue
                 event_sender.send(
@@ -381,11 +421,14 @@ EXO_RUNNER_MUST_TIMEOUT = "EXO RUNNER MUST TIMEOUT"
 
 def _determine_failure_mode(enhanced_token: EnhancedTokenChunk) -> FailureMode:
     """Determine the failure mode based on the enhanced token's validation result."""
-    if not enhanced_token.validation_result or not enhanced_token.validation_result.error_details:
+    if (
+        not enhanced_token.validation_result
+        or not enhanced_token.validation_result.error_details
+    ):
         return FailureMode.TOKEN_CORRUPTION
-    
+
     error_type = enhanced_token.validation_result.error_details.error_type
-    
+
     if error_type == CorruptionType.ENCODING_CORRUPTION:
         return FailureMode.ENCODING_ERROR
     elif error_type == CorruptionType.CHECKSUM_MISMATCH:
@@ -397,10 +440,10 @@ def _determine_failure_mode(enhanced_token: EnhancedTokenChunk) -> FailureMode:
 
 
 def _create_enhanced_chunk_event(
-    command_id: str, 
-    response: GenerationResponse, 
+    command_id: str,
+    response: GenerationResponse,
     enhanced_token: Optional[EnhancedTokenChunk],
-    shard_metadata: Any
+    shard_metadata: Any,
 ) -> ChunkGenerated:
     """Create an enhanced ChunkGenerated event with validation metadata."""
     # Create the basic chunk
@@ -411,7 +454,7 @@ def _create_enhanced_chunk_event(
         token_id=response.token,
         finish_reason=response.finish_reason,
     )
-    
+
     # Create the enhanced event with validation metadata
     return ChunkGenerated(
         command_id=command_id,
@@ -419,12 +462,16 @@ def _create_enhanced_chunk_event(
         validation_result=enhanced_token.validation_result if enhanced_token else None,
         corruption_report=None,  # Could be populated from corruption detector
         device_rank=shard_metadata.device_rank,
-        generation_timestamp=enhanced_token.generation_timestamp if enhanced_token else None,
-        sequence_position=enhanced_token.sequence_position if enhanced_token else 0
+        generation_timestamp=enhanced_token.generation_timestamp
+        if enhanced_token
+        else None,
+        sequence_position=enhanced_token.sequence_position if enhanced_token else 0,
     )
 
 
-def _create_enhanced_chunk_from_response(response: GenerationResponse, enhanced_token: EnhancedTokenChunk) -> TokenChunk:
+def _create_enhanced_chunk_from_response(
+    response: GenerationResponse, enhanced_token: EnhancedTokenChunk
+) -> TokenChunk:
     """Create a TokenChunk for events, optionally enhanced with validation metadata."""
     if enhanced_token:
         # Create an enhanced TokenChunk that includes validation information

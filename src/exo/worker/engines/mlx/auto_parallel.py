@@ -76,24 +76,30 @@ class PipelineFirstLayer(CustomMlxLayer):
             # Validate received tensor if validation is enabled
             if self.validation_enabled:
                 received_checksum = self._compute_tensor_checksum(x)
-                logger.debug(f"PipelineFirstLayer received tensor with checksum: {received_checksum}")
-            
+                logger.debug(
+                    f"PipelineFirstLayer received tensor with checksum: {received_checksum}"
+                )
+
             x = mx.distributed.recv_like(x, (self.r - 1), group=self.group)
-            
+
             # Verify tensor integrity after receive
             if self.validation_enabled:
                 post_receive_checksum = self._compute_tensor_checksum(x)
                 if received_checksum != post_receive_checksum:
-                    logger.warning(f"Tensor checksum mismatch in PipelineFirstLayer: {received_checksum} != {post_receive_checksum}")
-        
+                    logger.warning(
+                        f"Tensor checksum mismatch in PipelineFirstLayer: {received_checksum} != {post_receive_checksum}"
+                    )
+
         return self.original_layer(x, *args, **kwargs)
-    
+
     def _compute_tensor_checksum(self, tensor: mx.array) -> str:
         """Compute SHA-256 checksum of tensor data."""
         # Ensure tensor is evaluated before computing checksum
         mx.eval(tensor)
         tensor_bytes = tensor.tobytes()
-        return hashlib.sha256(tensor_bytes).hexdigest()[:16]  # Use first 16 chars for efficiency
+        return hashlib.sha256(tensor_bytes).hexdigest()[
+            :16
+        ]  # Use first 16 chars for efficiency
 
 
 class PipelineLastLayer(CustomMlxLayer):
@@ -125,32 +131,38 @@ class PipelineLastLayer(CustomMlxLayer):
             # Compute checksum before sending if validation is enabled
             if self.validation_enabled:
                 pre_send_checksum = self._compute_tensor_checksum(output)
-                self.transfer_checksums[f"send_{self.r}_{time.time()}"] = pre_send_checksum
-                logger.debug(f"PipelineLastLayer sending tensor with checksum: {pre_send_checksum}")
-            
+                self.transfer_checksums[f"send_{self.r}_{time.time()}"] = (
+                    pre_send_checksum
+                )
+                logger.debug(
+                    f"PipelineLastLayer sending tensor with checksum: {pre_send_checksum}"
+                )
+
             output = mx.distributed.send(
                 output, (self.r + 1) % self.s, group=self.group
             )
-            
+
             if cache is not None:
                 # This change happened upstream - check out mlx github somewhere??
                 cache.keys = mx.depends(cache.keys, output)  # type: ignore[reportUnknownMemberType]
 
         output = mx.distributed.all_gather(output, group=self.group)[-output.shape[0] :]
-        
+
         # Validate final output if validation is enabled
         if self.validation_enabled:
             final_checksum = self._compute_tensor_checksum(output)
             logger.debug(f"PipelineLastLayer final output checksum: {final_checksum}")
-        
+
         return output
-    
+
     def _compute_tensor_checksum(self, tensor: mx.array) -> str:
         """Compute SHA-256 checksum of tensor data."""
         # Ensure tensor is evaluated before computing checksum
         mx.eval(tensor)
         tensor_bytes = tensor.tobytes()
-        return hashlib.sha256(tensor_bytes).hexdigest()[:16]  # Use first 16 chars for efficiency
+        return hashlib.sha256(tensor_bytes).hexdigest()[
+            :16
+        ]  # Use first 16 chars for efficiency
 
 
 def _inner_model(model: nn.Module) -> nn.Module:
@@ -382,27 +394,31 @@ class ShardedDeepseekV3MoE(CustomMlxLayer):
         if self.validation_enabled and self.sharding_group is not None:
             input_checksum = self._compute_tensor_checksum(x)
             logger.debug(f"ShardedDeepseekV3MoE input checksum: {input_checksum}")
-        
+
         if self.sharding_group is not None:
             x = sum_gradients(self.sharding_group)(x)
-            
+
         y = self.original_layer.__call__(x)
-        
+
         if self.sharding_group is not None:
             # Validate before all_sum operation
             if self.validation_enabled:
                 pre_allsum_checksum = self._compute_tensor_checksum(y)
-                logger.debug(f"ShardedDeepseekV3MoE pre-allsum checksum: {pre_allsum_checksum}")
-            
+                logger.debug(
+                    f"ShardedDeepseekV3MoE pre-allsum checksum: {pre_allsum_checksum}"
+                )
+
             y = mx.distributed.all_sum(y, group=self.sharding_group)
-            
+
             # Validate after all_sum operation
             if self.validation_enabled:
                 post_allsum_checksum = self._compute_tensor_checksum(y)
-                logger.debug(f"ShardedDeepseekV3MoE post-allsum checksum: {post_allsum_checksum}")
-        
+                logger.debug(
+                    f"ShardedDeepseekV3MoE post-allsum checksum: {post_allsum_checksum}"
+                )
+
         return y
-    
+
     def _compute_tensor_checksum(self, tensor: mx.array) -> str:
         """Compute SHA-256 checksum of tensor data."""
         mx.eval(tensor)
@@ -421,32 +437,37 @@ class ShardedQwenMoE(CustomMlxLayer):
         if self.validation_enabled and self.sharding_group is not None:
             input_checksum = self._compute_tensor_checksum(x)
             logger.debug(f"ShardedQwenMoE input checksum: {input_checksum}")
-        
+
         if self.sharding_group is not None:
             x = sum_gradients(self.sharding_group)(x)
-            
+
         y = self.original_layer.__call__(x)
-        
+
         if self.sharding_group is not None:
             # Validate before all_sum operation
             if self.validation_enabled:
                 pre_allsum_checksum = self._compute_tensor_checksum(y)
-                logger.debug(f"ShardedQwenMoE pre-allsum checksum: {pre_allsum_checksum}")
-            
+                logger.debug(
+                    f"ShardedQwenMoE pre-allsum checksum: {pre_allsum_checksum}"
+                )
+
             y = mx.distributed.all_sum(y, group=self.sharding_group)
-            
+
             # Validate after all_sum operation
             if self.validation_enabled:
                 post_allsum_checksum = self._compute_tensor_checksum(y)
-                logger.debug(f"ShardedQwenMoE post-allsum checksum: {post_allsum_checksum}")
-        
+                logger.debug(
+                    f"ShardedQwenMoE post-allsum checksum: {post_allsum_checksum}"
+                )
+
         return y
-    
+
     def _compute_tensor_checksum(self, tensor: mx.array) -> str:
         """Compute SHA-256 checksum of tensor data."""
         mx.eval(tensor)
         tensor_bytes = tensor.tobytes()
         return hashlib.sha256(tensor_bytes).hexdigest()[:16]
+
 
 class QwenShardingStrategy(TensorParallelShardingStrategy):
     def shard_model(self, model: nn.Module) -> nn.Module:

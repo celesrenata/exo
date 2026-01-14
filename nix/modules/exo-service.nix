@@ -4,7 +4,7 @@ with lib;
 
 let
   cfg = config.services.exo;
-  
+
   # Configuration file generation
   exoConfigFile = pkgs.writeText "exo-config.json" (builtins.toJSON {
     mode = cfg.mode;
@@ -34,7 +34,8 @@ let
     ${optionalString (cfg.hardware.memoryLimit != null) "EXO_MEMORY_LIMIT=${cfg.hardware.memoryLimit}"}
   '';
 
-in {
+in
+{
   options.services.exo = {
     enable = mkEnableOption "EXO distributed AI inference system";
 
@@ -382,7 +383,7 @@ in {
 
         apiKeys = mkOption {
           type = types.listOf types.str;
-          default = [];
+          default = [ ];
           description = ''
             List of valid API keys for dashboard authentication.
             Keys should be securely generated random strings.
@@ -437,24 +438,24 @@ in {
       "d ${cfg.configDir} 0750 ${cfg.user} ${cfg.group} -"
       "d ${cfg.modelCacheDir} 0750 ${cfg.user} ${cfg.group} -"
       "d /var/log/exo 0750 ${cfg.user} ${cfg.group} -"
-      
+
       # Runtime directories
       "d /run/exo 0755 ${cfg.user} ${cfg.group} -"
       "d /run/exo/sockets 0750 ${cfg.user} ${cfg.group} -"
-      
+
       # Configuration files with restricted permissions
       "f ${cfg.configDir}/config.json 0640 ${cfg.user} ${cfg.group} - ${exoConfigFile}"
       "f ${cfg.configDir}/environment 0640 ${cfg.user} ${cfg.group} - ${exoEnvironmentFile}"
-      
+
       # Lock files and PID files
       "d /var/lock/exo 0755 ${cfg.user} ${cfg.group} -"
       "d /run/lock/exo 0755 ${cfg.user} ${cfg.group} -"
-      
+
       # Cache directories with appropriate permissions
       "d ${cfg.modelCacheDir}/downloads 0750 ${cfg.user} ${cfg.group} -"
       "d ${cfg.modelCacheDir}/models 0750 ${cfg.user} ${cfg.group} -"
       "d ${cfg.modelCacheDir}/temp 0750 ${cfg.user} ${cfg.group} -"
-      
+
       # Log rotation setup
       "d /var/log/exo/archive 0750 ${cfg.user} ${cfg.group} -"
     ];
@@ -537,7 +538,7 @@ in {
       description = "Setup EXO ACLs";
       wantedBy = [ "multi-user.target" ];
       before = [ "exo.target" ];
-      
+
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -565,7 +566,7 @@ in {
         SUBSYSTEM=="drm", KERNEL=="card*", GROUP="video", MODE="0664", TAG+="uaccess"
         SUBSYSTEM=="drm", KERNEL=="render*", GROUP="render", MODE="0664", TAG+="uaccess"
       ''
-      
+
       # NVIDIA specific rules
       (mkIf config.services.exo.hardware.enableNvidiaSupport ''
         # NVIDIA GPU devices for EXO
@@ -575,7 +576,7 @@ in {
         SUBSYSTEM=="nvidia", KERNEL=="nvidia-uvm-tools", GROUP="video", MODE="0664"
         SUBSYSTEM=="nvidia", KERNEL=="nvidia-modeset", GROUP="video", MODE="0664"
       '')
-      
+
       # AMD specific rules
       (mkIf config.services.exo.hardware.enableAmdSupport ''
         # AMD GPU devices for EXO
@@ -583,7 +584,7 @@ in {
         SUBSYSTEM=="drm", KERNEL=="card*", ATTRS{vendor}=="0x1002", GROUP="video", MODE="0664"
         SUBSYSTEM=="drm", KERNEL=="render*", ATTRS{vendor}=="0x1002", GROUP="render", MODE="0664"
       '')
-      
+
       # Intel specific rules
       (mkIf config.services.exo.hardware.enableIntelSupport ''
         # Intel GPU devices for EXO
@@ -597,7 +598,7 @@ in {
       description = "Setup EXO Network Namespace";
       wantedBy = [ "multi-user.target" ];
       before = [ "exo.target" ];
-      
+
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -620,7 +621,7 @@ in {
           ${pkgs.iproute2}/bin/ip netns exec exo-ns ${pkgs.iproute2}/bin/ip link set veth-exo-ns up
           ${pkgs.iproute2}/bin/ip netns exec exo-ns ${pkgs.iproute2}/bin/ip route add default via 192.168.100.1
         '';
-        
+
         ExecStop = pkgs.writeShellScript "cleanup-exo-namespace" ''
           # Cleanup network namespace
           ${pkgs.iproute2}/bin/ip link delete veth-exo || true
@@ -664,11 +665,11 @@ in {
         RestartSec = "5s";
         RestartSteps = 5;
         RestartMaxDelaySec = "30s";
-        
+
         # Logging
         StandardOutput = mkIf cfg.logging.journalRateLimit "journal";
         StandardError = mkIf cfg.logging.journalRateLimit "journal";
-        
+
         # Environment
         EnvironmentFile = "${cfg.configDir}/environment";
         Environment = [
@@ -697,7 +698,7 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = false; # Needed for AI inference
         RemoveIPC = true;
-        
+
         # Resource limits
         LimitNOFILE = 65536;
         LimitNPROC = 4096;
@@ -738,11 +739,11 @@ in {
         RestartSec = "5s";
         RestartSteps = 5;
         RestartMaxDelaySec = "30s";
-        
+
         # Logging
         StandardOutput = mkIf cfg.logging.journalRateLimit "journal";
         StandardError = mkIf cfg.logging.journalRateLimit "journal";
-        
+
         # Environment
         EnvironmentFile = "${cfg.configDir}/environment";
         Environment = [
@@ -771,10 +772,10 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = false; # Needed for AI inference
         RemoveIPC = true;
-        
+
         # Device access for GPU
         DeviceAllow = map (dev: "${dev} rw") cfg.security.allowedDevices;
-        
+
         # Resource limits
         LimitNOFILE = 65536;
         LimitNPROC = 4096;
@@ -814,11 +815,11 @@ in {
         RestartSec = "5s";
         RestartSteps = 5;
         RestartMaxDelaySec = "30s";
-        
+
         # Logging
         StandardOutput = mkIf cfg.logging.journalRateLimit "journal";
         StandardError = mkIf cfg.logging.journalRateLimit "journal";
-        
+
         # Environment
         EnvironmentFile = "${cfg.configDir}/environment";
         Environment = [
@@ -847,11 +848,11 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         RemoveIPC = true;
-        
+
         # Network binding
         IPAddressDeny = mkIf cfg.security.enableSandbox "any";
         IPAddressAllow = mkIf cfg.security.enableSandbox [ "localhost" "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16" ];
-        
+
         # Resource limits
         LimitNOFILE = 65536;
         LimitNPROC = 1024;
@@ -889,11 +890,11 @@ in {
         RestartSec = "5s";
         RestartSteps = 5;
         RestartMaxDelaySec = "30s";
-        
+
         # Logging
         StandardOutput = mkIf cfg.logging.journalRateLimit "journal";
         StandardError = mkIf cfg.logging.journalRateLimit "journal";
-        
+
         # Environment
         EnvironmentFile = "${cfg.configDir}/environment";
         Environment = [
@@ -931,11 +932,11 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         RemoveIPC = true;
-        
+
         # Network binding for dashboard
         IPAddressDeny = mkIf cfg.security.enableSandbox "any";
         IPAddressAllow = mkIf cfg.security.enableSandbox [ "localhost" "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16" ];
-        
+
         # Resource limits
         LimitNOFILE = 65536;
         LimitNPROC = 512;
@@ -959,14 +960,14 @@ in {
     security.acme = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.acme.enable) {
       acceptTerms = true;
       defaults.email = cfg.dashboard.ssl.acme.email;
-      
+
       certs.${cfg.dashboard.ssl.acme.domain} = {
         domain = cfg.dashboard.ssl.acme.domain;
         group = cfg.group;
-        
+
         # Use HTTP-01 challenge by default
         webroot = "/var/lib/acme/acme-challenge";
-        
+
         # Post-renewal hook to restart services
         postRun = ''
           systemctl reload-or-restart exo-dashboard.service exo-api.service || true
@@ -975,20 +976,20 @@ in {
     };
 
     # Update SSL paths when using ACME
-    services.exo.dashboard.ssl.certificatePath = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.acme.enable) 
+    services.exo.dashboard.ssl.certificatePath = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.acme.enable)
       (mkDefault "/var/lib/acme/${cfg.dashboard.ssl.acme.domain}/cert.pem");
-    services.exo.dashboard.ssl.keyPath = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.acme.enable) 
+    services.exo.dashboard.ssl.keyPath = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.acme.enable)
       (mkDefault "/var/lib/acme/${cfg.dashboard.ssl.acme.domain}/key.pem");
 
     # Nginx configuration for ACME challenge (if needed)
     services.nginx = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.acme.enable) {
       enable = mkDefault true;
-      
+
       virtualHosts.${cfg.dashboard.ssl.acme.domain} = {
         locations."/.well-known/acme-challenge" = {
           root = "/var/lib/acme/acme-challenge";
         };
-        
+
         # Redirect HTTP to HTTPS after certificate is obtained
         locations."/" = {
           return = "301 https://$server_name$request_uri";
@@ -1001,7 +1002,7 @@ in {
       description = "Generate EXO SSL Certificates";
       wantedBy = [ "multi-user.target" ];
       before = [ "exo-dashboard.service" "exo-api.service" ];
-      
+
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -1081,7 +1082,7 @@ in {
     systemd.timers.exo-ssl-renewal = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.autoGenerate) {
       description = "EXO SSL Certificate Renewal Timer";
       wantedBy = [ "timers.target" ];
-      
+
       timerConfig = {
         OnBootSec = "1h";
         OnUnitActiveSec = "1d";
@@ -1091,16 +1092,16 @@ in {
     };
 
     # Update SSL paths when auto-generating
-    services.exo.dashboard.ssl.certificatePath = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.autoGenerate) 
+    services.exo.dashboard.ssl.certificatePath = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.autoGenerate)
       (mkDefault "${cfg.configDir}/ssl/cert.pem");
-    services.exo.dashboard.ssl.keyPath = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.autoGenerate) 
+    services.exo.dashboard.ssl.keyPath = mkIf (cfg.dashboard.ssl.enable && cfg.dashboard.ssl.autoGenerate)
       (mkDefault "${cfg.configDir}/ssl/key.pem");
 
     # Health check service
     systemd.services.exo-healthcheck = {
       description = "EXO Health Check";
       after = [ "exo-master.service" "exo-worker.service" "exo-api.service" ] ++ optional cfg.dashboard.enable "exo-dashboard.service";
-      
+
       serviceConfig = {
         Type = "oneshot";
         User = cfg.user;
@@ -1137,7 +1138,7 @@ in {
           
           echo "EXO health check passed"
         '';
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1157,7 +1158,7 @@ in {
     systemd.timers.exo-healthcheck = {
       description = "EXO Health Check Timer";
       wantedBy = [ "timers.target" ];
-      
+
       timerConfig = {
         OnBootSec = "5min";
         OnUnitActiveSec = "5min";
@@ -1170,7 +1171,7 @@ in {
       description = "EXO Log Management Service";
       wantedBy = [ "multi-user.target" ];
       after = [ "systemd-journald.service" ];
-      
+
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -1221,14 +1222,14 @@ in {
       description = "EXO Metrics Collection";
       wantedBy = [ "exo.target" ];
       after = [ "exo-master.service" ];
-      
+
       serviceConfig = {
         Type = "exec";
         User = cfg.user;
         Group = cfg.group;
         Restart = "always";
         RestartSec = "10s";
-        
+
         ExecStart = pkgs.writeShellScript "exo-metrics" ''
           #!/bin/bash
           # EXO metrics collection script
@@ -1283,7 +1284,7 @@ in {
             sleep 60
           done
         '';
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1306,7 +1307,7 @@ in {
     systemd.services.exo-log-analyzer = {
       description = "EXO Log Analysis and Alerting";
       after = [ "exo-master.service" "exo-worker.service" ];
-      
+
       serviceConfig = {
         Type = "oneshot";
         User = cfg.user;
@@ -1355,7 +1356,7 @@ in {
           
           echo "Log analysis completed at $(date -Iseconds)"
         '';
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1376,7 +1377,7 @@ in {
     systemd.timers.exo-log-analyzer = {
       description = "EXO Log Analysis Timer";
       wantedBy = [ "timers.target" ];
-      
+
       timerConfig = {
         OnBootSec = "10min";
         OnUnitActiveSec = "1h";
@@ -1389,14 +1390,14 @@ in {
       description = "EXO Performance Monitor";
       wantedBy = [ "exo.target" ];
       after = [ "exo-master.service" "exo-worker.service" ];
-      
+
       serviceConfig = {
         Type = "exec";
         User = cfg.user;
         Group = cfg.group;
         Restart = "always";
         RestartSec = "30s";
-        
+
         ExecStart = pkgs.writeShellScript "exo-performance-monitor" ''
           #!/bin/bash
           # Monitor EXO performance metrics
@@ -1437,7 +1438,7 @@ in {
             sleep 300 # 5 minutes
           done
         '';
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1460,14 +1461,14 @@ in {
       description = "EXO Prometheus Metrics Exporter";
       wantedBy = [ "exo.target" ];
       after = [ "exo-master.service" ];
-      
+
       serviceConfig = {
         Type = "exec";
         User = cfg.user;
         Group = cfg.group;
         Restart = "always";
         RestartSec = "10s";
-        
+
         ExecStart = pkgs.writeShellScript "exo-prometheus-exporter" ''
           #!/bin/bash
           # Export EXO metrics in Prometheus format
@@ -1520,7 +1521,7 @@ in {
             kill $HTTP_PID 2>/dev/null || true
           done
         '';
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";

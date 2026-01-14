@@ -78,13 +78,13 @@ class MultiNodeValidator:
                     )
 
                     self.nodes[node_name][runner_name] = runner
-                    print(f"Created runner {runner_name} on {node_name}")
+                    print("Created runner {runner_name} on {node_name}")
 
             print("Multi-node environment setup completed")
             return True
 
         except Exception as e:
-            print(f"Failed to setup multi-node environment: {e}")
+            print("Failed to setup multi-node environment: {e}")
             return False
 
     def _create_mock_bound_instance(
@@ -118,7 +118,7 @@ class MultiNodeValidator:
             start_tasks = []
             for node_name, runners in self.nodes.items():
                 for runner_name, runner in runners.items():
-                    print(f"Starting runner {runner_name} on {node_name}")
+                    print("Starting runner {runner_name} on {node_name}")
                     start_tasks.append(asyncio.create_task(runner.run()))
 
             # Wait for all runners to start (with timeout)
@@ -138,7 +138,7 @@ class MultiNodeValidator:
                         )
                         all_healthy = False
                     else:
-                        print(f"Runner {runner_name} on {node_name} is healthy")
+                        print("Runner {runner_name} on {node_name} is healthy")
 
             if all_healthy:
                 print("✓ Multi-node instance creation test passed")
@@ -153,7 +153,7 @@ class MultiNodeValidator:
             print("✗ Multi-node instance creation test failed - timeout")
             return False
         except Exception as e:
-            print(f"✗ Multi-node instance creation test failed: {e}")
+            print("✗ Multi-node instance creation test failed: {e}")
             return False
 
     async def test_inference_coordination(self) -> bool:
@@ -171,7 +171,7 @@ class MultiNodeValidator:
                     task.task_id = f"task_{runner_name}"
                     task.instance_id = f"instance_{runner_name}"
 
-                    print(f"Starting inference task on {runner_name} ({node_name})")
+                    print("Starting inference task on {runner_name} ({node_name})")
                     inference_tasks.append(asyncio.create_task(runner.start_task(task)))
 
             # Wait for all inference tasks to complete
@@ -185,9 +185,9 @@ class MultiNodeValidator:
             for i, result in enumerate(results):
                 if not isinstance(result, Exception):
                     success_count += 1
-                    print(f"✓ Inference task {i} completed successfully")
+                    print("✓ Inference task {i} completed successfully")
                 else:
-                    print(f"✗ Inference task {i} failed: {result}")
+                    print("✗ Inference task {i} failed: {result}")
 
             total_tasks = len(inference_tasks)
             success_rate = success_count / total_tasks
@@ -207,7 +207,7 @@ class MultiNodeValidator:
             print("✗ Inference coordination test failed - timeout")
             return False
         except Exception as e:
-            print(f"✗ Inference coordination test failed: {e}")
+            print("✗ Inference coordination test failed: {e}")
             return False
 
     async def test_graceful_shutdown_scenarios(self) -> bool:
@@ -224,16 +224,16 @@ class MultiNodeValidator:
         results = {}
 
         for scenario_name, test_func in scenarios:
-            print(f"Testing scenario: {scenario_name}")
+            print("Testing scenario: {scenario_name}")
             try:
                 result = await test_func()
                 results[scenario_name] = result
                 if result:
-                    print(f"✓ Scenario {scenario_name} passed")
+                    print("✓ Scenario {scenario_name} passed")
                 else:
-                    print(f"✗ Scenario {scenario_name} failed")
+                    print("✗ Scenario {scenario_name} failed")
             except Exception as e:
-                print(f"✗ Scenario {scenario_name} failed with exception: {e}")
+                print("✗ Scenario {scenario_name} failed with exception: {e}")
                 results[scenario_name] = False
 
         # Overall success if most scenarios pass
@@ -279,7 +279,7 @@ class MultiNodeValidator:
             return success_count >= len(shutdown_tasks) * 0.8  # 80% success rate
 
         except Exception as e:
-            print(f"Normal shutdown test error: {e}")
+            print("Normal shutdown test error: {e}")
             return False
 
     async def _test_concurrent_shutdown(self) -> bool:
@@ -314,7 +314,7 @@ class MultiNodeValidator:
             return exception_count == 0  # No exceptions should occur
 
         except Exception as e:
-            print(f"Concurrent shutdown test error: {e}")
+            print("Concurrent shutdown test error: {e}")
             return False
 
     async def _test_partial_failure_shutdown(self) -> bool:
@@ -357,7 +357,7 @@ class MultiNodeValidator:
             return success_count > 0  # At least some should succeed
 
         except Exception as e:
-            print(f"Partial failure shutdown test error: {e}")
+            print("Partial failure shutdown test error: {e}")
             return False
 
     async def _test_timeout_shutdown(self) -> bool:
@@ -389,7 +389,7 @@ class MultiNodeValidator:
             return timeout_count > 0  # Some timeouts expected
 
         except Exception as e:
-            print(f"Timeout shutdown test error: {e}")
+            print("Timeout shutdown test error: {e}")
             return False
 
     async def test_error_handling_recovery(self) -> bool:
@@ -407,7 +407,7 @@ class MultiNodeValidator:
             results = {}
 
             for scenario_name, simulate_func in error_scenarios:
-                print(f"Testing error scenario: {scenario_name}")
+                print("Testing error scenario: {scenario_name}")
                 try:
                     # Simulate the error
                     await simulate_func()
@@ -424,10 +424,10 @@ class MultiNodeValidator:
                             f"✓ Error scenario {scenario_name} recovered successfully"
                         )
                     else:
-                        print(f"✗ Error scenario {scenario_name} failed to recover")
+                        print("✗ Error scenario {scenario_name} failed to recover")
 
                 except Exception as e:
-                    print(f"✗ Error scenario {scenario_name} failed: {e}")
+                    print("✗ Error scenario {scenario_name} failed: {e}")
                     results[scenario_name] = False
 
             # Overall success if most scenarios recover
@@ -447,7 +447,7 @@ class MultiNodeValidator:
                 return False
 
         except Exception as e:
-            print(f"Error handling test failed: {e}")
+            print("Error handling test failed: {e}")
             return False
 
     async def _simulate_resource_error(self):
@@ -514,7 +514,7 @@ class MultiNodeValidator:
             )
 
         except Exception as e:
-            print(f"Recovery check failed: {e}")
+            print("Recovery check failed: {e}")
             return False
 
     async def cleanup(self):
@@ -544,7 +544,7 @@ class MultiNodeValidator:
             print("Cleanup completed")
 
         except Exception as e:
-            print(f"Cleanup error: {e}")
+            print("Cleanup error: {e}")
 
 
 @pytest.mark.asyncio
@@ -631,7 +631,7 @@ async def test_stress_multinode():
 
         # Run multiple test cycles
         for cycle in range(3):
-            print(f"Running stress test cycle {cycle + 1}/3")
+            print("Running stress test cycle {cycle + 1}/3")
 
             # Test instance creation
             creation_success = await validator.test_multi_node_instance_creation()
@@ -667,31 +667,31 @@ if __name__ == "__main__":
         results = {}
 
         for test_name, test_func in tests:
-            print(f"\n{'=' * 50}")
-            print(f"Running {test_name} Test")
-            print(f"{'=' * 50}")
+            print("\n{'=' * 50}")
+            print("Running {test_name} Test")
+            print("{'=' * 50}")
 
             try:
                 await test_func()
                 results[test_name] = True
-                print(f"✓ {test_name} test PASSED")
+                print("✓ {test_name} test PASSED")
             except Exception as e:
                 results[test_name] = False
-                print(f"✗ {test_name} test FAILED: {e}")
+                print("✗ {test_name} test FAILED: {e}")
 
         # Summary
-        print(f"\n{'=' * 50}")
+        print("\n{'=' * 50}")
         print("VALIDATION SUMMARY")
-        print(f"{'=' * 50}")
+        print("{'=' * 50}")
 
         passed = sum(1 for result in results.values() if result)
         total = len(results)
 
         for test_name, result in results.items():
             status = "PASSED" if result else "FAILED"
-            print(f"{test_name}: {status}")
+            print("{test_name}: {status}")
 
-        print(f"\nOverall: {passed}/{total} tests passed")
+        print("\nOverall: {passed}/{total} tests passed")
 
         if passed == total:
             print("🎉 All validation tests PASSED!")

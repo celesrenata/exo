@@ -58,55 +58,55 @@ stdenv.mkDerivation rec {
   '';
 
   installPhase = ''
-    runHook preInstall
+        runHook preInstall
     
-    # Install built dashboard static assets
-    mkdir -p $out/share/exo/dashboard
+        # Install built dashboard static assets
+        mkdir -p $out/share/exo/dashboard
     
-    # Copy the built static files
-    if [ -d "build" ]; then
-      cp -r build/* $out/share/exo/dashboard/
-    else
-      echo "Error: build directory not found"
-      exit 1
+        # Copy the built static files
+        if [ -d "build" ]; then
+          cp -r build/* $out/share/exo/dashboard/
+        else
+          echo "Error: build directory not found"
+          exit 1
+        fi
+    
+        # Create bin directory and install server script
+        mkdir -p $out/bin
+    
+        # Copy the server script
+        cp ${dashboardServer} $out/bin/exo-dashboard-server
+        chmod +x $out/bin/exo-dashboard-server
+    
+        # Create a simple launcher script
+        cat > $out/bin/exo-dashboard << 'EOF'
+    #!/bin/sh
+    DASHBOARD_DIR="OUTPUT_DIR_PLACEHOLDER/share/exo/dashboard"
+    PORT=''${EXO_DASHBOARD_PORT:-8080}
+
+    if [ ! -d "$DASHBOARD_DIR" ]; then
+        echo "Error: Dashboard directory not found at $DASHBOARD_DIR"
+        exit 1
     fi
-    
-    # Create bin directory and install server script
-    mkdir -p $out/bin
-    
-    # Copy the server script
-    cp ${dashboardServer} $out/bin/exo-dashboard-server
-    chmod +x $out/bin/exo-dashboard-server
-    
-    # Create a simple launcher script
-    cat > $out/bin/exo-dashboard << 'EOF'
-#!/bin/sh
-DASHBOARD_DIR="OUTPUT_DIR_PLACEHOLDER/share/exo/dashboard"
-PORT=''${EXO_DASHBOARD_PORT:-8080}
 
-if [ ! -d "$DASHBOARD_DIR" ]; then
-    echo "Error: Dashboard directory not found at $DASHBOARD_DIR"
-    exit 1
-fi
+    echo "Starting EXO Dashboard on port $PORT"
+    echo "Dashboard files: $DASHBOARD_DIR"
 
-echo "Starting EXO Dashboard on port $PORT"
-echo "Dashboard files: $DASHBOARD_DIR"
+    exec NODE_PLACEHOLDER OUTPUT_DIR_PLACEHOLDER/bin/exo-dashboard-server "$DASHBOARD_DIR"
+    EOF
 
-exec NODE_PLACEHOLDER OUTPUT_DIR_PLACEHOLDER/bin/exo-dashboard-server "$DASHBOARD_DIR"
-EOF
-
-    # Fix the placeholders in the launcher script
-    sed -i "s|OUTPUT_DIR_PLACEHOLDER|$out|g" $out/bin/exo-dashboard
-    sed -i "s|NODE_PLACEHOLDER|${nodejs}/bin/node|g" $out/bin/exo-dashboard
-    chmod +x $out/bin/exo-dashboard
+        # Fix the placeholders in the launcher script
+        sed -i "s|OUTPUT_DIR_PLACEHOLDER|$out|g" $out/bin/exo-dashboard
+        sed -i "s|NODE_PLACEHOLDER|${nodejs}/bin/node|g" $out/bin/exo-dashboard
+        chmod +x $out/bin/exo-dashboard
     
-    # Verify build output
-    if [ ! -f "$out/share/exo/dashboard/index.html" ]; then
-      echo "Warning: index.html not found in build output"
-      ls -la $out/share/exo/dashboard/ || true
-    fi
+        # Verify build output
+        if [ ! -f "$out/share/exo/dashboard/index.html" ]; then
+          echo "Warning: index.html not found in build output"
+          ls -la $out/share/exo/dashboard/ || true
+        fi
     
-    runHook postInstall
+        runHook postInstall
   '';
 
   # Don't strip the JavaScript files

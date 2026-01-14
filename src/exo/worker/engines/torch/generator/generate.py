@@ -71,7 +71,7 @@ def torch_generate(
     # Check if this is distributed inference
     # For now, we'll implement a basic distributed generation
     # In a real implementation, you'd need proper inter-node communication
-    
+
     prompt = apply_chat_template(
         tokenizer=tokenizer,
         chat_task_data=task,
@@ -97,18 +97,20 @@ def torch_generate(
         while generated_tokens < max_tokens:
             # Forward pass through this model shard
             outputs = model(input_ids)
-            
+
             # For distributed inference, we need to handle different ranks differently
             # This is a basic implementation - real distributed inference needs proper communication
-            if hasattr(model, '_is_distributed_shard'):
+            if hasattr(model, "_is_distributed_shard"):
                 # Handle distributed forward pass
                 # In practice, you'd send/receive tensors between ranks
                 logger.debug("Processing distributed forward pass")
-            
+
             logits = outputs.logits[:, -1, :]
 
             # Sample next token (only on the last rank in distributed setup)
-            if tokenizer is not None:  # Assuming tokenizer only exists on rank 0/last rank
+            if (
+                tokenizer is not None
+            ):  # Assuming tokenizer only exists on rank 0/last rank
                 next_token = sampler(logits)
                 next_token_id = next_token.item()
 
@@ -119,7 +121,9 @@ def torch_generate(
                 # Decode the new token
                 try:
                     # Decode just the new token for streaming
-                    token_text = tokenizer.decode([next_token_id], skip_special_tokens=True)
+                    token_text = tokenizer.decode(
+                        [next_token_id], skip_special_tokens=True
+                    )
 
                     # Check for finish conditions
                     finish_reason: FinishReason | None = None
@@ -151,7 +155,7 @@ def torch_generate(
                 # In practice, you'd send the hidden states to the next rank
                 logger.debug("Intermediate rank processing - passing hidden states")
                 generated_tokens += 1
-                
+
                 # For now, just yield empty responses for intermediate ranks
                 yield GenerationResponse(
                     text="",

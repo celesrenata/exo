@@ -9,40 +9,40 @@ let
   # Helper function to create NixOS test VMs
   mkNixOSTest = name: testScript: pkgs.nixosTest {
     inherit name;
-    
+
     nodes = {
       master = { config, pkgs, ... }: {
         imports = [ nixosModules.exo-service ];
-        
+
         services.exo = {
           enable = true;
           mode = "master";
           apiPort = 52415;
           networking.bondInterface = "eth0";
         };
-        
+
         # Basic networking setup
         networking = {
-          firewall.enable = false;  # Simplified for testing
+          firewall.enable = false; # Simplified for testing
           interfaces.eth0.ipv4.addresses = [{
             address = "192.168.1.10";
             prefixLength = 24;
           }];
         };
-        
+
         # Enable systemd-resolved for service discovery
         services.resolved.enable = true;
       };
-      
+
       worker1 = { config, pkgs, ... }: {
         imports = [ nixosModules.exo-service ];
-        
+
         services.exo = {
           enable = true;
           mode = "worker";
           networking.bondInterface = "eth0";
         };
-        
+
         networking = {
           firewall.enable = false;
           interfaces.eth0.ipv4.addresses = [{
@@ -50,19 +50,19 @@ let
             prefixLength = 24;
           }];
         };
-        
+
         services.resolved.enable = true;
       };
-      
+
       worker2 = { config, pkgs, ... }: {
         imports = [ nixosModules.exo-service ];
-        
+
         services.exo = {
           enable = true;
           mode = "worker";
           networking.bondInterface = "eth0";
         };
-        
+
         networking = {
           firewall.enable = false;
           interfaces.eth0.ipv4.addresses = [{
@@ -70,18 +70,19 @@ let
             prefixLength = 24;
           }];
         };
-        
+
         services.resolved.enable = true;
       };
     };
-    
+
     testScript = testScript;
   };
 
   # Helper function for simple integration tests
-  mkTest = name: script: pkgs.runCommand "test-${name}" {
-    nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.curl pkgs.jq pkgs.netcat ];
-  } ''
+  mkTest = name: script: pkgs.runCommand "test-${name}"
+    {
+      nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.curl pkgs.jq pkgs.netcat ];
+    } ''
     set -euo pipefail
     
     echo "=== ${name} Integration Test ==="
@@ -148,56 +149,56 @@ let
 
   # Test K3s integration
   k3s-integration-tests = mkNixOSTest "k3s-integration" ''
-    # Configure K3s master node
-    master.wait_for_unit("k3s.service")
-    master.wait_for_unit("exo-master.service")
+        # Configure K3s master node
+        master.wait_for_unit("k3s.service")
+        master.wait_for_unit("exo-master.service")
     
-    # Configure K3s worker with EXO integration
-    worker1.wait_for_unit("k3s-agent.service")
-    worker1.wait_for_unit("exo-worker.service")
+        # Configure K3s worker with EXO integration
+        worker1.wait_for_unit("k3s-agent.service")
+        worker1.wait_for_unit("exo-worker.service")
     
-    with subtest("K3s cluster formation"):
-        # Wait for K3s cluster to be ready
-        master.wait_until_succeeds("k3s kubectl get nodes")
+        with subtest("K3s cluster formation"):
+            # Wait for K3s cluster to be ready
+            master.wait_until_succeeds("k3s kubectl get nodes")
         
-        # Verify worker joined the cluster
-        master.wait_until_succeeds("k3s kubectl get nodes | grep worker1")
+            # Verify worker joined the cluster
+            master.wait_until_succeeds("k3s kubectl get nodes | grep worker1")
     
-    with subtest("EXO service discovery"):
-        # Test that EXO services are registered with K3s
-        master.wait_until_succeeds("k3s kubectl get services | grep exo || true")
+        with subtest("EXO service discovery"):
+            # Test that EXO services are registered with K3s
+            master.wait_until_succeeds("k3s kubectl get services | grep exo || true")
         
-        # Test service discovery integration
-        result = master.succeed("k3s kubectl get pods -A | grep exo || true")
-        print(f"EXO pods: {result}")
+            # Test service discovery integration
+            result = master.succeed("k3s kubectl get pods -A | grep exo || true")
+            print(f"EXO pods: {result}")
     
-    with subtest("Network policy integration"):
-        # Test that EXO networking works with K3s policies
-        master.succeed("k3s kubectl apply -f - <<EOF
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: exo-network-policy
-spec:
-  podSelector:
-    matchLabels:
-      app: exo
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress:
-  - from: []
-    ports:
-    - protocol: TCP
-      port: 52415
-    - protocol: TCP
-      port: 52416
-  egress:
-  - to: []
-EOF")
+        with subtest("Network policy integration"):
+            # Test that EXO networking works with K3s policies
+            master.succeed("k3s kubectl apply -f - <<EOF
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: exo-network-policy
+    spec:
+      podSelector:
+        matchLabels:
+          app: exo
+      policyTypes:
+      - Ingress
+      - Egress
+      ingress:
+      - from: []
+        ports:
+        - protocol: TCP
+          port: 52415
+        - protocol: TCP
+          port: 52416
+      egress:
+      - to: []
+    EOF")
         
-        # Verify policy was applied
-        master.wait_until_succeeds("k3s kubectl get networkpolicy exo-network-policy")
+            # Verify policy was applied
+            master.wait_until_succeeds("k3s kubectl get networkpolicy exo-network-policy")
   '';
 
   # Test networking functionality
@@ -354,6 +355,7 @@ EOF")
     echo "Service discovery tests completed"
   '';
 
-in {
+in
+{
   inherit multi-node-cluster-tests k3s-integration-tests networking-tests service-discovery-tests;
 }

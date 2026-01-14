@@ -621,7 +621,7 @@ class SafeQueueOperations:
             if hasattr(logger, "debug"):
                 logger.debug(f"Error updating operation metrics: {e}")
             else:
-                print(f"Error updating operation metrics: {e}")
+                print("Error updating operation metrics: {e}")
 
     async def _get_queue_dependencies(self, queue_id: str) -> List[QueueDependency]:
         """Get dependencies for a queue."""

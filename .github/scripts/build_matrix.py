@@ -64,7 +64,7 @@ with open(os.environ["GITHUB_OUTPUT"], "a") as f:
     f.write(f"timeout_seconds={timeout_seconds}\n")
     f.write(f"environment={json.dumps(environment)}\n")
 
-print(f"Matrix: {json.dumps(matrix)}")
-print(f"Config file: {config_file}")
-print(f"Timeout: {timeout_seconds}")
-print(f"Environment: {json.dumps(environment)}")
+print("Matrix: {json.dumps(matrix)}")
+print("Config file: {config_file}")
+print("Timeout: {timeout_seconds}")
+print("Environment: {json.dumps(environment)}")

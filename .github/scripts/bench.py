@@ -71,7 +71,7 @@ def _http_request(
                 return {"raw": body}
     except Exception as e:
         error_details = _format_http_error(e)
-        print(f"HTTP request failed:\n{error_details}")
+        print("HTTP request failed:\n{error_details}")
         raise
 
 
@@ -105,7 +105,7 @@ async def _http_stream_async(
             return lines
         except Exception as e:
             error_details = _format_http_error(e)
-            print(f"HTTP request failed:\n{error_details}")
+            print("HTTP request failed:\n{error_details}")
             raise
 
     loop = asyncio.get_event_loop()
@@ -173,7 +173,7 @@ def collect_metrics_snapshot(state: Mapping[str, Any]) -> MetricsSnapshot:
     instance_tasks: list[InstanceTaskSnapshot] = []
     instances: Mapping[str, Any] = state.get("instances", {})
     tasks: Mapping[str, Any] = state.get("tasks", {})
-    print(f"[DEBUG] Num tasks: {len(tasks)}. Num instances: {len(instances)}.")
+    print("[DEBUG] Num tasks: {len(tasks)}. Num instances: {len(instances)}.")
 
     # Map instance_id -> node_ids (instances can span multiple nodes)
     instance_to_nodes: dict[str, set[str]] = {}
@@ -206,7 +206,7 @@ def collect_metrics_snapshot(state: Mapping[str, Any]) -> MetricsSnapshot:
 
     for _task_id, task_wrapper in tasks.items():
         if not isinstance(task_wrapper, dict):
-            print(f"[DEBUG] Task wrapper is not a dict: {task_wrapper}")
+            print("[DEBUG] Task wrapper is not a dict: {task_wrapper}")
             tasks_skipped += 1
             continue
 
@@ -221,7 +221,7 @@ def collect_metrics_snapshot(state: Mapping[str, Any]) -> MetricsSnapshot:
         _task_type, task_data = next(iter(task_wrapper.items()))
 
         if not isinstance(task_data, dict):
-            print(f"[DEBUG] Task data is not a dict: {task_data}")
+            print("[DEBUG] Task data is not a dict: {task_data}")
             tasks_skipped += 1
             continue
 
@@ -428,7 +428,7 @@ async def wait_for_topology_ready(
         )
 
         if node_count >= expected_nodes:
-            print(f"All {expected_nodes} node(s) are in topology!")
+            print("All {expected_nodes} node(s) are in topology!")
             return
 
         if elapsed > timeout_s:
@@ -474,14 +474,14 @@ async def wait_for_instances_ready(
 
 async def wait_for_all_instances_deleted(api_base: str, model_id: str) -> None:
     """Wait for all instances of a model to be deleted."""
-    print(f"Waiting for all instances of {model_id} to be deleted...")
+    print("Waiting for all instances of {model_id} to be deleted...")
     start = time.monotonic()
     while True:
         state = fetch_state(api_base)
         count = count_instances_by_model(state, model_id)
         if count == 0:
             elapsed = time.monotonic() - start
-            print(f"All instances of {model_id} deleted after {elapsed:.1f}s")
+            print("All instances of {model_id} deleted after {elapsed:.1f}s")
             return
         await asyncio.sleep(2)
 
@@ -492,9 +492,9 @@ async def wait_for_tasks_drained(api_base: str, timeout_s: int = 600) -> None:
     Tasks are deleted from state when complete, so we wait until there are no
     pending or running tasks remaining.
     """
-    print(f"\n{'=' * 80}")
+    print("\n{'=' * 80}")
     print("⏳ WAITING FOR ALL TASKS TO DRAIN")
-    print(f"{'=' * 80}")
+    print("{'=' * 80}")
     start = time.monotonic()
 
     while True:
@@ -509,7 +509,7 @@ async def wait_for_tasks_drained(api_base: str, timeout_s: int = 600) -> None:
         elapsed = time.monotonic() - start
 
         if total_active == 0:
-            print(f"✅ All tasks drained after {elapsed:.1f}s")
+            print("✅ All tasks drained after {elapsed:.1f}s")
             return
 
         print(
@@ -760,7 +760,7 @@ async def run_single_request(
         elapsed = time.monotonic() - start
         completed_at = time.time()
         error_details = _format_http_error(e)
-        print(f"  Request #{request_id}: FAILED - {error_details}")
+        print("  Request #{request_id}: FAILED - {error_details}")
         return RequestResult(
             request_id=request_id,
             success=False,
@@ -781,9 +781,9 @@ async def monitor_metrics(
     interval_seconds: float = 5.0,
 ) -> None:
     """Background task that collects metrics snapshots every interval_seconds."""
-    print(f"\n{'=' * 80}")
-    print(f"🔍 METRICS MONITORING STARTED (polling every {interval_seconds}s)")
-    print(f"{'=' * 80}\n")
+    print("\n{'=' * 80}")
+    print("🔍 METRICS MONITORING STARTED (polling every {interval_seconds}s)")
+    print("{'=' * 80}\n")
 
     snapshot_count = 0
     while not stop_event.is_set():
@@ -816,7 +816,7 @@ async def monitor_metrics(
                     )
 
         except Exception as e:
-            print(f"[METRICS] Error collecting snapshot: {e}")
+            print("[METRICS] Error collecting snapshot: {e}")
             import traceback
 
             traceback.print_exc()
@@ -834,13 +834,13 @@ async def run_stage(
 ) -> StageResult:
     """Run a single benchmark stage with fire-and-forget requests (or sequential if no_overlap=True)."""
     print("=" * 80)
-    print(f"STAGE: {stage.name}")
+    print("STAGE: {stage.name}")
     print("=" * 80)
-    print(f"  Prompt Length:       {stage.prompt_length} tokens")
-    print(f"  Generation Length:   {stage.generation_length} tokens")
-    print(f"  Time Between Reqs:   {stage.time_between_requests}s")
-    print(f"  Iterations:          {stage.iterations}")
-    print(f"  No Overlap:          {no_overlap}")
+    print("  Prompt Length:       {stage.prompt_length} tokens")
+    print("  Generation Length:   {stage.generation_length} tokens")
+    print("  Time Between Reqs:   {stage.time_between_requests}s")
+    print("  Iterations:          {stage.iterations}")
+    print("  No Overlap:          {no_overlap}")
     print("=" * 80)
 
     stage_started_at = time.time()
@@ -878,7 +878,7 @@ async def run_stage(
                 await asyncio.sleep(stage.time_between_requests)
 
         # Wait for all requests to complete
-        print(f"\nWaiting for all {len(tasks)} HTTP requests to complete...")
+        print("\nWaiting for all {len(tasks)} HTTP requests to complete...")
         results = list(await asyncio.gather(*tasks))
 
     # Wait for all tasks in the cluster to be drained
@@ -1002,19 +1002,19 @@ async def run_benchmark(
     print("=" * 80)
     print("EXO BENCHMARK")
     print("=" * 80)
-    print(f"Configuration File: {config_path}")
-    print(f"Model IDs:          {model_ids}")
-    print(f"Instance Count:     {len(model_ids)}")
+    print("Configuration File: {config_path}")
+    print("Model IDs:          {model_ids}")
+    print("Instance Count:     {len(model_ids)}")
     print(
         f"Sharding:           {sharding if sharding else 'not specified (defaults to Pipeline)'}"
     )
     print(
         f"Instance Type:      {instance_meta if instance_meta else 'not specified (defaults to MlxRing)'}"
     )
-    print(f"No Overlap:         {no_overlap}")
-    print(f"Stages:             {len(stages)}")
-    print(f"Expected Nodes:     {expected_nodes}")
-    print(f"Is Primary:         {is_primary}")
+    print("No Overlap:         {no_overlap}")
+    print("Stages:             {len(stages)}")
+    print("Expected Nodes:     {expected_nodes}")
+    print("Is Primary:         {is_primary}")
     print("=" * 80)
 
     try:
@@ -1037,7 +1037,7 @@ async def run_benchmark(
 
         print("\nTarget instance counts by model:")
         for model_id, count in model_counts.items():
-            print(f"  {model_id}: {count} instance(s)")
+            print("  {model_id}: {count} instance(s)")
         print()
 
         # Track all instance IDs (collected at the end)
@@ -1069,13 +1069,13 @@ async def run_benchmark(
                 response = await _http_request_async(
                     f"{api_base}/instance", method="POST", data=instance_data
                 )
-                print(f"[PRIMARY] Instance creation response: {response}")
+                print("[PRIMARY] Instance creation response: {response}")
 
                 # Wait for one more instance of this model to be ready
                 await wait_for_instances_ready(
                     api_base, model_id, target_count, timeout_s=timeout_seconds
                 )
-                print(f"[PRIMARY] Instance {idx + 1}/{len(model_ids)} is ready")
+                print("[PRIMARY] Instance {idx + 1}/{len(model_ids)} is ready")
                 print("=" * 80)
         else:
             # Secondary: wait for expected counts of each model to be ready
@@ -1100,16 +1100,16 @@ async def run_benchmark(
         print(
             f"\nAll {len(all_instance_ids)} instance(s) with {total_runners} total runner(s) are ready!"
         )
-        print(f"Instance IDs: {all_instance_ids}")
+        print("Instance IDs: {all_instance_ids}")
 
         if is_primary:
             # Run all stages once (requests will use available instances)
             # We use the first model_id for the benchmark requests
             benchmark_model_id = model_ids[0]
-            print(f"\n{'=' * 80}")
-            print(f"RUNNING BENCHMARK (using model: {benchmark_model_id})")
-            print(f"Instances available: {len(all_instance_ids)}")
-            print(f"{'=' * 80}")
+            print("\n{'=' * 80}")
+            print("RUNNING BENCHMARK (using model: {benchmark_model_id})")
+            print("Instances available: {len(all_instance_ids)}")
+            print("{'=' * 80}")
 
             # Start metrics monitoring with 500ms interval to catch fast-completing tasks
             metrics_snapshots: list[MetricsSnapshot] = []
@@ -1131,25 +1131,25 @@ async def run_benchmark(
             print("\nStopping metrics monitoring...")
             stop_monitoring.set()
             await monitoring_task
-            print(f"Collected {len(metrics_snapshots)} metrics snapshots")
+            print("Collected {len(metrics_snapshots)} metrics snapshots")
 
             # Print final results
             print("\n" + "=" * 80)
             print("BENCHMARK COMPLETE - RESULTS SUMMARY")
             print("=" * 80)
-            print(f"Instances tested: {len(all_instance_ids)}")
-            print(f"Model IDs: {model_ids}")
-            print(f"Instance IDs: {all_instance_ids}")
+            print("Instances tested: {len(all_instance_ids)}")
+            print("Model IDs: {model_ids}")
+            print("Instance IDs: {all_instance_ids}")
 
             for result in stage_results:
-                print(f"\nStage: {result.name}")
-                print(f"  Total Requests:     {result.total_requests}")
-                print(f"  Successful:         {result.successful_requests}")
-                print(f"  Failed:             {result.failed_requests}")
-                print(f"  Success Rate:       {result.success_rate * 100:.1f}%")
-                print(f"  Total Tokens:       {result.total_tokens}")
-                print(f"  Avg Tokens/Request: {result.avg_tokens_per_request:.1f}")
-                print(f"  Avg Time/Request:   {result.avg_time_per_request:.2f}s")
+                print("\nStage: {result.name}")
+                print("  Total Requests:     {result.total_requests}")
+                print("  Successful:         {result.successful_requests}")
+                print("  Failed:             {result.failed_requests}")
+                print("  Success Rate:       {result.success_rate * 100:.1f}%")
+                print("  Total Tokens:       {result.total_tokens}")
+                print("  Avg Tokens/Request: {result.avg_tokens_per_request:.1f}")
+                print("  Avg Time/Request:   {result.avg_time_per_request:.2f}s")
                 if result.avg_time_to_first_token is not None:
                     if result.std_time_to_first_token is not None:
                         print(
@@ -1165,9 +1165,9 @@ async def run_benchmark(
                             f"  Avg ms/token:       {result.avg_ms_per_token:.2f}ms ± {result.std_ms_per_token:.2f}ms"
                         )
                     else:
-                        print(f"  Avg ms/token:       {result.avg_ms_per_token:.2f}ms")
+                        print("  Avg ms/token:       {result.avg_ms_per_token:.2f}ms")
                 if result.avg_decode_tps is not None:
-                    print(f"  Avg Decode TPS:     {result.avg_decode_tps:.2f} tokens/s")
+                    print("  Avg Decode TPS:     {result.avg_decode_tps:.2f} tokens/s")
 
             benchmark_completed_at = time.time()
 
@@ -1313,18 +1313,18 @@ async def run_benchmark(
 
             # Save to file if path provided
             if results_output_path:
-                print(f"Saving results to: {results_output_path}")
+                print("Saving results to: {results_output_path}")
                 with open(results_output_path, "w") as f:
                     json.dump(results_doc, f, indent=2)
                 print("Results saved successfully")
 
             # Cleanup all instances
             for instance_id in all_instance_ids:
-                print(f"[PRIMARY] Cleaning up instance: {instance_id}")
+                print("[PRIMARY] Cleaning up instance: {instance_id}")
                 await _http_request_async(
                     f"{api_base}/instance/{instance_id}", method="DELETE"
                 )
-                print(f"[PRIMARY] Instance {instance_id} deleted successfully")
+                print("[PRIMARY] Instance {instance_id} deleted successfully")
         else:
             print(
                 "[SECONDARY] Waiting with cluster (primary handles benchmark execution)"
@@ -1337,12 +1337,12 @@ async def run_benchmark(
 
     except TimeoutError as e:
         print("=" * 80)
-        print(f"TIMEOUT ERROR: {e}")
+        print("TIMEOUT ERROR: {e}")
         print("=" * 80)
         return 1
     except Exception as e:
         print("=" * 80)
-        print(f"ERROR: {e}")
+        print("ERROR: {e}")
         import traceback
 
         traceback.print_exc()

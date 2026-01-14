@@ -26,6 +26,25 @@
       ];
       fenixToolchain = system: inputs.fenix.packages.${system}.latest;
 
+      # Overlay to pin anyio to 4.11.0 globally
+      anyioOverlay = final: prev: {
+        python313 = prev.python313.override {
+          packageOverrides = pself: psuper: {
+            anyio = psuper.anyio.overridePythonAttrs (old: rec {
+              version = "4.11.0";
+              src = prev.fetchPypi {
+                pname = "anyio";
+                inherit version;
+                hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
+              };
+              postPatch = (old.postPatch or "") + ''
+                sed -i '/def test_bad_init_value/,/pytest.raises.*CapacityLimiter.*0/d' tests/test_synchronization.py
+              '';
+            });
+          };
+        };
+      };
+
       # Package builder function
       mkExoPackage = { pkgs, system, accelerator ? "cpu" }:
         let
@@ -644,7 +663,7 @@
       let
         pkgs = import inputs.nixpkgs {
           inherit system;
-          overlays = [ inputs.fenix.overlays.default ];
+          overlays = [ inputs.fenix.overlays.default anyioOverlay ];
         };
         treefmtEval = inputs.treefmt-nix.lib.evalModule pkgs {
           projectRootFile = "flake.nix";

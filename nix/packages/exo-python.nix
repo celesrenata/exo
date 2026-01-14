@@ -4,7 +4,7 @@
 , buildPythonApplication
 , exo-rust-bindings
 , makeWrapper
-# Python dependencies - only include ones that exist in nixpkgs
+  # Python dependencies - only include ones that exist in nixpkgs
 , aiofiles
 , aiohttp
 , typeguard
@@ -54,49 +54,49 @@ buildPythonApplication rec {
     aiofiles
     aiohttp
     typeguard
-    
+
     # Data validation and serialization
     pydantic
     base58
     cryptography
-    
+
     # Web framework and API
     fastapi
     hypercorn
-    
+
     # File and system utilities
     filelock
     psutil
-    
+
     # Database and storage
     aiosqlite
     sqlmodel
     sqlalchemy
     greenlet
-    
+
     # Graph and network analysis
     networkx
     rustworkx
-    
+
     # Serialization and protocols
     protobuf
-    
+
     # UI and logging
     rich
     loguru
     textual
-    
+
     # ML and AI dependencies
     huggingface-hub
     tiktoken
-    
+
     # Async utilities
     anyio
     bidict
-    
+
     # Additional dependencies
     openai
-    
+
   ] ++ lib.optionals stdenv.isLinux [
     # Platform-specific dependencies for Linux
     # MLX CPU support - these would need to be packaged separately
@@ -107,39 +107,39 @@ buildPythonApplication rec {
 
   # Set up environment for Python 3.13
   preBuild = ''
-    export PYTHONPATH="${exo-rust-bindings}/lib/python3.13/site-packages:$PYTHONPATH"
+        export PYTHONPATH="${exo-rust-bindings}/lib/python3.13/site-packages:$PYTHONPATH"
     
-    # Ensure we're using Python 3.13 as required
-    python_version=$(${python313}/bin/python --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-    if [ "$python_version" != "3.13" ]; then
-      echo "Error: Python 3.13 is required, but found $python_version"
-      exit 1
-    fi
+        # Ensure we're using Python 3.13 as required
+        python_version=$(${python313}/bin/python --version | cut -d' ' -f2 | cut -d'.' -f1,2)
+        if [ "$python_version" != "3.13" ]; then
+          echo "Error: Python 3.13 is required, but found $python_version"
+          exit 1
+        fi
     
-    echo "Building EXO with Python $python_version"
-    echo "Dependencies provided by Nix packages"
+        echo "Building EXO with Python $python_version"
+        echo "Dependencies provided by Nix packages"
     
-    # Create a simple setup.py for building
-    cat > setup.py << 'EOF'
-from setuptools import setup, find_packages
+        # Create a simple setup.py for building
+        cat > setup.py << 'EOF'
+    from setuptools import setup, find_packages
 
-setup(
-    name="exo",
-    version="0.3.0",
-    description="Run your own AI cluster at home with everyday devices",
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
-    entry_points={
-        "console_scripts": [
-            "exo=exo.main:main",
-            "exo-master=exo.master.main:main",
-            "exo-worker=exo.worker.main:main",
-        ],
-    },
-    python_requires=">=3.13",
-    install_requires=[],  # Dependencies handled by Nix
-)
-EOF
+    setup(
+        name="exo",
+        version="0.3.0",
+        description="Run your own AI cluster at home with everyday devices",
+        packages=find_packages(where="src"),
+        package_dir={"": "src"},
+        entry_points={
+            "console_scripts": [
+                "exo=exo.main:main",
+                "exo-master=exo.master.main:main",
+                "exo-worker=exo.worker.main:main",
+            ],
+        },
+        python_requires=">=3.13",
+        install_requires=[],  # Dependencies handled by Nix
+    )
+    EOF
   '';
 
   # Use standard Python build process
@@ -190,32 +190,32 @@ EOF
 
   # Wrap executables to ensure proper Python path and environment
   postInstall = ''
-    # Wrap the main executables with proper environment
-    for script in exo exo-master exo-worker; do
-      if [ -f "$out/bin/$script" ]; then
-        echo "Wrapping executable: $script"
-        wrapProgram "$out/bin/$script" \
-          --set PYTHONPATH "$out/lib/python3.13/site-packages:${exo-rust-bindings}/lib/python3.13/site-packages" \
-          --prefix PATH : "${python313}/bin"
-      fi
-    done
+        # Wrap the main executables with proper environment
+        for script in exo exo-master exo-worker; do
+          if [ -f "$out/bin/$script" ]; then
+            echo "Wrapping executable: $script"
+            wrapProgram "$out/bin/$script" \
+              --set PYTHONPATH "$out/lib/python3.13/site-packages:${exo-rust-bindings}/lib/python3.13/site-packages" \
+              --prefix PATH : "${python313}/bin"
+          fi
+        done
     
-    # Create a version info file for debugging
-    cat > $out/lib/python3.13/site-packages/exo-build-info.txt << EOF
-EXO Python Package Build Information:
-Built with Python: $(${python313}/bin/python --version)
-Build date: $(date)
-Rust bindings: ${exo-rust-bindings}
-Package version: ${version}
-Source: ${src}
-Dependencies managed by: Nix packages
-Note: Some dependencies may be missing and need to be installed separately
-EOF
+        # Create a version info file for debugging
+        cat > $out/lib/python3.13/site-packages/exo-build-info.txt << EOF
+    EXO Python Package Build Information:
+    Built with Python: $(${python313}/bin/python --version)
+    Build date: $(date)
+    Rust bindings: ${exo-rust-bindings}
+    Package version: ${version}
+    Source: ${src}
+    Dependencies managed by: Nix packages
+    Note: Some dependencies may be missing and need to be installed separately
+    EOF
   '';
 
   # Skip tests for now (they require GPU hardware and network setup)
   doCheck = false;
-  
+
   # Skip runtime dependency check since we handle deps through Nix
   dontCheckRuntimeDeps = true;
 

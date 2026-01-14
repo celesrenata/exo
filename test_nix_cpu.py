@@ -30,8 +30,8 @@ def test_cpu_engine():
         available = detect_available_engines()
         selected = select_best_engine()
 
-        print(f"   Available engines: {available}")
-        print(f"   Selected engine: {selected}")
+        print("   Available engines: {available}")
+        print("   Selected engine: {selected}")
 
         if "torch" in available:
             print("   ✅ PyTorch engine detected")
@@ -40,7 +40,7 @@ def test_cpu_engine():
             return False
 
     except Exception as e:
-        print(f"   ❌ Engine detection failed: {e}")
+        print("   ❌ Engine detection failed: {e}")
         return False
 
     try:
@@ -48,17 +48,17 @@ def test_cpu_engine():
         print("\n2. Testing PyTorch Core...")
         import torch
 
-        print(f"   PyTorch version: {torch.__version__}")
+        print("   PyTorch version: {torch.__version__}")
 
         # Test tensor operations
         x = torch.tensor([1.0, 2.0, 3.0])
         y = x * 2
-        print(f"   Tensor test: {x.tolist()} * 2 = {y.tolist()}")
+        print("   Tensor test: {x.tolist()} * 2 = {y.tolist()}")
 
         print("   ✅ PyTorch working correctly")
 
     except Exception as e:
-        print(f"   ❌ PyTorch test failed: {e}")
+        print("   ❌ PyTorch test failed: {e}")
         return False
 
     try:
@@ -67,7 +67,7 @@ def test_cpu_engine():
         from exo.worker.engines.torch.utils_torch import check_torch_availability
 
         torch_available = check_torch_availability()
-        print(f"   Torch available: {torch_available}")
+        print("   Torch available: {torch_available}")
 
         if torch_available:
             print("   ✅ Engine components loaded successfully")
@@ -76,7 +76,7 @@ def test_cpu_engine():
             return False
 
     except Exception as e:
-        print(f"   ❌ Engine components test failed: {e}")
+        print("   ❌ Engine components test failed: {e}")
         return False
 
     print("\n" + "=" * 50)

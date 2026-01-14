@@ -12,7 +12,7 @@ let
   # ROCm-enabled Python environment
   rocmEnv = python313.withPackages (ps: with ps; [
     # ROCm-specific packages
-    torch-bin  # PyTorch base (ROCm version would be preferred when available)
+    torch-bin # PyTorch base (ROCm version would be preferred when available)
     torchvision-bin
     torchaudio-bin
     # Additional ML packages
@@ -101,8 +101,8 @@ stdenv.mkDerivation rec {
 
   nativeBuildInputs = [ makeWrapper ];
 
-  buildInputs = [ 
-    exo-python 
+  buildInputs = [
+    exo-python
     rocmPackages.rocm-runtime
     rocmPackages.hip
     rocmPackages.rocblas
@@ -199,7 +199,7 @@ stdenv.mkDerivation rec {
     license = licenses.asl20;
     maintainers = [ ];
     platforms = platforms.linux;
-    
+
     # Additional metadata for hardware requirements
     longDescription = ''
       EXO ROCm variant provides GPU acceleration for AMD graphics cards.

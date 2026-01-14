@@ -8,6 +8,7 @@ import sys
 from unittest.mock import Mock, MagicMock
 from dataclasses import dataclass
 
+
 # Mock the required types
 @dataclass
 class PipelineShardMetadata:
@@ -17,125 +18,129 @@ class PipelineShardMetadata:
     end_layer: int
     model_meta: object
 
+
 @dataclass
 class BoundInstance:
     bound_shard: PipelineShardMetadata
     instance: object
 
+
 def test_distributed_initialization():
     """Test that distributed initialization logic works correctly."""
-    
+
     print("🧪 Testing PyTorch Distributed Inference Fix")
     print("=" * 50)
-    
+
     # Mock model metadata
     model_meta = Mock()
     model_meta.model_id = "microsoft/DialoGPT-medium"
-    
+
     # Create mock shard metadata for 2-node setup
     shard_metadata = PipelineShardMetadata(
-        device_rank=0,
-        world_size=2,
-        start_layer=0,
-        end_layer=12,
-        model_meta=model_meta
+        device_rank=0, world_size=2, start_layer=0, end_layer=12, model_meta=model_meta
     )
-    
+
     # Mock bound instance
     mock_instance = Mock()
     mock_instance.shard_assignments.node_to_runner = {
-        'node1': 'runner1',
-        'node2': 'runner2'
+        "node1": "runner1",
+        "node2": "runner2",
     }
-    
-    bound_instance = BoundInstance(
-        bound_shard=shard_metadata,
-        instance=mock_instance
-    )
-    
-    print(f"✅ Test Setup:")
-    print(f"   Model: {model_meta.model_id}")
-    print(f"   World size: {shard_metadata.world_size}")
-    print(f"   Device rank: {shard_metadata.device_rank}")
-    print(f"   Layers: {shard_metadata.start_layer}-{shard_metadata.end_layer}")
-    
+
+    bound_instance = BoundInstance(bound_shard=shard_metadata, instance=mock_instance)
+
+    print("✅ Test Setup:")
+    print("   Model: {model_meta.model_id}")
+    print("   World size: {shard_metadata.world_size}")
+    print("   Device rank: {shard_metadata.device_rank}")
+    print("   Layers: {shard_metadata.start_layer}-{shard_metadata.end_layer}")
+
     # Test the key logic from the fix
     shard_assignments = bound_instance.instance.shard_assignments
     is_distributed = len(shard_assignments.node_to_runner) > 1
-    
-    print(f"\n🔍 Distributed Detection:")
-    print(f"   Nodes: {len(shard_assignments.node_to_runner)}")
-    print(f"   Is distributed: {is_distributed}")
-    
+
+    print("\n🔍 Distributed Detection:")
+    print("   Nodes: {len(shard_assignments.node_to_runner)}")
+    print("   Is distributed: {is_distributed}")
+
     if is_distributed:
-        print(f"\n✅ SUCCESS: Distributed inference detected correctly")
-        print(f"   - Would call _initialize_distributed_torch()")
-        print(f"   - Would extract layers {shard_metadata.start_layer}:{shard_metadata.end_layer}")
-        print(f"   - Would handle rank {shard_metadata.device_rank}/{shard_metadata.world_size}")
-        
+        print("\n✅ SUCCESS: Distributed inference detected correctly")
+        print("   - Would call _initialize_distributed_torch()")
+        print(
+            f"   - Would extract layers {shard_metadata.start_layer}:{shard_metadata.end_layer}"
+        )
+        print(
+            f"   - Would handle rank {shard_metadata.device_rank}/{shard_metadata.world_size}"
+        )
+
         # Test layer extraction logic
         if isinstance(shard_metadata, PipelineShardMetadata):
-            print(f"   - Pipeline parallelism supported ✅")
+            print("   - Pipeline parallelism supported ✅")
         else:
-            print(f"   - Only pipeline parallelism supported ❌")
-            
+            print("   - Only pipeline parallelism supported ❌")
+
         return True
     else:
-        print(f"\n❌ FAILURE: Should have detected distributed inference")
+        print("\n❌ FAILURE: Should have detected distributed inference")
         return False
+
 
 def test_old_vs_new_behavior():
     """Compare old behavior vs new behavior."""
-    
-    print(f"\n📊 Behavior Comparison:")
+
+    print("\n📊 Behavior Comparison:")
     print(f"=" * 30)
-    
-    print(f"OLD BEHAVIOR (before fix):")
-    print(f"   ❌ NotImplementedError: 'Distributed inference not yet supported'")
-    print(f"   ❌ Multi-node instances fail immediately")
-    print(f"   ❌ EXO's core functionality broken")
-    
-    print(f"\nNEW BEHAVIOR (after fix):")
-    print(f"   ✅ Distributed initialization supported")
-    print(f"   ✅ Pipeline parallelism implemented")
-    print(f"   ✅ Layer sharding functional")
-    print(f"   ✅ Multi-node instances can be created")
-    print(f"   ✅ EXO's core functionality restored")
+
+    print("OLD BEHAVIOR (before fix):")
+    print("   ❌ NotImplementedError: 'Distributed inference not yet supported'")
+    print("   ❌ Multi-node instances fail immediately")
+    print("   ❌ EXO's core functionality broken")
+
+    print("\nNEW BEHAVIOR (after fix):")
+    print("   ✅ Distributed initialization supported")
+    print("   ✅ Pipeline parallelism implemented")
+    print("   ✅ Layer sharding functional")
+    print("   ✅ Multi-node instances can be created")
+    print("   ✅ EXO's core functionality restored")
+
 
 def test_model_architecture_support():
     """Test support for different model architectures."""
-    
-    print(f"\n🏗️  Model Architecture Support:")
+
+    print("\n🏗️  Model Architecture Support:")
     print(f"=" * 35)
-    
+
     # Test GPT-style models
     mock_model_gpt = Mock()
     mock_model_gpt.transformer = Mock()
     mock_model_gpt.transformer.h = list(range(24))  # 24 layers
-    
-    if hasattr(mock_model_gpt, 'transformer') and hasattr(mock_model_gpt.transformer, 'h'):
+
+    if hasattr(mock_model_gpt, "transformer") and hasattr(
+        mock_model_gpt.transformer, "h"
+    ):
         layers = mock_model_gpt.transformer.h[0:12]  # Extract first 12 layers
-        print(f"   ✅ GPT-style models: Extracted {len(layers)}/24 layers")
-    
-    # Test Llama-style models  
+        print("   ✅ GPT-style models: Extracted {len(layers)}/24 layers")
+
+    # Test Llama-style models
     mock_model_llama = Mock()
     mock_model_llama.model = Mock()
     mock_model_llama.model.layers = list(range(24))  # 24 layers
-    
-    if hasattr(mock_model_llama, 'model') and hasattr(mock_model_llama.model, 'layers'):
+
+    if hasattr(mock_model_llama, "model") and hasattr(mock_model_llama.model, "layers"):
         layers = mock_model_llama.model.layers[12:24]  # Extract last 12 layers
-        print(f"   ✅ Llama-style models: Extracted {len(layers)}/24 layers")
-    
-    print(f"   ✅ Fallback: Full model loading for unknown architectures")
+        print("   ✅ Llama-style models: Extracted {len(layers)}/24 layers")
+
+    print("   ✅ Fallback: Full model loading for unknown architectures")
+
 
 if __name__ == "__main__":
     print("Testing PyTorch Distributed Inference Fix")
     print("=" * 50)
-    
+
     success = test_distributed_initialization()
     test_old_vs_new_behavior()
     test_model_architecture_support()
-    
+
     print("\n" + "=" * 50)
     if success:
         print("🎉 SUCCESS: PyTorch distributed inference fix is ready!")

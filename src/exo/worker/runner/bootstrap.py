@@ -1067,7 +1067,7 @@ def entrypoint_with_fallback_mechanisms(
     """
     global logger
     logger = _logger
-    
+
     runner_id = bound_instance.bound_runner_id
 
     try:

@@ -20,7 +20,9 @@ class GenerationResponse(BaseRunnerResponse):
     token: int
     # logprobs: list[float] | None = None # too big. we can change to be top-k
     finish_reason: FinishReason | None = None
-    enhanced_token: Optional['EnhancedTokenChunk'] = None  # Forward reference to avoid circular import
+    enhanced_token: Optional["EnhancedTokenChunk"] = (
+        None  # Forward reference to avoid circular import
+    )
 
 
 class FinishedResponse(BaseRunnerResponse):

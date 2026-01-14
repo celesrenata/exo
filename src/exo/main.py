@@ -223,7 +223,7 @@ def main():
         except RuntimeError:
             # Last resort: use spawn but with limited process creation
             mp.set_start_method("spawn")
-    
+
     # TODO: Refactor the current verbosity system
     logger_setup(EXO_LOG, args.verbosity)
     logger.info("Starting EXO")

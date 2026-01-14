@@ -15,6 +15,7 @@ from .chunks import TokenChunk
 
 class ValidationStatus(str, Enum):
     """Status of token validation."""
+
     VALID = "valid"
     INVALID = "invalid"
     PENDING = "pending"
@@ -24,6 +25,7 @@ class ValidationStatus(str, Enum):
 
 class CorruptionType(str, Enum):
     """Types of corruption that can be detected."""
+
     ENCODING_CORRUPTION = "encoding_corruption"
     SEMANTIC_CORRUPTION = "semantic_corruption"
     SEQUENCE_CORRUPTION = "sequence_corruption"
@@ -33,6 +35,7 @@ class CorruptionType(str, Enum):
 
 class CorruptionSeverity(str, Enum):
     """Severity levels for corruption."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -41,6 +44,7 @@ class CorruptionSeverity(str, Enum):
 
 class FailureMode(str, Enum):
     """Types of failures that can occur in distributed inference."""
+
     TOKEN_CORRUPTION = "token_corruption"
     ENCODING_ERROR = "encoding_error"
     SYNCHRONIZATION_FAILURE = "synchronization_failure"
@@ -53,6 +57,7 @@ class FailureMode(str, Enum):
 
 class RecoveryAction(str, Enum):
     """Actions that can be taken to recover from failures."""
+
     RETRY = "retry"
     REGENERATE_TOKEN = "regenerate_token"
     RESTART_PIPELINE_STAGE = "restart_pipeline_stage"
@@ -65,6 +70,7 @@ class RecoveryAction(str, Enum):
 
 class RecoveryStatus(str, Enum):
     """Status of recovery operations."""
+
     SUCCESS = "success"
     PARTIAL_SUCCESS = "partial_success"
     FAILURE = "failure"
@@ -74,6 +80,7 @@ class RecoveryStatus(str, Enum):
 
 class ValidationError(CamelCaseModel):
     """Details about validation errors."""
+
     error_type: CorruptionType
     message: str
     severity: CorruptionSeverity
@@ -82,6 +89,7 @@ class ValidationError(CamelCaseModel):
 
 class ValidationResult(CamelCaseModel):
     """Result of token validation."""
+
     is_valid: bool
     error_type: Optional[CorruptionType] = None
     confidence_score: float = Field(ge=0.0, le=1.0)
@@ -91,6 +99,7 @@ class ValidationResult(CamelCaseModel):
 
 class RecoveryResult(CamelCaseModel):
     """Result of a recovery operation."""
+
     status: RecoveryStatus
     action_taken: RecoveryAction
     success: bool
@@ -103,6 +112,7 @@ class RecoveryResult(CamelCaseModel):
 
 class DeviceHealth(CamelCaseModel):
     """Health status of a device in the distributed system."""
+
     device_id: str
     is_healthy: bool
     last_heartbeat: datetime
@@ -114,59 +124,59 @@ class DeviceHealth(CamelCaseModel):
 
 class EnhancedTokenChunk(TokenChunk):
     """Enhanced TokenChunk with validation metadata."""
-    
+
     # Validation metadata
     checksum: str = Field(default="")
     generation_timestamp: datetime = Field(default_factory=datetime.now)
     source_device_rank: int = Field(default=0)
     validation_status: ValidationStatus = Field(default=ValidationStatus.PENDING)
     sequence_position: int = Field(default=0)
-    
+
     # Optional validation results
     validation_result: Optional[ValidationResult] = None
-    
+
     def compute_checksum(self) -> str:
         """Compute SHA-256 checksum of the token text."""
         content = f"{self.text}:{self.token_id}:{self.idx}"
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()
-    
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
     def verify_checksum(self) -> bool:
         """Verify that the stored checksum matches the computed checksum."""
         if not self.checksum:
             return False
         return self.checksum == self.compute_checksum()
-    
+
     def update_checksum(self) -> None:
         """Update the checksum based on current token content."""
         self.checksum = self.compute_checksum()
-    
+
     def mark_as_valid(self) -> None:
         """Mark the token as valid."""
         self.validation_status = ValidationStatus.VALID
-        self.validation_result = ValidationResult(
-            is_valid=True,
-            confidence_score=1.0
-        )
-    
-    def mark_as_corrupted(self, corruption_type: CorruptionType, 
-                         error_message: str, severity: CorruptionSeverity) -> None:
+        self.validation_result = ValidationResult(is_valid=True, confidence_score=1.0)
+
+    def mark_as_corrupted(
+        self,
+        corruption_type: CorruptionType,
+        error_message: str,
+        severity: CorruptionSeverity,
+    ) -> None:
         """Mark the token as corrupted with details."""
         self.validation_status = ValidationStatus.CORRUPTED
         error = ValidationError(
-            error_type=corruption_type,
-            message=error_message,
-            severity=severity
+            error_type=corruption_type, message=error_message, severity=severity
         )
         self.validation_result = ValidationResult(
             is_valid=False,
             error_type=corruption_type,
             confidence_score=0.0,
-            error_details=error
+            error_details=error,
         )
 
 
 class SequenceValidationResult(CamelCaseModel):
     """Result of sequence validation."""
+
     is_valid: bool
     missing_positions: list[int] = Field(default_factory=list)
     duplicate_positions: list[int] = Field(default_factory=list)
@@ -177,6 +187,7 @@ class SequenceValidationResult(CamelCaseModel):
 
 class CorruptionReport(CamelCaseModel):
     """Detailed report of detected corruption."""
+
     corruption_type: CorruptionType
     affected_range: tuple[int, int]  # Start and end positions
     severity: CorruptionSeverity

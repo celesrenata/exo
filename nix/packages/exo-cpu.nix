@@ -210,7 +210,7 @@ stdenv.mkDerivation rec {
     license = licenses.asl20;
     maintainers = [ ];
     platforms = platforms.all;
-    
+
     # Additional metadata
     longDescription = ''
       EXO CPU variant provides optimized CPU-only inference for systems

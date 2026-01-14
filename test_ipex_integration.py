@@ -27,15 +27,15 @@ def test_ipex_model_cards():
         # Find IPEX models
         ipex_models = {k: v for k, v in MODEL_CARDS.items() if "ipex" in v.tags}
 
-        print(f"Found {len(ipex_models)} IPEX-compatible models:")
+        print("Found {len(ipex_models)} IPEX-compatible models:")
         print("-" * 40)
 
         for short_id, model_card in ipex_models.items():
-            print(f"✅ {short_id}")
-            print(f"   Model ID: {model_card.model_id}")
-            print(f"   Name: {model_card.name}")
-            print(f"   Size: {model_card.metadata.storage_size}")
-            print(f"   Tags: {model_card.tags}")
+            print("✅ {short_id}")
+            print("   Model ID: {model_card.model_id}")
+            print("   Name: {model_card.name}")
+            print("   Size: {model_card.metadata.storage_size}")
+            print("   Tags: {model_card.tags}")
             print()
 
         # Verify we have the expected models from the provided list
@@ -57,14 +57,14 @@ def test_ipex_model_cards():
                 missing_models.append(expected)
 
         if missing_models:
-            print(f"❌ Missing expected models: {missing_models}")
+            print("❌ Missing expected models: {missing_models}")
             return False
 
         print("✅ All expected IPEX models are present in model cards")
         return True
 
     except Exception as e:
-        print(f"❌ Error testing model cards: {e}")
+        print("❌ Error testing model cards: {e}")
         return False
 
 
@@ -89,10 +89,10 @@ def test_ipex_engine_compatibility():
             is_compatible = is_model_compatible(model_id, "ipex")
 
             if is_compatible:
-                print(f"✅ {short_id}: {model_id} - Compatible")
+                print("✅ {short_id}: {model_id} - Compatible")
                 compatible_count += 1
             else:
-                print(f"❌ {short_id}: {model_id} - Not Compatible")
+                print("❌ {short_id}: {model_id} - Not Compatible")
 
         print(
             f"\nCompatibility Results: {compatible_count}/{total_count} models compatible"
@@ -102,11 +102,11 @@ def test_ipex_engine_compatibility():
             print("✅ All IPEX models are compatible with IPEX engine")
             return True
         else:
-            print(f"⚠️  {total_count - compatible_count} models are not compatible")
+            print("⚠️  {total_count - compatible_count} models are not compatible")
             return False
 
     except Exception as e:
-        print(f"❌ Error testing compatibility: {e}")
+        print("❌ Error testing compatibility: {e}")
         return False
 
 
@@ -139,10 +139,10 @@ def test_ipex_model_metadata():
                 xlarge_models.append(short_id)
 
         print("Model Categories:")
-        print(f"  Small/Tiny (<1GB): {small_models}")
-        print(f"  Medium (~1-2GB): {medium_models}")
-        print(f"  Large (6-12GB): {large_models}")
-        print(f"  XLarge (>20GB): {xlarge_models}")
+        print("  Small/Tiny (<1GB): {small_models}")
+        print("  Medium (~1-2GB): {medium_models}")
+        print("  Large (6-12GB): {large_models}")
+        print("  XLarge (>20GB): {xlarge_models}")
 
         # Verify metadata completeness
         metadata_complete = True
@@ -164,10 +164,10 @@ def test_ipex_model_metadata():
                     missing_fields.append(field)
 
             if missing_fields:
-                print(f"❌ {short_id}: Missing metadata fields: {missing_fields}")
+                print("❌ {short_id}: Missing metadata fields: {missing_fields}")
                 metadata_complete = False
             else:
-                print(f"✅ {short_id}: Complete metadata")
+                print("✅ {short_id}: Complete metadata")
 
         if metadata_complete:
             print("\n✅ All IPEX models have complete metadata")
@@ -177,7 +177,7 @@ def test_ipex_model_metadata():
             return False
 
     except Exception as e:
-        print(f"❌ Error testing metadata: {e}")
+        print("❌ Error testing metadata: {e}")
         return False
 
 
@@ -210,7 +210,7 @@ def test_ipex_model_progression():
             else:
                 size_str = f"{size_mb / 1024:.1f}GB"
 
-            print(f"  {short_id}: {size_str}")
+            print("  {short_id}: {size_str}")
 
         # Check we have good coverage
         small_count = sum(1 for _, size in model_sizes if size < 1024)  # <1GB
@@ -218,9 +218,9 @@ def test_ipex_model_progression():
         large_count = sum(1 for _, size in model_sizes if size >= 5120)  # >5GB
 
         print("\nSize Distribution:")
-        print(f"  Small (<1GB): {small_count} models")
-        print(f"  Medium (1-5GB): {medium_count} models")
-        print(f"  Large (>5GB): {large_count} models")
+        print("  Small (<1GB): {small_count} models")
+        print("  Medium (1-5GB): {medium_count} models")
+        print("  Large (>5GB): {large_count} models")
 
         # We should have models in each category for good testing coverage
         if small_count > 0 and medium_count > 0 and large_count > 0:
@@ -231,7 +231,7 @@ def test_ipex_model_progression():
             return True  # Not a failure, just a recommendation
 
     except Exception as e:
-        print(f"❌ Error testing model progression: {e}")
+        print("❌ Error testing model progression: {e}")
         return False
 
 
@@ -273,9 +273,9 @@ def test_ipex_model_features():
         print("Feature Coverage:")
         for feature, models in features.items():
             if models:
-                print(f"  {feature.capitalize()}: {len(models)} models - {models}")
+                print("  {feature.capitalize()}: {len(models)} models - {models}")
             else:
-                print(f"  {feature.capitalize()}: 0 models")
+                print("  {feature.capitalize()}: 0 models")
 
         # Check that we have good feature coverage
         feature_count = sum(1 for models in features.values() if models)
@@ -292,7 +292,7 @@ def test_ipex_model_features():
             return True  # Not a failure, just a note
 
     except Exception as e:
-        print(f"❌ Error testing features: {e}")
+        print("❌ Error testing features: {e}")
         return False
 
 
@@ -301,8 +301,8 @@ def main():
 
     print("🚀 Intel IPEX Integration Test Suite")
     print("=" * 60)
-    print(f"Python version: {sys.version}")
-    print(f"Working directory: {os.getcwd()}")
+    print("Python version: {sys.version}")
+    print("Working directory: {os.getcwd()}")
     print("=" * 60)
 
     # Run all tests
@@ -317,11 +317,11 @@ def main():
     results = {}
 
     for test_name, test_func in tests:
-        print(f"\n{'=' * 20} {test_name} {'=' * 20}")
+        print("\n{'=' * 20} {test_name} {'=' * 20}")
         try:
             results[test_name] = test_func()
         except Exception as e:
-            print(f"❌ Test failed with exception: {e}")
+            print("❌ Test failed with exception: {e}")
             results[test_name] = False
 
     # Final summary
@@ -334,9 +334,9 @@ def main():
 
     for test_name, result in results.items():
         status = "✅ PASSED" if result else "❌ FAILED"
-        print(f"{test_name}: {status}")
+        print("{test_name}: {status}")
 
-    print(f"\nOverall: {passed}/{total} tests passed")
+    print("\nOverall: {passed}/{total} tests passed")
 
     if passed == total:
         print("\n🎉 All IPEX integration tests passed!")
@@ -348,7 +348,7 @@ def main():
         print("\nThese models can be used with Intel GPU acceleration via IPEX!")
         return True
     else:
-        print(f"\n⚠️  {total - passed} tests failed")
+        print("\n⚠️  {total - passed} tests failed")
         return False
 
 

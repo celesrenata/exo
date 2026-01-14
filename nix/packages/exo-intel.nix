@@ -14,7 +14,7 @@ let
   # Intel GPU-enabled Python environment with IPEX support
   intelEnv = python313.withPackages (ps: with ps; [
     # Intel Extension for PyTorch (IPEX) and related packages
-    torch-bin  # PyTorch base
+    torch-bin # PyTorch base
     torchvision-bin
     torchaudio-bin
     # Note: intel-extension-for-pytorch would be added when available in nixpkgs
@@ -23,7 +23,7 @@ let
     scipy
     scikit-learn
     # Intel-specific optimizations
-    mkl  # Intel Math Kernel Library
+    mkl # Intel Math Kernel Library
   ]);
 
   # Intel GPU detection script
@@ -133,8 +133,8 @@ stdenv.mkDerivation rec {
 
   nativeBuildInputs = [ makeWrapper ];
 
-  buildInputs = [ 
-    exo-python 
+  buildInputs = [
+    exo-python
     intel-compute-runtime
     level-zero
     intel-media-sdk
@@ -239,7 +239,7 @@ stdenv.mkDerivation rec {
     license = licenses.asl20;
     maintainers = [ ];
     platforms = platforms.linux;
-    
+
     # Additional metadata for hardware requirements
     longDescription = ''
       EXO Intel variant provides GPU acceleration for Intel Arc discrete GPUs

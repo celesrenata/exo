@@ -7,9 +7,10 @@
 
 let
   # Helper function to create test derivations
-  mkTest = name: script: pkgs.runCommand "test-${name}" {
-    nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.jq ];
-  } ''
+  mkTest = name: script: pkgs.runCommand "test-${name}"
+    {
+      nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.jq ];
+    } ''
     set -euo pipefail
     
     echo "=== ${name} Test ==="
@@ -253,6 +254,7 @@ let
     echo "Build reproducibility tests completed"
   '';
 
-in {
+in
+{
   inherit build-all-packages cross-compilation-tests dependency-resolution-tests reproducibility-tests;
 }

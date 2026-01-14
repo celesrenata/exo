@@ -7,18 +7,19 @@
 
 let
   # Helper function to create performance test derivations
-  mkPerfTest = name: script: pkgs.runCommand "perf-test-${name}" {
-    nativeBuildInputs = [ 
-      pkgs.bash 
-      pkgs.coreutils 
-      pkgs.time
-      pkgs.iperf3
-      pkgs.netcat
-      pkgs.curl
-      pkgs.jq
-      pkgs.bc
-    ];
-  } ''
+  mkPerfTest = name: script: pkgs.runCommand "perf-test-${name}"
+    {
+      nativeBuildInputs = [
+        pkgs.bash
+        pkgs.coreutils
+        pkgs.time
+        pkgs.iperf3
+        pkgs.netcat
+        pkgs.curl
+        pkgs.jq
+        pkgs.bc
+      ];
+    } ''
     set -euo pipefail
     
     echo "=== ${name} Performance Test ==="
@@ -573,6 +574,7 @@ let
     echo "CPU fallback benchmarks completed"
   '';
 
-in {
+in
+{
   inherit network-throughput-tests rdma-performance-tests gpu-acceleration-benchmarks cpu-fallback-benchmarks;
 }

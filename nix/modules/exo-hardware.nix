@@ -4,7 +4,7 @@ with lib;
 
 let
   cfg = config.services.exo.hardware;
-  
+
   # Hardware detection script for NixOS module
   hardwareDetectionScript = pkgs.writeShellScript "exo-hardware-detect" ''
     # Hardware detection for EXO NixOS module
@@ -57,7 +57,8 @@ let
     fi
   '';
 
-in {
+in
+{
   options.services.exo.hardware = {
     autoDetect = mkOption {
       type = types.bool;
@@ -142,7 +143,7 @@ in {
       description = "EXO Hardware Detection";
       wantedBy = [ "multi-user.target" ];
       before = [ "exo-master.service" "exo-worker.service" ];
-      
+
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -150,7 +151,7 @@ in {
         StandardOutput = "file:/var/lib/exo/hardware-type";
         User = "root";
       };
-      
+
       preStart = ''
         mkdir -p /var/lib/exo
         chown exo:exo /var/lib/exo
@@ -163,12 +164,12 @@ in {
       (mkIf (cfg.preferredAccelerator != null) {
         EXO_FORCE_ACCELERATOR = cfg.preferredAccelerator;
       })
-      
+
       # Memory limit
       (mkIf (cfg.memoryLimit != null) {
         EXO_MEMORY_LIMIT = cfg.memoryLimit;
       })
-      
+
       # CPU optimizations
       (mkIf cfg.cpuOptimizations {
         EXO_CPU_OPTIMIZATIONS = "1";
@@ -185,7 +186,7 @@ in {
           powerManagement.finegrained = mkDefault false;
         };
       })
-      
+
       # AMD GPU support
       (mkIf cfg.enableAmdSupport {
         amdgpu = {
@@ -193,7 +194,7 @@ in {
           enable = mkDefault true;
         };
       })
-      
+
       # Intel GPU support  
       (mkIf cfg.enableIntelSupport {
         intel-gpu-tools.enable = mkDefault true;
@@ -229,7 +230,7 @@ in {
         SUBSYSTEM=="drm", KERNEL=="render*", GROUP="render", MODE="0664"
         SUBSYSTEM=="misc", KERNEL=="kfd", GROUP="render", MODE="0664"
       '')
-      
+
       # Intel GPU device permissions
       (mkIf cfg.enableIntelSupport ''
         # Intel GPU devices
@@ -241,7 +242,7 @@ in {
     # User groups for GPU access
     users.groups = mkMerge [
       (mkIf (cfg.enableAmdSupport || cfg.enableIntelSupport) {
-        render = {};
+        render = { };
       })
     ];
 
@@ -259,7 +260,7 @@ in {
         assertion = cfg.preferredAccelerator == null || cfg.autoDetect == false || cfg.preferredAccelerator != null;
         message = "When preferredAccelerator is set, autoDetect should typically be disabled to avoid conflicts.";
       }
-      
+
       {
         assertion = !(cfg.enableNvidiaSupport && cfg.preferredAccelerator == "cuda") || config.hardware.nvidia.modesetting.enable;
         message = "NVIDIA modesetting must be enabled when using CUDA acceleration.";
@@ -271,11 +272,11 @@ in {
       (mkIf (cfg.enableNvidiaSupport && !config.hardware.nvidia.modesetting.enable) [
         "EXO NVIDIA support is enabled but NVIDIA modesetting is disabled. CUDA acceleration may not work properly."
       ])
-      
+
       (mkIf (cfg.preferredAccelerator == "rocm" && !cfg.enableAmdSupport) [
         "ROCm accelerator is preferred but AMD support is disabled."
       ])
-      
+
       (mkIf (cfg.preferredAccelerator == "intel" && !cfg.enableIntelSupport) [
         "Intel accelerator is preferred but Intel GPU support is disabled."
       ])

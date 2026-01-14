@@ -149,17 +149,17 @@ from exo.utils.channels import mp_channel, MpSender, MpReceiver
 def worker_process(sender: MpSender, receiver: MpReceiver, worker_id: int):
     """Simulate a runner process that can trigger the race condition"""
     try:
-        print(f"Worker {worker_id} starting")
+        print("Worker {worker_id} starting")
         
         # Simulate some work
         for i in range(5):
             sender.send(f"Message {i} from worker {worker_id}")
             time.sleep(0.1)
         
-        print(f"Worker {worker_id} finishing")
+        print("Worker {worker_id} finishing")
         
     except Exception as e:
-        print(f"Worker {worker_id} error: {e}")
+        print("Worker {worker_id} error: {e}")
     finally:
         # This is where the race condition occurs
         try:
@@ -168,7 +168,7 @@ def worker_process(sender: MpSender, receiver: MpReceiver, worker_id: int):
             sender.join()
             receiver.join()
         except Exception as e:
-            print(f"Worker {worker_id} cleanup error: {e}")
+            print("Worker {worker_id} cleanup error: {e}")
 
 def reproduce_race_condition():
     """Reproduce the multiprocessing race condition"""
@@ -199,13 +199,13 @@ def reproduce_race_condition():
             sender.close()
             receiver.close()
         except Exception as e:
-            print(f"Channel cleanup error: {e}")
+            print("Channel cleanup error: {e}")
     
     # Wait for processes to finish
     for process in processes:
         process.join(timeout=5)
         if process.is_alive():
-            print(f"Process {process.pid} didn't terminate, killing...")
+            print("Process {process.pid} didn't terminate, killing...")
             process.terminate()
             process.join()
     

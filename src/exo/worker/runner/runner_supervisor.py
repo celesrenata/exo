@@ -746,7 +746,7 @@ class RunnerSupervisor:
 
             # Convert ResourceState enums to strings for serialization
             health_status["metrics"]["resource_states"] = {
-                state.name if hasattr(state, 'name') else str(state): count 
+                state.name if hasattr(state, "name") else str(state): count
                 for state, count in resource_states.items()
             }
 
@@ -991,7 +991,7 @@ class RunnerSupervisor:
                     try:
                         # Use explicit receive with proper exception handling for race conditions
                         event = await events.receive_async()
-                        
+
                         # Double-check shutdown status after receiving event
                         if self._shutdown_in_progress:
                             logger.debug(
@@ -1063,7 +1063,7 @@ class RunnerSupervisor:
                             logger.debug(
                                 f"Released pending task {task_id} due to channel closure"
                             )
-                        
+
                         # Break out of the event loop when channel is closed
                         break
 
@@ -1080,15 +1080,11 @@ class RunnerSupervisor:
                         break
 
         except (ClosedResourceError, BrokenResourceError) as e:
-            logger.info(
-                f"Event channel closed for runner {self._runner_id}: {e}"
-            )
+            logger.info(f"Event channel closed for runner {self._runner_id}: {e}")
             # Set all pending task events to avoid hanging
             for task_id, task_event in self.pending.items():
                 task_event.set()
-                logger.debug(
-                    f"Released pending task {task_id} due to channel closure"
-                )
+                logger.debug(f"Released pending task {task_id} due to channel closure")
         except Exception as e:
             logger.error(
                 f"Unexpected error in event forwarding for runner {self._runner_id}: {e}"

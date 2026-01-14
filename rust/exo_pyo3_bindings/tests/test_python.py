@@ -25,10 +25,10 @@ async def test_sleep_on_multiple_items() -> None:
 async def _await_cons(h: NetworkingHandle):
     while True:
         c = await h.connection_update_recv()
-        print(f"PYTHON: connection update: {c}")
+        print("PYTHON: connection update: {c}")
 
 
 async def _await_msg(h: NetworkingHandle):
     while True:
         m = await h.gossipsub_recv()
-        print(f"PYTHON: message: {m}")
+        print("PYTHON: message: {m}")

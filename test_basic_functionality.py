@@ -38,11 +38,11 @@ def test_constants():
             EXO_RUNNER_STARTUP_TIMEOUT,
         )
 
-        print(f"✓ EXO_RUNNER_SHUTDOWN_TIMEOUT: {EXO_RUNNER_SHUTDOWN_TIMEOUT}")
-        print(f"✓ EXO_RUNNER_HEALTH_CHECK_INTERVAL: {EXO_RUNNER_HEALTH_CHECK_INTERVAL}")
-        print(f"✓ EXO_RUNNER_STARTUP_TIMEOUT: {EXO_RUNNER_STARTUP_TIMEOUT}")
-        print(f"✓ EXO_RUNNER_CLEANUP_TIMEOUT: {EXO_RUNNER_CLEANUP_TIMEOUT}")
-        print(f"✓ EXO_RUNNER_MAX_STARTUP_RETRIES: {EXO_RUNNER_MAX_STARTUP_RETRIES}")
+        print("✓ EXO_RUNNER_SHUTDOWN_TIMEOUT: {EXO_RUNNER_SHUTDOWN_TIMEOUT}")
+        print("✓ EXO_RUNNER_HEALTH_CHECK_INTERVAL: {EXO_RUNNER_HEALTH_CHECK_INTERVAL}")
+        print("✓ EXO_RUNNER_STARTUP_TIMEOUT: {EXO_RUNNER_STARTUP_TIMEOUT}")
+        print("✓ EXO_RUNNER_CLEANUP_TIMEOUT: {EXO_RUNNER_CLEANUP_TIMEOUT}")
+        print("✓ EXO_RUNNER_MAX_STARTUP_RETRIES: {EXO_RUNNER_MAX_STARTUP_RETRIES}")
         print(
             f"✓ EXO_RUNNER_ENABLE_ENHANCED_LOGGING: {EXO_RUNNER_ENABLE_ENHANCED_LOGGING}"
         )
@@ -50,7 +50,7 @@ def test_constants():
         return True
 
     except Exception as e:
-        print(f"✗ Constants test failed: {e}")
+        print("✗ Constants test failed: {e}")
         return False
 
 
@@ -92,7 +92,7 @@ def test_component_creation():
         return True
 
     except Exception as e:
-        print(f"✗ Component creation failed: {e}")
+        print("✗ Component creation failed: {e}")
         import traceback
 
         traceback.print_exc()
@@ -133,7 +133,7 @@ def test_singleton_functions():
         return True
 
     except Exception as e:
-        print(f"✗ Singleton functions test failed: {e}")
+        print("✗ Singleton functions test failed: {e}")
         import traceback
 
         traceback.print_exc()
@@ -159,9 +159,9 @@ def test_integration_updates():
 
         for check_string, description in integration_checks:
             if check_string in worker_content:
-                print(f"✓ {description} found in worker main.py")
+                print("✓ {description} found in worker main.py")
             else:
-                print(f"✗ {description} NOT found in worker main.py")
+                print("✗ {description} NOT found in worker main.py")
                 return False
 
         # Check engine_init.py has enhanced logging
@@ -189,15 +189,15 @@ def test_integration_updates():
 
         for const in required_constants:
             if const in constants_content:
-                print(f"✓ {const} found in constants.py")
+                print("✓ {const} found in constants.py")
             else:
-                print(f"✗ {const} NOT found in constants.py")
+                print("✗ {const} NOT found in constants.py")
                 return False
 
         return True
 
     except Exception as e:
-        print(f"✗ Integration updates test failed: {e}")
+        print("✗ Integration updates test failed: {e}")
         return False
 
 
@@ -242,7 +242,7 @@ def test_documentation_updates():
         return True
 
     except Exception as e:
-        print(f"✗ Documentation updates test failed: {e}")
+        print("✗ Documentation updates test failed: {e}")
         return False
 
 
@@ -266,7 +266,7 @@ def main():
             result = test_func()
             results[test_name] = result
         except Exception as e:
-            print(f"✗ {test_name} failed with exception: {e}")
+            print("✗ {test_name} failed with exception: {e}")
             results[test_name] = False
 
     # Summary
@@ -279,9 +279,9 @@ def main():
 
     for test_name, result in results.items():
         status = "✓ PASS" if result else "✗ FAIL"
-        print(f"{status}: {test_name}")
+        print("{status}: {test_name}")
 
-    print(f"\nResult: {passed}/{total} tests passed")
+    print("\nResult: {passed}/{total} tests passed")
 
     if passed == total:
         print("🎉 Basic functionality test PASSED!")
@@ -293,7 +293,7 @@ def main():
         return 0
     else:
         print("❌ Basic functionality test FAILED!")
-        print(f"   {total - passed} tests failed - please check the integration")
+        print("   {total - passed} tests failed - please check the integration")
         return 1
 
 

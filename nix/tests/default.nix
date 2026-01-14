@@ -13,7 +13,8 @@ let
   hardwareTests = import ./hardware-tests.nix { inherit lib pkgs system exo-packages; };
   performanceTests = import ./performance-tests.nix { inherit lib pkgs system exo-packages; };
 
-in {
+in
+{
   # Package build and validation tests
   inherit (packageTests)
     build-all-packages

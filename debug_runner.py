@@ -20,7 +20,7 @@ def check_instance_status(host="10.1.1.12", port=52415):
 
     if instance_id in state["instances"]:
         instance = state["instances"][instance_id]
-        print(f"Instance {instance_id[:8]} found:")
+        print("Instance {instance_id[:8]} found:")
         print(json.dumps(instance, indent=2))
         print("\n" + "=" * 80 + "\n")
 
@@ -35,7 +35,7 @@ def check_instance_status(host="10.1.1.12", port=52415):
             for runner_id in runner_ids:
                 if runner_id in state["runners"]:
                     runner_status = state["runners"][runner_id]
-                    print(f"  Runner {runner_id[:8]}: {list(runner_status.keys())[0]}")
+                    print("  Runner {runner_id[:8]}: {list(runner_status.keys())[0]}")
                     if "RunnerFailed" in runner_status:
                         print(
                             f"    Error: {runner_status['RunnerFailed']['errorMessage']}"
@@ -46,12 +46,12 @@ def check_instance_status(host="10.1.1.12", port=52415):
             # Check nodes
             print("Nodes in cluster:")
             for node_id, profile in state["nodeProfiles"].items():
-                print(f"  {profile['friendlyName']} ({node_id[:8]})")
-                print(f"    CPU: {profile['chipId']}")
-                print(f"    Engine: {profile['selectedEngine']}")
-                print(f"    Available engines: {profile['availableEngines']}")
+                print("  {profile['friendlyName']} ({node_id[:8]})")
+                print("    CPU: {profile['chipId']}")
+                print("    Engine: {profile['selectedEngine']}")
+                print("    Available engines: {profile['availableEngines']}")
     else:
-        print(f"Instance {instance_id[:8]} not found")
+        print("Instance {instance_id[:8]} not found")
 
     return state
 

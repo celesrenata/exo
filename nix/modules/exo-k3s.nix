@@ -5,7 +5,7 @@ with lib;
 let
   cfg = config.services.exo.k3s;
   exoCfg = config.services.exo;
-  
+
   # K3s service discovery script
   k3sServiceDiscoveryScript = pkgs.writeShellScript "exo-k3s-service-discovery" ''
     #!/bin/bash
@@ -1461,7 +1461,8 @@ let
     esac
   '';
 
-in {
+in
+{
   options.services.exo.k3s = {
     integration = mkOption {
       type = types.bool;
@@ -1711,14 +1712,14 @@ in {
         ExecStart = "${k3sServiceDiscoveryScript} main";
         ExecReload = "${k3sServiceDiscoveryScript} main";
         ExecStop = "${k3sServiceDiscoveryScript} cleanup";
-        
+
         # Environment
         Environment = [
           "KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
           "EXO_CONFIG_DIR=${exoCfg.configDir}"
           "EXO_DATA_DIR=${exoCfg.dataDir}"
         ];
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1734,7 +1735,7 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         RemoveIPC = true;
-        
+
         # Network access for K3s API
         RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
       };
@@ -1744,7 +1745,7 @@ in {
     systemd.timers.exo-k3s-service-monitor = mkIf (cfg.serviceDiscovery && cfg.autoRegistration.enable) {
       description = "EXO K3s Service Monitor Timer";
       wantedBy = [ "timers.target" ];
-      
+
       timerConfig = {
         OnBootSec = "2min";
         OnUnitActiveSec = cfg.autoRegistration.healthCheckInterval;
@@ -1754,20 +1755,20 @@ in {
 
     systemd.services.exo-k3s-service-monitor = mkIf (cfg.serviceDiscovery && cfg.autoRegistration.enable) {
       description = "EXO K3s Service Monitor";
-      
+
       serviceConfig = {
         Type = "oneshot";
         User = exoCfg.user;
         Group = exoCfg.group;
         ExecStart = "${k3sServiceDiscoveryScript} monitor";
-        
+
         # Environment
         Environment = [
           "KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
           "EXO_CONFIG_DIR=${exoCfg.configDir}"
           "EXO_DATA_DIR=${exoCfg.dataDir}"
         ];
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1783,7 +1784,7 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         RemoveIPC = true;
-        
+
         # Network access for K3s API
         RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
       };
@@ -1805,12 +1806,12 @@ in {
         ExecStart = "${k3sNetworkPolicyScript} create";
         ExecReload = "${k3sNetworkPolicyScript} create";
         ExecStop = "${k3sNetworkPolicyScript} cleanup";
-        
+
         # Environment
         Environment = [
           "KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
         ];
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1825,7 +1826,7 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         RemoveIPC = true;
-        
+
         # Network access for K3s API
         RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
       };
@@ -1847,14 +1848,14 @@ in {
         ExecStart = "${k3sOrchestrationScript} create";
         ExecReload = "${k3sOrchestrationScript} manage";
         ExecStop = "${k3sOrchestrationScript} cleanup";
-        
+
         # Environment
         Environment = [
           "KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
           "EXO_CONFIG_DIR=${exoCfg.configDir}"
           "EXO_DATA_DIR=${exoCfg.dataDir}"
         ];
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1870,7 +1871,7 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         RemoveIPC = true;
-        
+
         # Network access for K3s API
         RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
       };
@@ -1880,7 +1881,7 @@ in {
     systemd.timers.exo-k3s-orchestration-monitor = mkIf cfg.orchestration.enable {
       description = "EXO K3s Orchestration Monitor Timer";
       wantedBy = [ "timers.target" ];
-      
+
       timerConfig = {
         OnBootSec = "5min";
         OnUnitActiveSec = "5min";
@@ -1890,20 +1891,20 @@ in {
 
     systemd.services.exo-k3s-orchestration-monitor = mkIf cfg.orchestration.enable {
       description = "EXO K3s Orchestration Monitor";
-      
+
       serviceConfig = {
         Type = "oneshot";
         User = exoCfg.user;
         Group = exoCfg.group;
         ExecStart = "${k3sOrchestrationScript} monitor";
-        
+
         # Environment
         Environment = [
           "KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
           "EXO_CONFIG_DIR=${exoCfg.configDir}"
           "EXO_DATA_DIR=${exoCfg.dataDir}"
         ];
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1919,7 +1920,7 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         RemoveIPC = true;
-        
+
         # Network access for K3s API
         RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
       };

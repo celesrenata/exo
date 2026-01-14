@@ -28,9 +28,9 @@ def test_imports():
         )
 
         print("✓ Constants imported successfully")
-        print(f"  - Shutdown timeout: {EXO_RUNNER_SHUTDOWN_TIMEOUT}")
-        print(f"  - Health check interval: {EXO_RUNNER_HEALTH_CHECK_INTERVAL}")
-        print(f"  - Enhanced logging: {EXO_RUNNER_ENABLE_ENHANCED_LOGGING}")
+        print("  - Shutdown timeout: {EXO_RUNNER_SHUTDOWN_TIMEOUT}")
+        print("  - Health check interval: {EXO_RUNNER_HEALTH_CHECK_INTERVAL}")
+        print("  - Enhanced logging: {EXO_RUNNER_ENABLE_ENHANCED_LOGGING}")
 
         # Test component imports
         from exo.worker.runner.channel_manager import ChannelManager
@@ -50,10 +50,10 @@ def test_imports():
         return True
 
     except ImportError as e:
-        print(f"✗ Import failed: {e}")
+        print("✗ Import failed: {e}")
         return False
     except Exception as e:
-        print(f"✗ Unexpected error: {e}")
+        print("✗ Unexpected error: {e}")
         return False
 
 
@@ -82,7 +82,7 @@ def test_file_structure():
     if missing_files:
         print("✗ Missing files:")
         for file_path in missing_files:
-            print(f"  - {file_path}")
+            print("  - {file_path}")
         return False
     else:
         print("✓ All required files exist")
@@ -131,15 +131,15 @@ def test_configuration():
                 )
                 all_good = False
             elif min_value is not None and value < min_value:
-                print(f"✗ {name} has invalid value: {value} (should be >= {min_value})")
+                print("✗ {name} has invalid value: {value} (should be >= {min_value})")
                 all_good = False
             else:
-                print(f"✓ {name}: {value}")
+                print("✓ {name}: {value}")
 
         return all_good
 
     except Exception as e:
-        print(f"✗ Configuration test failed: {e}")
+        print("✗ Configuration test failed: {e}")
         return False
 
 
@@ -180,14 +180,14 @@ def test_integration_points():
 
         for const in required_constants:
             if const not in constants_content:
-                print(f"✗ Missing constant: {const}")
+                print("✗ Missing constant: {const}")
                 return False
 
         print("✓ All required constants present")
         return True
 
     except Exception as e:
-        print(f"✗ Integration points test failed: {e}")
+        print("✗ Integration points test failed: {e}")
         return False
 
 
@@ -210,7 +210,7 @@ def main():
             result = test_func()
             results[test_name] = result
         except Exception as e:
-            print(f"✗ {test_name} failed with exception: {e}")
+            print("✗ {test_name} failed with exception: {e}")
             results[test_name] = False
 
     # Summary
@@ -223,9 +223,9 @@ def main():
 
     for test_name, result in results.items():
         status = "✓ PASS" if result else "✗ FAIL"
-        print(f"{status}: {test_name}")
+        print("{status}: {test_name}")
 
-    print(f"\nResult: {passed}/{total} tests passed")
+    print("\nResult: {passed}/{total} tests passed")
 
     if passed == total:
         print("🎉 Integration test PASSED!")

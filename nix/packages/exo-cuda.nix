@@ -12,7 +12,7 @@ let
   # CUDA-enabled Python environment with PyTorch and related packages
   cudaEnv = python313.withPackages (ps: with ps; [
     # CUDA-specific packages
-    torch-bin  # PyTorch with CUDA support
+    torch-bin # PyTorch with CUDA support
     torchvision-bin
     torchaudio-bin
     # Additional ML packages that benefit from CUDA
@@ -90,8 +90,8 @@ stdenv.mkDerivation rec {
 
   nativeBuildInputs = [ makeWrapper ];
 
-  buildInputs = [ 
-    exo-python 
+  buildInputs = [
+    exo-python
     cudaPackages.cudatoolkit
     cudaPackages.cudnn
     cudaPackages.nccl
@@ -177,7 +177,7 @@ stdenv.mkDerivation rec {
     license = licenses.asl20;
     maintainers = [ ];
     platforms = platforms.linux;
-    
+
     # Additional metadata for hardware requirements
     longDescription = ''
       EXO CUDA variant provides GPU acceleration for NVIDIA graphics cards.

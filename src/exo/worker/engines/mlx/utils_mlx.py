@@ -67,6 +67,7 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (2048, 4096))
 
 class BarrierStatus(Enum):
     """Status of barrier synchronization operations."""
+
     PENDING = "pending"
     SUCCESS = "success"
     TIMEOUT = "timeout"
@@ -75,6 +76,7 @@ class BarrierStatus(Enum):
 
 class SyncResult(Enum):
     """Result of synchronization operations."""
+
     SUCCESS = "success"
     TIMEOUT = "timeout"
     RETRY_EXHAUSTED = "retry_exhausted"
@@ -84,6 +86,7 @@ class SyncResult(Enum):
 @dataclass
 class SyncState:
     """State information for synchronization operations."""
+
     participating_devices: list[int]
     sync_timestamp: datetime
     barrier_status: BarrierStatus
@@ -94,82 +97,87 @@ class SyncState:
 
 class DistributedBarrier:
     """Enhanced barrier with timeout and retry mechanisms."""
-    
+
     def __init__(self, group: Group | None = None, default_timeout: float = 30.0):
         self.group = group
         self.default_timeout = default_timeout
         self.sync_state: SyncState | None = None
-        
-    async def sync_with_timeout(self, timeout: float | None = None, retry_count: int = 3) -> SyncResult:
+
+    async def sync_with_timeout(
+        self, timeout: float | None = None, retry_count: int = 3
+    ) -> SyncResult:
         """
         Synchronize with timeout and retry logic.
-        
+
         Args:
             timeout: Maximum time to wait for synchronization (seconds)
             retry_count: Maximum number of retry attempts
-            
+
         Returns:
             SyncResult indicating the outcome of synchronization
         """
         if timeout is None:
             timeout = self.default_timeout
-            
+
         self.sync_state = SyncState(
             participating_devices=list(range(self.group.size())) if self.group else [0],
             sync_timestamp=datetime.now(),
             barrier_status=BarrierStatus.PENDING,
             timeout_remaining=timeout,
-            max_retries=retry_count
+            max_retries=retry_count,
         )
-        
+
         for attempt in range(retry_count + 1):
             self.sync_state.retry_count = attempt
-            
+
             try:
                 # Calculate exponential backoff delay for retries
                 if attempt > 0:
                     backoff_delay = min(2 ** (attempt - 1), 8.0)  # Cap at 8 seconds
                     await asyncio.sleep(backoff_delay)
-                    logger.info(f"Barrier retry attempt {attempt} after {backoff_delay}s backoff")
-                
+                    logger.info(
+                        f"Barrier retry attempt {attempt} after {backoff_delay}s backoff"
+                    )
+
                 # Perform the actual barrier synchronization with timeout
                 start_time = time.perf_counter()
-                
+
                 # Use asyncio.wait_for to add timeout to the barrier operation
-                await asyncio.wait_for(
-                    self._perform_barrier_sync(),
-                    timeout=timeout
-                )
-                
+                await asyncio.wait_for(self._perform_barrier_sync(), timeout=timeout)
+
                 elapsed = time.perf_counter() - start_time
                 self.sync_state.barrier_status = BarrierStatus.SUCCESS
                 self.sync_state.timeout_remaining = max(0, timeout - elapsed)
-                
+
                 logger.info(f"Barrier synchronization successful in {elapsed:.2f}s")
                 return SyncResult.SUCCESS
-                
+
             except asyncio.TimeoutError:
                 self.sync_state.barrier_status = BarrierStatus.TIMEOUT
-                logger.warning(f"Barrier synchronization timeout on attempt {attempt + 1}")
-                
+                logger.warning(
+                    f"Barrier synchronization timeout on attempt {attempt + 1}"
+                )
+
                 if attempt == retry_count:
                     return SyncResult.TIMEOUT
-                    
+
             except Exception as e:
                 self.sync_state.barrier_status = BarrierStatus.FAILED
-                logger.error(f"Barrier synchronization failed on attempt {attempt + 1}: {e}")
-                
+                logger.error(
+                    f"Barrier synchronization failed on attempt {attempt + 1}: {e}"
+                )
+
                 if attempt == retry_count:
                     return SyncResult.FAILED
-        
+
         return SyncResult.RETRY_EXHAUSTED
-    
+
     async def _perform_barrier_sync(self) -> None:
         """Perform the actual barrier synchronization operation."""
         # Run the blocking mx_barrier in a thread pool to make it async
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._blocking_barrier_sync)
-    
+
     def _blocking_barrier_sync(self) -> None:
         """Blocking barrier synchronization using MLX distributed operations."""
         mx.eval(
@@ -179,33 +187,38 @@ class DistributedBarrier:
                 group=self.group,
             )
         )
-    
+
     async def validate_sync_state(self) -> bool:
         """
         Validate the current synchronization state.
-        
+
         Returns:
             True if synchronization state is valid and healthy
         """
         if self.sync_state is None:
             return False
-            
+
         # Check if sync is recent (within last 60 seconds)
         time_since_sync = datetime.now() - self.sync_state.sync_timestamp
         if time_since_sync > timedelta(seconds=60):
             logger.warning("Synchronization state is stale")
             return False
-            
+
         # Check if barrier completed successfully
         if self.sync_state.barrier_status != BarrierStatus.SUCCESS:
-            logger.warning(f"Barrier status is not successful: {self.sync_state.barrier_status}")
+            logger.warning(
+                f"Barrier status is not successful: {self.sync_state.barrier_status}"
+            )
             return False
-            
+
         # Validate that all expected devices participated
-        if self.group and len(self.sync_state.participating_devices) != self.group.size():
+        if (
+            self.group
+            and len(self.sync_state.participating_devices) != self.group.size()
+        ):
             logger.warning("Not all devices participated in synchronization")
             return False
-            
+
         return True
 
 
@@ -220,15 +233,17 @@ def mx_barrier(group: Group | None = None):
     )
 
 
-async def mx_barrier_async(group: Group | None = None, timeout: float = 30.0, retry_count: int = 3) -> SyncResult:
+async def mx_barrier_async(
+    group: Group | None = None, timeout: float = 30.0, retry_count: int = 3
+) -> SyncResult:
     """
     Enhanced asynchronous barrier with timeout and retry logic.
-    
+
     Args:
         group: MLX distributed group
         timeout: Maximum time to wait for synchronization (seconds)
         retry_count: Maximum number of retry attempts
-        
+
     Returns:
         SyncResult indicating the outcome of synchronization
     """
@@ -239,6 +254,7 @@ async def mx_barrier_async(group: Group | None = None, timeout: float = 30.0, re
 @dataclass
 class GenerationCoordination:
     """Coordination information for token generation across pipeline stages."""
+
     pipeline_stage: int
     device_rank: int
     world_size: int
@@ -249,25 +265,25 @@ class GenerationCoordination:
 
 class TokenStreamSynchronizer:
     """Coordinates token generation across distributed devices."""
-    
+
     def __init__(self, group: Group | None = None, pipeline_stage: int = 0):
         self.group = group
         self.pipeline_stage = pipeline_stage
         self.device_rank = group.rank() if group else 0
         self.world_size = group.size() if group else 1
         self.barrier = DistributedBarrier(group)
-        
+
         # Track token sequences and synchronization points
         self.token_sequences: dict[str, list[EnhancedTokenChunk]] = {}
         self.sync_points: dict[str, GenerationCoordination] = {}
-        
+
     async def coordinate_generation(self, sync_point_id: str) -> GenerationCoordination:
         """
         Coordinate token generation across pipeline stages.
-        
+
         Args:
             sync_point_id: Unique identifier for this synchronization point
-            
+
         Returns:
             GenerationCoordination with coordination details
         """
@@ -275,113 +291,139 @@ class TokenStreamSynchronizer:
             pipeline_stage=self.pipeline_stage,
             device_rank=self.device_rank,
             world_size=self.world_size,
-            sync_point_id=sync_point_id
+            sync_point_id=sync_point_id,
         )
-        
+
         self.sync_points[sync_point_id] = coordination
-        
+
         # Synchronize all devices at this generation point
         sync_result = await self.barrier.sync_with_timeout(timeout=30.0, retry_count=3)
-        
+
         if sync_result == SyncResult.SUCCESS:
             coordination.tokens_ready = True
-            logger.info(f"Generation coordination successful for sync point {sync_point_id}")
+            logger.info(
+                f"Generation coordination successful for sync point {sync_point_id}"
+            )
         else:
-            logger.error(f"Generation coordination failed for sync point {sync_point_id}: {sync_result}")
-            
+            logger.error(
+                f"Generation coordination failed for sync point {sync_point_id}: {sync_result}"
+            )
+
         return coordination
-    
-    async def verify_token_ordering(self, tokens: list[EnhancedTokenChunk], sequence_id: str = "default") -> bool:
+
+    async def verify_token_ordering(
+        self, tokens: list[EnhancedTokenChunk], sequence_id: str = "default"
+    ) -> bool:
         """
         Verify token ordering across distributed devices.
-        
+
         Args:
             tokens: List of tokens to verify
             sequence_id: Identifier for the token sequence
-            
+
         Returns:
             True if token ordering is correct
         """
         if not tokens:
             return True
-            
+
         # Store the token sequence for this device
         self.token_sequences[sequence_id] = tokens
-        
+
         # Verify local token ordering first
         local_ordering_valid = self._verify_local_ordering(tokens)
         if not local_ordering_valid:
             logger.error(f"Local token ordering invalid for sequence {sequence_id}")
             return False
-        
+
         # If we're in a distributed setup, coordinate with other devices
         if self.group and self.world_size > 1:
             return await self._verify_distributed_ordering(tokens, sequence_id)
-        
+
         return True
-    
+
     def _verify_local_ordering(self, tokens: list[EnhancedTokenChunk]) -> bool:
         """Verify that tokens are in correct order locally."""
         for i in range(1, len(tokens)):
-            if tokens[i].sequence_position <= tokens[i-1].sequence_position:
-                logger.error(f"Token ordering violation: position {tokens[i].sequence_position} <= {tokens[i-1].sequence_position}")
+            if tokens[i].sequence_position <= tokens[i - 1].sequence_position:
+                logger.error(
+                    f"Token ordering violation: position {tokens[i].sequence_position} <= {tokens[i - 1].sequence_position}"
+                )
                 return False
         return True
-    
-    async def _verify_distributed_ordering(self, tokens: list[EnhancedTokenChunk], sequence_id: str) -> bool:
+
+    async def _verify_distributed_ordering(
+        self, tokens: list[EnhancedTokenChunk], sequence_id: str
+    ) -> bool:
         """Verify token ordering across distributed devices."""
         try:
             # Create a summary of our token positions
             local_positions = [token.sequence_position for token in tokens]
             local_min = min(local_positions) if local_positions else 0
             local_max = max(local_positions) if local_positions else 0
-            
+
             # Broadcast position ranges to all devices
-            position_data = mx.array([local_min, local_max, len(tokens)], dtype=mx.int32)
-            
+            position_data = mx.array(
+                [local_min, local_max, len(tokens)], dtype=mx.int32
+            )
+
             # Gather position data from all devices
-            all_position_data = mx.distributed.all_gather(position_data, group=self.group)
+            all_position_data = mx.distributed.all_gather(
+                position_data, group=self.group
+            )
             mx.eval(all_position_data)
-            
+
             # Verify that position ranges don't overlap inappropriately
             all_ranges = []
             for i in range(self.world_size):
-                device_data = all_position_data[i * 3:(i + 1) * 3]
-                min_pos, max_pos, count = int(device_data[0]), int(device_data[1]), int(device_data[2])
+                device_data = all_position_data[i * 3 : (i + 1) * 3]
+                min_pos, max_pos, count = (
+                    int(device_data[0]),
+                    int(device_data[1]),
+                    int(device_data[2]),
+                )
                 if count > 0:  # Only consider devices with tokens
                     all_ranges.append((i, min_pos, max_pos, count))
-            
+
             # Check for overlaps and gaps
             all_ranges.sort(key=lambda x: x[1])  # Sort by min position
-            
+
             for i in range(1, len(all_ranges)):
-                prev_device, prev_min, prev_max, prev_count = all_ranges[i-1]
+                prev_device, prev_min, prev_max, prev_count = all_ranges[i - 1]
                 curr_device, curr_min, curr_max, curr_count = all_ranges[i]
-                
+
                 # Check for overlaps (tokens with same positions on different devices)
                 if curr_min <= prev_max:
-                    logger.error(f"Token position overlap between devices {prev_device} and {curr_device}")
+                    logger.error(
+                        f"Token position overlap between devices {prev_device} and {curr_device}"
+                    )
                     return False
-                
+
                 # Check for gaps (missing token positions)
                 if curr_min > prev_max + 1:
-                    logger.warning(f"Token position gap between devices {prev_device} and {curr_device}: {prev_max} -> {curr_min}")
-            
-            logger.info(f"Distributed token ordering verified for sequence {sequence_id}")
+                    logger.warning(
+                        f"Token position gap between devices {prev_device} and {curr_device}: {prev_max} -> {curr_min}"
+                    )
+
+            logger.info(
+                f"Distributed token ordering verified for sequence {sequence_id}"
+            )
             return True
-            
+
         except Exception as e:
             logger.error(f"Error verifying distributed token ordering: {e}")
             return False
-    
-    async def create_synchronization_point(self, point_id: str, tokens: list[EnhancedTokenChunk]) -> bool:
+
+    async def create_synchronization_point(
+        self, point_id: str, tokens: list[EnhancedTokenChunk]
+    ) -> bool:
         """
         Create a synchronization point for token stream assembly.
-        
+
         Args:
             point_id: Unique identifier for the synchronization point
             tokens: Tokens to synchronize at this point
-            
+
         Returns:
             True if synchronization point was created successfully
         """
@@ -392,48 +434,52 @@ class TokenStreamSynchronizer:
                     # Update checksum and mark as valid if not already done
                     token.update_checksum()
                     token.mark_as_valid()
-            
+
             # Coordinate generation at this point
             coordination = await self.coordinate_generation(point_id)
-            
+
             if not coordination.tokens_ready:
                 logger.error(f"Failed to create synchronization point {point_id}")
                 return False
-            
+
             # Verify token ordering
             ordering_valid = await self.verify_token_ordering(tokens, point_id)
-            
+
             if not ordering_valid:
-                logger.error(f"Token ordering invalid at synchronization point {point_id}")
+                logger.error(
+                    f"Token ordering invalid at synchronization point {point_id}"
+                )
                 return False
-            
-            logger.info(f"Synchronization point {point_id} created successfully with {len(tokens)} tokens")
+
+            logger.info(
+                f"Synchronization point {point_id} created successfully with {len(tokens)} tokens"
+            )
             return True
-            
+
         except Exception as e:
             logger.error(f"Error creating synchronization point {point_id}: {e}")
             return False
-    
-    def get_sequence_validation_result(self, sequence_id: str) -> SequenceValidationResult:
+
+    def get_sequence_validation_result(
+        self, sequence_id: str
+    ) -> SequenceValidationResult:
         """Get validation results for a token sequence."""
         tokens = self.token_sequences.get(sequence_id, [])
-        
+
         if not tokens:
             return SequenceValidationResult(
-                is_valid=True,
-                total_tokens=0,
-                expected_tokens=0
+                is_valid=True, total_tokens=0, expected_tokens=0
             )
-        
+
         positions = [token.sequence_position for token in tokens]
         positions.sort()
-        
+
         # Check for missing positions
         missing_positions = []
         if positions:
             expected_range = range(positions[0], positions[-1] + 1)
             missing_positions = [pos for pos in expected_range if pos not in positions]
-        
+
         # Check for duplicates
         duplicate_positions = []
         seen_positions = set()
@@ -441,25 +487,24 @@ class TokenStreamSynchronizer:
             if pos in seen_positions:
                 duplicate_positions.append(pos)
             seen_positions.add(pos)
-        
+
         # Check for out-of-order positions (already handled in local ordering)
         out_of_order_positions = []
-        
+
         is_valid = (
-            len(missing_positions) == 0 and 
-            len(duplicate_positions) == 0 and 
-            len(out_of_order_positions) == 0
+            len(missing_positions) == 0
+            and len(duplicate_positions) == 0
+            and len(out_of_order_positions) == 0
         )
-        
+
         return SequenceValidationResult(
             is_valid=is_valid,
             missing_positions=missing_positions,
             duplicate_positions=duplicate_positions,
             out_of_order_positions=out_of_order_positions,
             total_tokens=len(tokens),
-            expected_tokens=len(positions) + len(missing_positions) if positions else 0
+            expected_tokens=len(positions) + len(missing_positions) if positions else 0,
         )
-
 
 
 # TODO: Test this

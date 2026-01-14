@@ -1,7 +1,8 @@
 # Simple test to verify the testing infrastructure works
 { lib, pkgs, system }:
 
-pkgs.runCommand "test-simple" {
+pkgs.runCommand "test-simple"
+{
   nativeBuildInputs = [ pkgs.bash pkgs.coreutils ];
 } ''
   set -euo pipefail

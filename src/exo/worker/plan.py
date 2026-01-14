@@ -145,8 +145,8 @@ def _init_distributed_backend(
             continue
 
         runner_is_idle = isinstance(runner.status, RunnerIdle)
-        
-        # Fixed logic: Allow ConnectToGroup if this runner is idle and other runners 
+
+        # Fixed logic: Allow ConnectToGroup if this runner is idle and other runners
         # are in valid connection states (Idle, Connecting, or already Connected)
         all_runners_in_valid_connection_state = all(
             isinstance(
@@ -172,7 +172,10 @@ def _init_distributed_backend(
 
         # Rank = n-1: Allow connection if other runners are Connecting or already Connected
         connecting_rank_ready = device_rank == world_size - 1 and all(
-            isinstance(all_runners.get(global_runner_id, None), (RunnerConnecting, RunnerConnected))
+            isinstance(
+                all_runners.get(global_runner_id, None),
+                (RunnerConnecting, RunnerConnected),
+            )
             for global_runner_id in shard_assignments.runner_to_shard
             if global_runner_id != runner_id
         )

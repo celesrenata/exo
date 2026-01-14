@@ -69,11 +69,11 @@ async def example_coordinated_shutdown():
         resource_id="shutdown_event",
     )
 
-    print(f"Registered {len(resource_manager.get_all_resources())} resources")
+    print("Registered {len(resource_manager.get_all_resources())} resources")
 
     # Register a shutdown handler
     def shutdown_handler(runner_id: str):
-        print(f"Shutdown handler called for runner {runner_id}")
+        print("Shutdown handler called for runner {runner_id}")
         # Signal shutdown event to other processes
         example_event.signal(EventType.SHUTDOWN_SIGNAL, {"runner_id": runner_id})
 
@@ -84,7 +84,7 @@ async def example_coordinated_shutdown():
     await asyncio.sleep(1.0)
 
     # Initiate coordinated shutdown
-    print(f"Initiating coordinated shutdown for {runner_id}")
+    print("Initiating coordinated shutdown for {runner_id}")
     success = await coordinator.initiate_shutdown(runner_id, timeout=30.0)
 
     if success:
@@ -103,7 +103,7 @@ async def example_coordinated_shutdown():
                 f"Resource cleanup had issues: {len(cleanup_result.failed_resources)} failed"
             )
             for error in cleanup_result.errors:
-                print(f"  Error: {error}")
+                print("  Error: {error}")
     else:
         print("Shutdown failed or timed out")
 
@@ -152,7 +152,7 @@ def example_cross_process_coordination():
                 print(
                     f"Received shutdown signal from process {event_info.source_process}"
                 )
-                print(f"Message: {event_info.data.get('message', 'No message')}")
+                print("Message: {event_info.data.get('message', 'No message')}")
             else:
                 print("No shutdown signals detected")
 

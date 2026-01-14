@@ -45,17 +45,17 @@ async def test_basic_channel_operations():
         for i in range(5):
             success = channel.send_safe(f"message_{i}", timeout=1.0)
             if success:
-                print(f"Sent message_{i}")
+                print("Sent message_{i}")
             else:
-                print(f"Failed to send message_{i}")
+                print("Failed to send message_{i}")
 
         # Receive messages
         for i in range(5):
             success, item = channel.receive_safe(timeout=1.0)
             if success:
-                print(f"Received: {item}")
+                print("Received: {item}")
             else:
-                print(f"Failed to receive message {i}")
+                print("Failed to receive message {i}")
 
         # Test channel info
         info = channel.get_info()
@@ -65,12 +65,12 @@ async def test_basic_channel_operations():
 
         # Close the channel
         success = await channel_manager.close_channel("test_channel")
-        print(f"Channel closed successfully: {success}")
+        print("Channel closed successfully: {success}")
 
         return True
 
     except Exception as e:
-        print(f"Error in basic channel operations test: {e}")
+        print("Error in basic channel operations test: {e}")
         return False
 
 
@@ -87,13 +87,13 @@ async def test_queue_state_management():
 
         # Test state operations
         current_state = queue_state.get_state()
-        print(f"Initial queue state: {current_state}")
+        print("Initial queue state: {current_state}")
 
         # Update metrics
         success = queue_state.update_metrics(
             put_operations=10, get_operations=8, current_size=2
         )
-        print(f"Metrics updated: {success}")
+        print("Metrics updated: {success}")
 
         # Get metrics
         metrics = queue_state.get_metrics()
@@ -106,16 +106,16 @@ async def test_queue_state_management():
         success = await queue_manager.close_queue_atomically(
             "test_queue", drain_timeout=2.0
         )
-        print(f"Queue closed atomically: {success}")
+        print("Queue closed atomically: {success}")
 
         # Unregister
         success = await queue_manager.unregister_queue("test_queue")
-        print(f"Queue unregistered: {success}")
+        print("Queue unregistered: {success}")
 
         return True
 
     except Exception as e:
-        print(f"Error in queue state management test: {e}")
+        print("Error in queue state management test: {e}")
         return False
 
 
@@ -138,14 +138,14 @@ async def test_safe_queue_operations():
                 queue_id="test_safe_queue",
                 timeout=1.0,
             )
-            print(f"Put result for item {i}: {result}")
+            print("Put result for item {i}: {result}")
 
         # Test safe get operations
         for i in range(3):
             result, item, error = await safe_ops.safe_get(
                 queue=test_queue, queue_id="test_safe_queue", timeout=1.0
             )
-            print(f"Get result for item {i}: {result}, item: {item}")
+            print("Get result for item {i}: {result}, item: {item}")
 
         # Test drain operation
         # Add some more items first
@@ -162,7 +162,7 @@ async def test_safe_queue_operations():
         return True
 
     except Exception as e:
-        print(f"Error in safe queue operations test: {e}")
+        print("Error in safe queue operations test: {e}")
         return False
 
 
@@ -196,31 +196,31 @@ async def test_integration_scenario():
 
         # Get channel statistics
         stats = channel_manager.get_statistics()
-        print(f"Channel manager stats: {stats}")
+        print("Channel manager stats: {stats}")
 
         # Get queue summary
         queue_stats = queue_manager.get_summary_statistics()
-        print(f"Queue manager stats: {queue_stats}")
+        print("Queue manager stats: {queue_stats}")
 
         # Simulate coordinated shutdown
         print("Starting coordinated shutdown...")
 
         # Close all channels
         close_results = await channel_manager.close_all_channels(drain_timeout=2.0)
-        print(f"Channel closure results: {close_results}")
+        print("Channel closure results: {close_results}")
 
         # Close all queues
         for i in range(3):
             success = await queue_manager.close_queue_atomically(
                 f"integration_queue_{i}"
             )
-            print(f"Queue {i} closed: {success}")
+            print("Queue {i} closed: {success}")
 
         print("Integration scenario completed successfully")
         return True
 
     except Exception as e:
-        print(f"Error in integration scenario: {e}")
+        print("Error in integration scenario: {e}")
         return False
 
 
@@ -239,13 +239,13 @@ async def main():
     results = []
 
     for test_name, test_func in tests:
-        print(f"\n--- {test_name} ---")
+        print("\n--- {test_name} ---")
         try:
             success = await test_func()
             results.append((test_name, success))
-            print(f"✓ {test_name}: {'PASSED' if success else 'FAILED'}")
+            print("✓ {test_name}: {'PASSED' if success else 'FAILED'}")
         except Exception as e:
-            print(f"✗ {test_name}: FAILED with exception: {e}")
+            print("✗ {test_name}: FAILED with exception: {e}")
             results.append((test_name, False))
 
     print("\n" + "=" * 60)
@@ -256,9 +256,9 @@ async def main():
 
     for test_name, success in results:
         status = "PASSED" if success else "FAILED"
-        print(f"  {test_name}: {status}")
+        print("  {test_name}: {status}")
 
-    print(f"\nOverall: {passed}/{total} tests passed")
+    print("\nOverall: {passed}/{total} tests passed")
 
     if passed == total:
         print(

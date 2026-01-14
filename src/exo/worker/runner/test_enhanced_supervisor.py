@@ -32,7 +32,7 @@ def test_error_handler_creation():
         return True
 
     except Exception as e:
-        print(f"✗ ErrorHandler test failed: {e}")
+        print("✗ ErrorHandler test failed: {e}")
         return False
 
 
@@ -68,7 +68,7 @@ def test_resource_manager_creation():
         return True
 
     except Exception as e:
-        print(f"✗ ResourceManager test failed: {e}")
+        print("✗ ResourceManager test failed: {e}")
         return False
 
 
@@ -92,7 +92,7 @@ def test_shutdown_coordinator_creation():
         return True
 
     except Exception as e:
-        print(f"✗ ShutdownCoordinator test failed: {e}")
+        print("✗ ShutdownCoordinator test failed: {e}")
         return False
 
 
@@ -126,7 +126,7 @@ async def test_integration():
         return True
 
     except Exception as e:
-        print(f"✗ Integration test failed: {e}")
+        print("✗ Integration test failed: {e}")
         return False
 
 
@@ -158,7 +158,7 @@ def main():
             result = asyncio.run(test())
             async_results.append(result)
         except Exception as e:
-            print(f"✗ Async test {test.__name__} failed: {e}")
+            print("✗ Async test {test.__name__} failed: {e}")
             async_results.append(False)
 
     # Summary
@@ -167,7 +167,7 @@ def main():
     total = len(all_results)
 
     print("=" * 50)
-    print(f"Test Results: {passed}/{total} passed")
+    print("Test Results: {passed}/{total} passed")
 
     if passed == total:
         print(

@@ -46,8 +46,8 @@ def run_ipex_tests():
     print("=" * 60)
     print("Running Intel IPEX Engine Tests")
     print("=" * 60)
-    print(f"Test directory: {test_dir}")
-    print(f"Python version: {sys.version}")
+    print("Test directory: {test_dir}")
+    print("Python version: {sys.version}")
     print("=" * 60)
 
     # Run the tests
@@ -70,12 +70,12 @@ def run_specific_test_module(module_name):
     module_path = test_dir / f"{module_name}.py"
 
     if not module_path.exists():
-        print(f"❌ Test module not found: {module_path}")
+        print("❌ Test module not found: {module_path}")
         return 1
 
     pytest_args = [str(module_path), "-v", "--tb=short", "--disable-warnings"]
 
-    print(f"Running tests from: {module_name}")
+    print("Running tests from: {module_name}")
     return pytest.main(pytest_args)
 
 
@@ -91,7 +91,7 @@ def list_available_tests():
     for test_file in sorted(test_files):
         if test_file.name != "test_runner.py":
             module_name = test_file.stem
-            print(f"  {module_name}")
+            print("  {module_name}")
 
             # Try to extract test classes/functions for preview
             try:
@@ -104,9 +104,9 @@ def list_available_tests():
                 classes = re.findall(r"class (Test\w+)", content)
                 if classes:
                     for cls in classes[:3]:  # Show first 3 classes
-                        print(f"    - {cls}")
+                        print("    - {cls}")
                     if len(classes) > 3:
-                        print(f"    - ... and {len(classes) - 3} more")
+                        print("    - ... and {len(classes) - 3} more")
 
             except Exception:
                 pass
@@ -141,7 +141,7 @@ if __name__ == "__main__":
             print("  python test_runner.py test_ipex_dashboard_integration")
             sys.exit(0)
         else:
-            print(f"Unknown command: {command}")
+            print("Unknown command: {command}")
             print("Use 'python test_runner.py help' for usage information")
             sys.exit(1)
     else:

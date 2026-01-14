@@ -21,11 +21,11 @@ stdenv.mkDerivation rec {
 
   nativeBuildInputs = [ makeWrapper ];
 
-  buildInputs = [ 
-    exo-cpu 
-    exo-cuda 
-    exo-rocm 
-    exo-intel 
+  buildInputs = [
+    exo-cpu
+    exo-cuda
+    exo-rocm
+    exo-intel
     exo-dashboard
     pciutils
     glxinfo
@@ -451,7 +451,7 @@ stdenv.mkDerivation rec {
     license = licenses.asl20;
     maintainers = [ ];
     platforms = platforms.unix;
-    
+
     longDescription = ''
       EXO complete package provides automatic hardware detection and optimal
       acceleration selection. Supports NVIDIA CUDA, AMD ROCm, Intel Arc GPUs,

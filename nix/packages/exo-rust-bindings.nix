@@ -69,7 +69,7 @@ rustPlatform.buildRustPackage rec {
   };
 
   # Configure cross-compilation
-  CARGO_BUILD_TARGET = lib.optionalString (stdenv.buildPlatform != stdenv.hostPlatform) 
+  CARGO_BUILD_TARGET = lib.optionalString (stdenv.buildPlatform != stdenv.hostPlatform)
     stdenv.hostPlatform.rust.rustcTargetSpec;
 
   # Install the shared library for Python

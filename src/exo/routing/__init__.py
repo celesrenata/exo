@@ -9,12 +9,12 @@ from .connection_message import ConnectionMessage
 
 __all__ = [
     "Router",
-    "TopicRouter", 
+    "TopicRouter",
     "ReliableRouter",
     "ReliableTopicRouter",
     "create_reliable_router",
     "get_node_id_keypair",
     "TypedTopic",
     "PublishPolicy",
-    "ConnectionMessage"
+    "ConnectionMessage",
 ]

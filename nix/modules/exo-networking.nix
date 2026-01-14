@@ -5,7 +5,7 @@ with lib;
 let
   cfg = config.services.exo.networking;
   exoCfg = config.services.exo;
-  
+
   # Network interface detection script
   networkDetectionScript = pkgs.writeShellScript "exo-network-detection" ''
     #!/bin/bash
@@ -1019,7 +1019,8 @@ let
     topology_loop
   '';
 
-in {
+in
+{
   options.services.exo.networking = {
     autoDetection = {
       enable = mkOption {
@@ -1073,7 +1074,7 @@ in {
 
       backup = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = [ ];
         example = [ "eth0" "eth1" ];
         description = ''
           Backup network interfaces for failover scenarios.
@@ -1118,62 +1119,62 @@ in {
           Ensures EXO traffic doesn't conflict with Kubernetes networking.
         '';
       };
-    rdma = {
-      enable = mkOption {
-        type = types.bool;
-        default = true;
-        description = ''
-          Enable RDMA (Remote Direct Memory Access) support.
-          Provides low-latency, high-throughput communication for supported hardware.
-        '';
-      };
+      rdma = {
+        enable = mkOption {
+          type = types.bool;
+          default = true;
+          description = ''
+            Enable RDMA (Remote Direct Memory Access) support.
+            Provides low-latency, high-throughput communication for supported hardware.
+          '';
+        };
 
-      thunderboltSupport = mkOption {
-        type = types.bool;
-        default = true;
-        description = ''
-          Enable RDMA over Thunderbolt support.
-          Requires Thunderbolt 4 or 5 hardware with RDMA capabilities.
-        '';
-      };
+        thunderboltSupport = mkOption {
+          type = types.bool;
+          default = true;
+          description = ''
+            Enable RDMA over Thunderbolt support.
+            Requires Thunderbolt 4 or 5 hardware with RDMA capabilities.
+          '';
+        };
 
-      autoDetect = mkOption {
-        type = types.bool;
-        default = true;
-        description = ''
-          Automatically detect and configure RDMA-capable interfaces.
-          When enabled, EXO will automatically use RDMA when available.
-        '';
-      };
+        autoDetect = mkOption {
+          type = types.bool;
+          default = true;
+          description = ''
+            Automatically detect and configure RDMA-capable interfaces.
+            When enabled, EXO will automatically use RDMA when available.
+          '';
+        };
 
-      devices = mkOption {
-        type = types.listOf types.str;
-        default = [];
-        example = [ "mlx5_0" "mlx5_1" ];
-        description = ''
-          Specific RDMA devices to use for EXO communication.
-          If empty, all available RDMA devices will be used.
-        '';
-      };
+        devices = mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          example = [ "mlx5_0" "mlx5_1" ];
+          description = ''
+            Specific RDMA devices to use for EXO communication.
+            If empty, all available RDMA devices will be used.
+          '';
+        };
 
-      maxQueuePairs = mkOption {
-        type = types.int;
-        default = 256;
-        description = ''
-          Maximum number of RDMA queue pairs per device.
-          Higher values allow more concurrent connections but use more memory.
-        '';
-      };
+        maxQueuePairs = mkOption {
+          type = types.int;
+          default = 256;
+          description = ''
+            Maximum number of RDMA queue pairs per device.
+            Higher values allow more concurrent connections but use more memory.
+          '';
+        };
 
-      completionQueueSize = mkOption {
-        type = types.int;
-        default = 1024;
-        description = ''
-          Size of RDMA completion queues.
-          Larger queues can improve performance but use more memory.
-        '';
+        completionQueueSize = mkOption {
+          type = types.int;
+          default = 1024;
+          description = ''
+            Size of RDMA completion queues.
+            Larger queues can improve performance but use more memory.
+          '';
+        };
       };
-    };
       enableTcpOptimization = mkOption {
         type = types.bool;
         default = true;
@@ -1211,212 +1212,212 @@ in {
           BBR is recommended for high-bandwidth, high-latency networks.
         '';
       };
-    discovery = {
-      enable = mkOption {
-        type = types.bool;
-        default = true;
-        description = ''
-          Enable automatic network discovery for EXO cluster nodes.
-          Allows nodes to automatically find and connect to each other.
-        '';
-      };
-
-      multicast = {
+      discovery = {
         enable = mkOption {
           type = types.bool;
           default = true;
           description = ''
-            Enable multicast-based node discovery.
-            Uses multicast packets to discover nodes on the local network.
+            Enable automatic network discovery for EXO cluster nodes.
+            Allows nodes to automatically find and connect to each other.
           '';
         };
 
-        address = mkOption {
-          type = types.str;
-          default = "239.255.42.42";
-          description = ''
-            Multicast address for node discovery.
-            Must be a valid multicast address in the 239.x.x.x range.
-          '';
-        };
-
-        port = mkOption {
-          type = types.port;
-          default = 52417;
-          description = ''
-            Port for multicast discovery packets.
-            Should be different from API and discovery ports.
-          '';
-        };
-
-        interval = mkOption {
-          type = types.str;
-          default = "30s";
-          description = ''
-            Interval between multicast discovery announcements.
-            More frequent announcements provide faster discovery but increase network traffic.
-          '';
-        };
-      };
-
-      broadcast = {
-        enable = mkOption {
-          type = types.bool;
-          default = true;
-          description = ''
-            Enable broadcast-based node discovery as fallback.
-            Used when multicast is not available or blocked.
-          '';
-        };
-
-        port = mkOption {
-          type = types.port;
-          default = 52418;
-          description = ''
-            Port for broadcast discovery packets.
-            Should be different from other EXO ports.
-          '';
-        };
-      };
-
-      staticNodes = mkOption {
-        type = types.listOf types.str;
-        default = [];
-        example = [ "192.168.1.10:52415" "192.168.1.11:52415" ];
-        description = ''
-          Static list of known EXO nodes.
-          Used as fallback when automatic discovery fails.
-        '';
-      };
-
-      timeout = mkOption {
-        type = types.str;
-        default = "10s";
-        description = ''
-          Timeout for node discovery attempts.
-          Nodes that don't respond within this time are considered unavailable.
-        '';
-      };
-    };
-
-    topology = {
-      enable = mkOption {
-        type = types.bool;
-        default = true;
-        description = ''
-          Enable network topology management and optimization.
-          Automatically manages network paths and load balancing.
-        '';
-      };
-
-      updateInterval = mkOption {
-        type = types.str;
-        default = "60s";
-        description = ''
-          Interval for topology updates and optimization.
-          More frequent updates provide better optimization but use more resources.
-        '';
-      };
-
-      loadBalancing = {
-        enable = mkOption {
-          type = types.bool;
-          default = true;
-          description = ''
-            Enable load balancing across multiple network paths.
-            Distributes traffic across available network interfaces.
-          '';
-        };
-
-        algorithm = mkOption {
-          type = types.enum [ "round_robin" "least_connections" "weighted" "adaptive" ];
-          default = "adaptive";
-          description = ''
-            Load balancing algorithm to use:
-            - round_robin: Distribute requests evenly across interfaces
-            - least_connections: Use interface with fewest active connections
-            - weighted: Use interface weights based on bandwidth
-            - adaptive: Dynamically adjust based on performance metrics
-          '';
-        };
-
-        healthCheck = {
+        multicast = {
           enable = mkOption {
             type = types.bool;
             default = true;
             description = ''
-              Enable health checking for network paths.
-              Automatically removes failed paths from load balancing.
+              Enable multicast-based node discovery.
+              Uses multicast packets to discover nodes on the local network.
+            '';
+          };
+
+          address = mkOption {
+            type = types.str;
+            default = "239.255.42.42";
+            description = ''
+              Multicast address for node discovery.
+              Must be a valid multicast address in the 239.x.x.x range.
+            '';
+          };
+
+          port = mkOption {
+            type = types.port;
+            default = 52417;
+            description = ''
+              Port for multicast discovery packets.
+              Should be different from API and discovery ports.
             '';
           };
 
           interval = mkOption {
             type = types.str;
-            default = "10s";
+            default = "30s";
             description = ''
-              Interval between health checks for network paths.
-              More frequent checks provide faster failure detection.
-            '';
-          };
-
-          timeout = mkOption {
-            type = types.str;
-            default = "5s";
-            description = ''
-              Timeout for individual health check probes.
-              Paths that don't respond within this time are marked as failed.
+              Interval between multicast discovery announcements.
+              More frequent announcements provide faster discovery but increase network traffic.
             '';
           };
         };
+
+        broadcast = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = ''
+              Enable broadcast-based node discovery as fallback.
+              Used when multicast is not available or blocked.
+            '';
+          };
+
+          port = mkOption {
+            type = types.port;
+            default = 52418;
+            description = ''
+              Port for broadcast discovery packets.
+              Should be different from other EXO ports.
+            '';
+          };
+        };
+
+        staticNodes = mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          example = [ "192.168.1.10:52415" "192.168.1.11:52415" ];
+          description = ''
+            Static list of known EXO nodes.
+            Used as fallback when automatic discovery fails.
+          '';
+        };
+
+        timeout = mkOption {
+          type = types.str;
+          default = "10s";
+          description = ''
+            Timeout for node discovery attempts.
+            Nodes that don't respond within this time are considered unavailable.
+          '';
+        };
       };
 
-      pathOptimization = {
+      topology = {
         enable = mkOption {
           type = types.bool;
           default = true;
           description = ''
-            Enable automatic path optimization based on performance metrics.
-            Selects optimal network paths for different types of traffic.
+            Enable network topology management and optimization.
+            Automatically manages network paths and load balancing.
           '';
         };
 
-        metrics = mkOption {
-          type = types.listOf (types.enum [ "latency" "bandwidth" "packet_loss" "jitter" ]);
-          default = [ "latency" "bandwidth" "packet_loss" ];
+        updateInterval = mkOption {
+          type = types.str;
+          default = "60s";
           description = ''
-            Network metrics to consider for path optimization.
-            Multiple metrics are combined to select optimal paths.
+            Interval for topology updates and optimization.
+            More frequent updates provide better optimization but use more resources.
           '';
         };
 
-        latencyWeight = mkOption {
-          type = types.float;
-          default = 0.4;
-          description = ''
-            Weight for latency in path optimization (0.0-1.0).
-            Higher values prioritize low-latency paths.
-          '';
+        loadBalancing = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = ''
+              Enable load balancing across multiple network paths.
+              Distributes traffic across available network interfaces.
+            '';
+          };
+
+          algorithm = mkOption {
+            type = types.enum [ "round_robin" "least_connections" "weighted" "adaptive" ];
+            default = "adaptive";
+            description = ''
+              Load balancing algorithm to use:
+              - round_robin: Distribute requests evenly across interfaces
+              - least_connections: Use interface with fewest active connections
+              - weighted: Use interface weights based on bandwidth
+              - adaptive: Dynamically adjust based on performance metrics
+            '';
+          };
+
+          healthCheck = {
+            enable = mkOption {
+              type = types.bool;
+              default = true;
+              description = ''
+                Enable health checking for network paths.
+                Automatically removes failed paths from load balancing.
+              '';
+            };
+
+            interval = mkOption {
+              type = types.str;
+              default = "10s";
+              description = ''
+                Interval between health checks for network paths.
+                More frequent checks provide faster failure detection.
+              '';
+            };
+
+            timeout = mkOption {
+              type = types.str;
+              default = "5s";
+              description = ''
+                Timeout for individual health check probes.
+                Paths that don't respond within this time are marked as failed.
+              '';
+            };
+          };
         };
 
-        bandwidthWeight = mkOption {
-          type = types.float;
-          default = 0.4;
-          description = ''
-            Weight for bandwidth in path optimization (0.0-1.0).
-            Higher values prioritize high-bandwidth paths.
-          '';
-        };
+        pathOptimization = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = ''
+              Enable automatic path optimization based on performance metrics.
+              Selects optimal network paths for different types of traffic.
+            '';
+          };
 
-        reliabilityWeight = mkOption {
-          type = types.float;
-          default = 0.2;
-          description = ''
-            Weight for reliability in path optimization (0.0-1.0).
-            Higher values prioritize stable, low-loss paths.
-          '';
+          metrics = mkOption {
+            type = types.listOf (types.enum [ "latency" "bandwidth" "packet_loss" "jitter" ]);
+            default = [ "latency" "bandwidth" "packet_loss" ];
+            description = ''
+              Network metrics to consider for path optimization.
+              Multiple metrics are combined to select optimal paths.
+            '';
+          };
+
+          latencyWeight = mkOption {
+            type = types.float;
+            default = 0.4;
+            description = ''
+              Weight for latency in path optimization (0.0-1.0).
+              Higher values prioritize low-latency paths.
+            '';
+          };
+
+          bandwidthWeight = mkOption {
+            type = types.float;
+            default = 0.4;
+            description = ''
+              Weight for bandwidth in path optimization (0.0-1.0).
+              Higher values prioritize high-bandwidth paths.
+            '';
+          };
+
+          reliabilityWeight = mkOption {
+            type = types.float;
+            default = 0.2;
+            description = ''
+              Weight for reliability in path optimization (0.0-1.0).
+              Higher values prioritize stable, low-loss paths.
+            '';
+          };
         };
       };
-    };
       enable = mkOption {
         type = types.bool;
         default = true;
@@ -1487,7 +1488,7 @@ in {
 
         restrictToInterfaces = mkOption {
           type = types.listOf types.str;
-          default = [];
+          default = [ ];
           example = [ "bond0" "eth0" ];
           description = ''
             Restrict EXO traffic to specific network interfaces.
@@ -1497,7 +1498,7 @@ in {
 
         customRules = mkOption {
           type = types.listOf types.str;
-          default = [];
+          default = [ ];
           example = [
             "iptables -A INPUT -p tcp --dport 52415 -m conntrack --ctstate NEW -j LOG --log-prefix 'EXO-API: '"
             "iptables -A INPUT -p udp --dport 52416 -m limit --limit 10/min -j ACCEPT"
@@ -1673,7 +1674,7 @@ in {
         Group = exoCfg.group;
         ExecStart = networkDetectionScript;
         ExecReload = networkDetectionScript;
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1696,7 +1697,7 @@ in {
     systemd.timers.exo-network-detection = mkIf cfg.autoDetection.enable {
       description = "EXO Network Detection Timer";
       wantedBy = [ "timers.target" ];
-      
+
       timerConfig = {
         OnBootSec = "1min";
         OnUnitActiveSec = cfg.autoDetection.interval;
@@ -1715,20 +1716,20 @@ in {
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        User = "root";  # Need root for device configuration
+        User = "root"; # Need root for device configuration
         Group = "root";
         ExecStart = rdmaConfigScript;
         ExecReload = rdmaConfigScript;
-        
+
         # Security settings (less restrictive due to hardware access needs)
-        NoNewPrivileges = false;  # Need privileges for device configuration
+        NoNewPrivileges = false; # Need privileges for device configuration
         ProtectSystem = "strict";
         ProtectHome = true;
         ReadWritePaths = [ exoCfg.configDir "/dev" "/sys" ];
         ReadOnlyPaths = [ "/proc" ];
         PrivateTmp = true;
-        RestrictSUIDSGID = false;  # May need SUID for device access
-        RestrictRealtime = false;  # RDMA may need realtime capabilities
+        RestrictSUIDSGID = false; # May need SUID for device access
+        RestrictRealtime = false; # RDMA may need realtime capabilities
         LockPersonality = true;
         RemoveIPC = true;
       };
@@ -1747,7 +1748,7 @@ in {
         Group = exoCfg.group;
         Restart = "always";
         RestartSec = "30s";
-        
+
         ExecStart = pkgs.writeShellScript "exo-rdma-monitor" ''
           #!/bin/bash
           # Monitor RDMA device status and performance
@@ -1825,7 +1826,7 @@ in {
             sleep ${cfg.monitoring.metricsInterval}
           done
         '';
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1859,13 +1860,13 @@ in {
         Restart = "always";
         RestartSec = "10s";
         ExecStart = networkDiscoveryScript;
-        
+
         # Environment
         Environment = [
           "EXO_CONFIG_DIR=${exoCfg.configDir}"
           "EXO_DATA_DIR=${exoCfg.dataDir}"
         ];
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1881,7 +1882,7 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         RemoveIPC = true;
-        
+
         # Network access
         RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
       };
@@ -1901,13 +1902,13 @@ in {
         Restart = "always";
         RestartSec = "15s";
         ExecStart = topologyManagementScript;
-        
+
         # Environment
         Environment = [
           "EXO_CONFIG_DIR=${exoCfg.configDir}"
           "EXO_DATA_DIR=${exoCfg.dataDir}"
         ];
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -1922,7 +1923,7 @@ in {
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         RemoveIPC = true;
-        
+
         # Network access
         RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
       };
@@ -2055,7 +2056,7 @@ in {
           
           echo "EXO firewall rules configured successfully" >&2
         '';
-        
+
         ExecStop = pkgs.writeShellScript "exo-firewall-cleanup" ''
           #!/bin/bash
           # Cleanup EXO firewall rules
@@ -2139,7 +2140,7 @@ in {
           
           echo "EXO network namespace configured successfully" >&2
         '';
-        
+
         ExecStop = pkgs.writeShellScript "exo-namespace-cleanup" ''
           #!/bin/bash
           # Cleanup EXO network namespace
@@ -2182,7 +2183,7 @@ in {
         Group = exoCfg.group;
         Restart = "always";
         RestartSec = "30s";
-        
+
         ExecStart = pkgs.writeShellScript "exo-security-monitor" ''
           #!/bin/bash
           # EXO Security Monitoring
@@ -2235,7 +2236,7 @@ in {
             sleep 60
           done
         '';
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -2256,9 +2257,9 @@ in {
     # Load required kernel modules for networking, security, RDMA, and optimization
     boot.kernelModules = mkMerge [
       (mkIf cfg.security.firewall.enable [
-        "xt_hashlimit"  # For rate limiting
-        "xt_conntrack"  # For connection tracking
-        "xt_multiport"  # For multiple port matching
+        "xt_hashlimit" # For rate limiting
+        "xt_conntrack" # For connection tracking
+        "xt_multiport" # For multiple port matching
       ])
       (mkIf cfg.rdma.enable [
         "rdma_core"
@@ -2269,8 +2270,8 @@ in {
         "iw_cm"
       ])
       (mkIf cfg.optimization.enableTcpOptimization [
-        "tcp_bbr"  # BBR congestion control
-        "tcp_cubic"  # CUBIC congestion control
+        "tcp_bbr" # BBR congestion control
+        "tcp_cubic" # CUBIC congestion control
       ])
     ];
 
@@ -2306,7 +2307,7 @@ in {
         Group = exoCfg.group;
         ExecStart = k3sIntegrationScript;
         ExecReload = k3sIntegrationScript;
-        
+
         # Security settings
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -2329,21 +2330,25 @@ in {
     boot.kernel.sysctl = mkMerge [
       (mkIf cfg.optimization.enableTcpOptimization {
         # TCP buffer sizes
-        "net.core.rmem_max" = mkIf (cfg.optimization.bufferSizes.receive != null) 
-          (let size = cfg.optimization.bufferSizes.receive; in
-           if hasSuffix "M" size then toString (toInt (removeSuffix "M" size) * 1024 * 1024)
-           else if hasSuffix "K" size then toString (toInt (removeSuffix "K" size) * 1024)
-           else size);
-        
+        "net.core.rmem_max" = mkIf (cfg.optimization.bufferSizes.receive != null)
+          (
+            let size = cfg.optimization.bufferSizes.receive; in
+            if hasSuffix "M" size then toString (toInt (removeSuffix "M" size) * 1024 * 1024)
+            else if hasSuffix "K" size then toString (toInt (removeSuffix "K" size) * 1024)
+            else size
+          );
+
         "net.core.wmem_max" = mkIf (cfg.optimization.bufferSizes.send != null)
-          (let size = cfg.optimization.bufferSizes.send; in
-           if hasSuffix "M" size then toString (toInt (removeSuffix "M" size) * 1024 * 1024)
-           else if hasSuffix "K" size then toString (toInt (removeSuffix "K" size) * 1024)
-           else size);
-        
+          (
+            let size = cfg.optimization.bufferSizes.send; in
+            if hasSuffix "M" size then toString (toInt (removeSuffix "M" size) * 1024 * 1024)
+            else if hasSuffix "K" size then toString (toInt (removeSuffix "K" size) * 1024)
+            else size
+          );
+
         # TCP congestion control
         "net.ipv4.tcp_congestion_control" = cfg.optimization.congestionControl;
-        
+
         # Additional TCP optimizations for high-bandwidth networks
         "net.ipv4.tcp_window_scaling" = 1;
         "net.ipv4.tcp_timestamps" = 1;
@@ -2351,12 +2356,12 @@ in {
         "net.ipv4.tcp_fack" = 1;
         "net.ipv4.tcp_low_latency" = 1;
         "net.ipv4.tcp_adv_win_scale" = 2;
-        
+
         # Increase default buffer sizes
         "net.core.netdev_max_backlog" = 5000;
         "net.ipv4.tcp_rmem" = "4096 87380 16777216";
         "net.ipv4.tcp_wmem" = "4096 65536 16777216";
-        
+
         # Optimize for high-throughput
         "net.ipv4.tcp_slow_start_after_idle" = 0;
         "net.ipv4.tcp_mtu_probing" = 1;
@@ -2364,18 +2369,18 @@ in {
       (mkIf cfg.rdma.enable {
         # RDMA memory settings
         "vm.max_map_count" = 262144;
-        "kernel.shmmax" = 68719476736;  # 64GB
-        "kernel.shmall" = 4294967296;   # 16TB
-        
+        "kernel.shmmax" = 68719476736; # 64GB
+        "kernel.shmall" = 4294967296; # 16TB
+
         # Network buffer settings for RDMA
         "net.core.rmem_default" = 262144;
         "net.core.rmem_max" = 16777216;
         "net.core.wmem_default" = 262144;
         "net.core.wmem_max" = 16777216;
-        
+
         # RDMA-specific settings
-        "net.ipv4.tcp_timestamps" = 0;  # Disable for better RDMA performance
-        "net.ipv4.tcp_sack" = 0;        # Disable for better RDMA performance
+        "net.ipv4.tcp_timestamps" = 0; # Disable for better RDMA performance
+        "net.ipv4.tcp_sack" = 0; # Disable for better RDMA performance
       })
     ];
 

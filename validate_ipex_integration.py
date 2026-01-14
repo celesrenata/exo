@@ -53,37 +53,37 @@ def validate_ipex_files():
                 # Try to compile the file
                 compile(content, file_path, "exec")
                 valid_files.append(file_path)
-                print(f"✅ {file_path}")
+                print("✅ {file_path}")
 
             except SyntaxError as e:
                 syntax_errors.append((file_path, str(e)))
-                print(f"❌ {file_path}: Syntax error - {e}")
+                print("❌ {file_path}: Syntax error - {e}")
             except Exception as e:
                 syntax_errors.append((file_path, str(e)))
-                print(f"❌ {file_path}: Error - {e}")
+                print("❌ {file_path}: Error - {e}")
         else:
             # Non-Python files (just check existence)
             valid_files.append(file_path)
-            print(f"✅ {file_path}")
+            print("✅ {file_path}")
 
     # Summary
     print("\n" + "=" * 50)
     print("📊 File Validation Summary")
     print("=" * 50)
-    print(f"Total files checked: {len(ipex_files)}")
-    print(f"Valid files: {len(valid_files)}")
-    print(f"Missing files: {len(missing_files)}")
-    print(f"Syntax errors: {len(syntax_errors)}")
+    print("Total files checked: {len(ipex_files)}")
+    print("Valid files: {len(valid_files)}")
+    print("Missing files: {len(missing_files)}")
+    print("Syntax errors: {len(syntax_errors)}")
 
     if missing_files:
         print("\n❌ Missing files:")
         for file_path in missing_files:
-            print(f"  - {file_path}")
+            print("  - {file_path}")
 
     if syntax_errors:
         print("\n❌ Files with syntax errors:")
         for file_path, error in syntax_errors:
-            print(f"  - {file_path}: {error}")
+            print("  - {file_path}: {error}")
 
     return len(missing_files) == 0 and len(syntax_errors) == 0
 
@@ -124,10 +124,10 @@ def validate_model_cards_integration():
         for model in expected_ipex_models:
             if f'"{model}"' in content:
                 found_models.append(model)
-                print(f"✅ Found IPEX model: {model}")
+                print("✅ Found IPEX model: {model}")
             else:
                 missing_models.append(model)
-                print(f"❌ Missing IPEX model: {model}")
+                print("❌ Missing IPEX model: {model}")
 
         # Check for IPEX-related content
         ipex_indicators = ["Intel IPEX", "Intel GPU acceleration", "ipex", "intel"]
@@ -137,18 +137,18 @@ def validate_model_cards_integration():
             if indicator in content:
                 found_indicators.append(indicator)
 
-        print(f"\nFound IPEX indicators: {found_indicators}")
+        print("\nFound IPEX indicators: {found_indicators}")
 
         # Summary
         print("\nModel Cards Integration Summary:")
-        print(f"Expected IPEX models: {len(expected_ipex_models)}")
-        print(f"Found IPEX models: {len(found_models)}")
-        print(f"Missing IPEX models: {len(missing_models)}")
+        print("Expected IPEX models: {len(expected_ipex_models)}")
+        print("Found IPEX models: {len(found_models)}")
+        print("Missing IPEX models: {len(missing_models)}")
 
         return len(missing_models) == 0
 
     except Exception as e:
-        print(f"❌ Error validating model cards: {e}")
+        print("❌ Error validating model cards: {e}")
         return False
 
 
@@ -182,10 +182,10 @@ def validate_engine_utils_integration():
         for indicator in ipex_indicators:
             if indicator in content:
                 found_indicators.append(indicator)
-                print(f"✅ Found IPEX indicator: {indicator}")
+                print("✅ Found IPEX indicator: {indicator}")
             else:
                 missing_indicators.append(indicator)
-                print(f"❌ Missing IPEX indicator: {indicator}")
+                print("❌ Missing IPEX indicator: {indicator}")
 
         # Check for IPEX in engine type
         if '"ipex"' in content:
@@ -194,12 +194,12 @@ def validate_engine_utils_integration():
             print("❌ IPEX engine type not found in EngineType")
 
         print("\nEngine Utils Integration Summary:")
-        print(f"Found indicators: {len(found_indicators)}/{len(ipex_indicators)}")
+        print("Found indicators: {len(found_indicators)}/{len(ipex_indicators)}")
 
         return len(missing_indicators) == 0
 
     except Exception as e:
-        print(f"❌ Error validating engine utils: {e}")
+        print("❌ Error validating engine utils: {e}")
         return False
 
 
@@ -235,15 +235,15 @@ def validate_test_structure():
         file_path = test_dir / test_file
         if file_path.exists():
             found_files.append(test_file)
-            print(f"✅ Found test file: {test_file}")
+            print("✅ Found test file: {test_file}")
         else:
             missing_files.append(test_file)
-            print(f"❌ Missing test file: {test_file}")
+            print("❌ Missing test file: {test_file}")
 
     print("\nTest Structure Summary:")
-    print(f"Expected files: {len(expected_test_files)}")
-    print(f"Found files: {len(found_files)}")
-    print(f"Missing files: {len(missing_files)}")
+    print("Expected files: {len(expected_test_files)}")
+    print("Found files: {len(found_files)}")
+    print("Missing files: {len(missing_files)}")
 
     return len(missing_files) == 0
 
@@ -253,8 +253,8 @@ def main():
 
     print("🚀 IPEX Integration Validation")
     print("=" * 60)
-    print(f"Python version: {sys.version}")
-    print(f"Working directory: {Path.cwd()}")
+    print("Python version: {sys.version}")
+    print("Working directory: {Path.cwd()}")
     print("=" * 60)
 
     # Run validation checks
@@ -271,7 +271,7 @@ def main():
         try:
             results[check_name] = check_func()
         except Exception as e:
-            print(f"❌ {check_name} failed with exception: {e}")
+            print("❌ {check_name} failed with exception: {e}")
             results[check_name] = False
 
     # Final summary
@@ -284,9 +284,9 @@ def main():
 
     for check_name, result in results.items():
         status = "✅ PASSED" if result else "❌ FAILED"
-        print(f"{check_name}: {status}")
+        print("{check_name}: {status}")
 
-    print(f"\nOverall: {passed}/{total} checks passed")
+    print("\nOverall: {passed}/{total} checks passed")
 
     if passed == total:
         print("\n🎉 All IPEX integration validation checks passed!")
@@ -299,7 +299,7 @@ def main():
         print("\n🚀 The Intel IPEX engine is ready for use!")
         return True
     else:
-        print(f"\n⚠️  {total - passed} validation checks failed")
+        print("\n⚠️  {total - passed} validation checks failed")
         return False
 
 
