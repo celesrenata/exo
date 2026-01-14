@@ -41,6 +41,93 @@
         inputs.treefmt-nix.flakeModule
       ];
 
+      flake.nixosModules.default = { config, lib, pkgs, ... }:
+        with lib;
+        let
+          cfg = config.services.exo;
+        in
+        {
+          options.services.exo = {
+            enable = mkEnableOption "EXO distributed AI inference system";
+
+            package = mkOption {
+              type = types.package;
+              description = "EXO package to use (must be provided by user)";
+            };
+
+            port = mkOption {
+              type = types.port;
+              default = 52415;
+              description = "Port for EXO dashboard and API";
+            };
+
+            openFirewall = mkOption {
+              type = types.bool;
+              default = false;
+              description = "Open firewall for EXO communication";
+            };
+
+            user = mkOption {
+              type = types.str;
+              default = "exo";
+              description = "User to run EXO services";
+            };
+
+            group = mkOption {
+              type = types.str;
+              default = "exo";
+              description = "Group to run EXO services";
+            };
+          };
+
+          config = mkIf cfg.enable {
+            users.users.${cfg.user} = {
+              isSystemUser = true;
+              group = cfg.group;
+              description = "EXO system user";
+            };
+
+            users.groups.${cfg.group} = { };
+
+            systemd.services.exo = {
+              description = "EXO distributed AI inference system";
+              after = [ "network.target" ];
+              wantedBy = [ "multi-user.target" ];
+
+              serviceConfig = {
+                Type = "simple";
+                User = cfg.user;
+                Group = cfg.group;
+                ExecStart = "${cfg.package}/bin/exo --verbose";
+                Restart = "always";
+                RestartSec = "10";
+
+                NoNewPrivileges = true;
+                PrivateTmp = true;
+                ProtectSystem = "strict";
+                ProtectHome = true;
+                ReadWritePaths = [ "/var/lib/exo" "/var/log/exo" "/var/cache/exo" ];
+
+                WorkingDirectory = "/var/lib/exo";
+                CacheDirectory = "exo";
+                LogsDirectory = "exo";
+                StateDirectory = "exo";
+              };
+
+              environment = {
+                EXO_PORT = toString cfg.port;
+                XDG_CACHE_HOME = "/var/cache/exo";
+                XDG_DATA_HOME = "/var/lib/exo";
+                HOME = "/var/lib/exo";
+              };
+            };
+
+            networking.firewall = mkIf cfg.openFirewall {
+              allowedTCPPorts = [ cfg.port ];
+            };
+          };
+        };
+
       perSystem =
         { config, inputs', pkgs, lib, system, ... }:
         let
