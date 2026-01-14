@@ -45,6 +45,61 @@
         let
           pkgs = import inputs.nixpkgs { inherit system; };
           python = pkgs.python313;
+          fenixToolchain = inputs.fenix.packages.${system}.latest;
+
+          # Build Rust bindings
+          rustBindings =
+            let
+              rustPlatform = pkgs.makeRustPlatform {
+                cargo = fenixToolchain.cargo;
+                rustc = fenixToolchain.rustc;
+              };
+            in
+            rustPlatform.buildRustPackage {
+              pname = "exo-pyo3-bindings";
+              version = "0.1.0";
+              src = inputs.self;
+
+              cargoLock = {
+                lockFile = inputs.self + "/Cargo.lock";
+                allowBuiltinFetchGit = true;
+              };
+
+              cargoBuildFlags = [ "--package" "exo_pyo3_bindings" ];
+              doCheck = false;
+
+              nativeBuildInputs = with pkgs; [
+                python
+                maturin
+                pkg-config
+              ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ openssl.dev ];
+
+              buildInputs = with pkgs; [ python openssl ];
+
+              buildPhase = ''
+                cd rust/exo_pyo3_bindings
+                export PYO3_CROSS_LIB_DIR=${python}/lib
+                maturin build --release --out ./dist
+              '';
+
+              installPhase = ''
+                mkdir -p $out
+                find . -name "*.whl" -type f -exec cp {} $out/ \;
+              '';
+            };
+
+          # Build dashboard
+          dashboard = pkgs.buildNpmPackage {
+            pname = "exo-dashboard";
+            version = "0.1.0";
+            src = inputs.self + "/dashboard";
+            npmDepsHash = "sha256-koqsTfxfqJjo3Yq7x61q3duJ9Xtor/yOZcTjfBadZUs=";
+            buildPhase = "npm run build";
+            installPhase = ''
+              mkdir -p $out
+              cp -r build/* $out/
+            '';
+          };
         in
         {
           default = python.pkgs.buildPythonApplication {
@@ -56,11 +111,14 @@
             postPatch = ''
               sed -i 's/requires = \["uv_build.*"\]/requires = ["setuptools>=61.0", "wheel"]/' pyproject.toml
               sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
+              sed -i 's/exo-master = "exo.master.main:main"/exo-master = "exo.main:main"/' pyproject.toml
+              sed -i 's/exo-worker = "exo.worker.main:main"/exo-worker = "exo.main:main"/' pyproject.toml
             '';
 
             nativeBuildInputs = with pkgs; [
               python.pkgs.setuptools
               python.pkgs.wheel
+              python.pkgs.pip
             ];
 
             propagatedBuildInputs = with python.pkgs; [
@@ -89,6 +147,17 @@
               tiktoken
               hypercorn
             ];
+
+            preBuild = ''
+              export WHEEL_DIR=$(mktemp -d)
+              cp ${rustBindings}/*.whl $WHEEL_DIR/
+              pip install --no-index --find-links=$WHEEL_DIR exo-pyo3-bindings
+            '';
+
+            postInstall = ''
+              mkdir -p $out/share/exo/dashboard
+              cp -r ${dashboard}/* $out/share/exo/dashboard/
+            '';
 
             dontCheckRuntimeDeps = true;
             pythonImportsCheck = [ "exo" ];
