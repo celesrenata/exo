@@ -53,6 +53,11 @@
             format = "pyproject";
             src = inputs.self;
 
+            postPatch = ''
+              sed -i 's/requires = \["uv_build.*"\]/requires = ["setuptools>=61.0", "wheel"]/' pyproject.toml
+              sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
+            '';
+
             nativeBuildInputs = with pkgs; [
               python.pkgs.setuptools
               python.pkgs.wheel
