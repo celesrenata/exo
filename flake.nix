@@ -149,6 +149,10 @@
                   inherit version;
                   hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
                 };
+                # Patch the failing test - CapacityLimiter now allows 0 in Python 3.13
+                postPatch = (old.postPatch or "") + ''
+                  sed -i '/def test_bad_init_value/,/pytest.raises.*CapacityLimiter.*0/d' tests/test_synchronization.py
+                '';
               }))
               bidict
               tiktoken
