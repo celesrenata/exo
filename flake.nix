@@ -148,13 +148,11 @@
               hypercorn
             ];
 
-            preBuild = ''
-              export WHEEL_DIR=$(mktemp -d)
-              cp ${rustBindings}/*.whl $WHEEL_DIR/
-              pip install --no-index --find-links=$WHEEL_DIR exo-pyo3-bindings
-            '';
-
             postInstall = ''
+              # Install Rust bindings wheel
+              ${python.pkgs.pip}/bin/pip install --no-index --no-deps --prefix=$out ${rustBindings}/*.whl
+              
+              # Install dashboard
               mkdir -p $out/share/exo/dashboard
               cp -r ${dashboard}/* $out/share/exo/dashboard/
             '';
