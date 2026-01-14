@@ -278,6 +278,7 @@
                 XDG_CACHE_HOME = "/var/cache/exo";
                 XDG_DATA_HOME = "/var/lib/exo";
                 HOME = "/var/lib/exo";
+                DASHBOARD_DIR = "${cfg.package}/share/exo/dashboard";
               };
             };
 
