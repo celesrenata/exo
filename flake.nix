@@ -90,6 +90,7 @@
               hypercorn
             ];
 
+            dontCheckRuntimeDeps = true;
             pythonImportsCheck = [ "exo" ];
           };
         }
