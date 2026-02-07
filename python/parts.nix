@@ -29,8 +29,10 @@
 
       # Overlay to provide build systems and custom packages
       buildSystemsOverlay = final: prev: {
-        # Use our pure Nix-built MLX with Metal support
+        # Use our pure Nix-built MLX with Metal support (macOS only)
+      } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
         mlx = self'.packages.mlx;
+      } // {
 
         # mlx-lm is a git dependency that needs setuptools
         mlx-lm = prev.mlx-lm.overrideAttrs (old: {
