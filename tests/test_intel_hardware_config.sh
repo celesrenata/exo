@@ -140,6 +140,91 @@ else
 fi
 echo ""
 
+# Test 11: Check tinygrad environment variables
+echo "Test 11: Checking tinygrad environment variables..."
+ENV_VARS_OK=true
+if [ -n "$EXO_TINYGRAD_ENABLED" ]; then
+  pass "EXO_TINYGRAD_ENABLED is set to: $EXO_TINYGRAD_ENABLED"
+else
+  warn "EXO_TINYGRAD_ENABLED not set"
+  ENV_VARS_OK=false
+fi
+
+if [ -n "$TINYGRAD_BACKEND" ]; then
+  pass "TINYGRAD_BACKEND is set to: $TINYGRAD_BACKEND"
+else
+  warn "TINYGRAD_BACKEND not set"
+  ENV_VARS_OK=false
+fi
+
+if [ -n "$TINYGRAD_INTEL_RUNTIME" ]; then
+  pass "TINYGRAD_INTEL_RUNTIME is set to: $TINYGRAD_INTEL_RUNTIME"
+else
+  warn "TINYGRAD_INTEL_RUNTIME not set (will auto-detect)"
+fi
+echo ""
+
+# Test 12: Check OpenCL ICD configuration
+echo "Test 12: Checking OpenCL ICD configuration..."
+if [ -f "/etc/OpenCL/vendors/intel.icd" ]; then
+  ICD_PATH=$(cat /etc/OpenCL/vendors/intel.icd)
+  pass "Intel OpenCL ICD configured: $ICD_PATH"
+  if [ -f "$ICD_PATH" ]; then
+    pass "ICD library exists at configured path"
+  else
+    fail "ICD library not found at: $ICD_PATH"
+  fi
+else
+  warn "Intel OpenCL ICD not configured at /etc/OpenCL/vendors/intel.icd"
+fi
+echo ""
+
+# Test 13: Check kernel modules
+echo "Test 13: Checking Intel GPU kernel module..."
+if lsmod | grep -q "^i915"; then
+  pass "i915 kernel module loaded"
+else
+  fail "i915 kernel module not loaded"
+fi
+echo ""
+
+# Test 14: Check DRI device permissions
+echo "Test 14: Checking DRI device permissions..."
+if [ -e "/dev/dri/renderD128" ]; then
+  PERMS=$(stat -c "%a" /dev/dri/renderD128)
+  if [ "$PERMS" = "666" ] || [ "$PERMS" = "660" ]; then
+    pass "DRI render device has correct permissions: $PERMS"
+  else
+    warn "DRI render device permissions may be restrictive: $PERMS"
+  fi
+else
+  warn "DRI render device not found"
+fi
+echo ""
+
+# Test 15: Test tinygrad device detection
+echo "Test 15: Testing tinygrad device detection..."
+if python3 -c "import tinygrad" 2>/dev/null; then
+  DEVICE_TEST=$(python3 -c "
+import os
+os.environ.setdefault('TINYGRAD_BACKEND', 'GPU')
+try:
+    from tinygrad import Device
+    print(f'Device: {Device.DEFAULT}')
+except Exception as e:
+    print(f'Error: {e}')
+" 2>&1)
+  
+  if echo "$DEVICE_TEST" | grep -q "Device:"; then
+    pass "Tinygrad device detection: $DEVICE_TEST"
+  else
+    warn "Tinygrad device detection issue: $DEVICE_TEST"
+  fi
+else
+  warn "Cannot test tinygrad device detection (tinygrad not available)"
+fi
+echo ""
+
 # Summary
 echo "=== Test Summary ==="
 echo -e "Tests passed: ${GREEN}$TESTS_PASSED${NC}"

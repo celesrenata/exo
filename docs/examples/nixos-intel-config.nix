@@ -30,16 +30,27 @@
             # Enable the Intel hardware support module
             enable = true;
 
+            # Tinygrad backend configuration
+            tinygrad = {
+              # Enable tinygrad backend (enabled by default)
+              enable = true;
+
+              # Backend selection:
+              # - "GPU": Use GPU acceleration (default)
+              # - "CPU": Use CPU-only execution
+              backend = "GPU";
+            };
+
             # Intel Arc iGPU configuration
             arc = {
-              # Enable Intel Arc iGPU support
+              # Enable Intel Arc iGPU support (enabled by default when intel.enable = true)
               enable = true;
 
               # Runtime selection:
               # - "level-zero": Use Level Zero API (recommended for best performance)
               # - "opencl": Use OpenCL API (fallback option)
-              # - "auto": Automatically select best available runtime
-              runtime = "level-zero";
+              # - "auto": Automatically select best available runtime (default)
+              runtime = "auto";
             };
 
             # Intel NPU configuration (experimental)
@@ -61,11 +72,11 @@
             enable32Bit = true; # Enable 32-bit graphics support if needed
           };
 
-          # Optional: Add monitoring tools
-          environment.systemPackages = with nixpkgs.legacyPackages.x86_64-linux; [
-            intel-gpu-tools # For intel_gpu_top
-            clinfo # For OpenCL device information
-          ];
+          # Optional: Add monitoring tools (already included when arc.enable = true)
+          # environment.systemPackages = with nixpkgs.legacyPackages.x86_64-linux; [
+          #   intel-gpu-tools # For intel_gpu_top
+          #   clinfo # For OpenCL device information
+          # ];
 
           # Optional: Enable OpenGL/Vulkan debugging
           # environment.variables = {

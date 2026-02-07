@@ -77,8 +77,21 @@
           options.services.exo.intel = {
             enable = lib.mkEnableOption "Intel hardware acceleration for exo";
 
+            tinygrad = {
+              enable = lib.mkEnableOption "tinygrad backend for exo" // {
+                default = true;
+              };
+              backend = lib.mkOption {
+                type = lib.types.enum [ "GPU" "CPU" ];
+                default = "GPU";
+                description = "Tinygrad backend to use (GPU or CPU)";
+              };
+            };
+
             arc = {
-              enable = lib.mkEnableOption "Intel Arc iGPU support";
+              enable = lib.mkEnableOption "Intel Arc iGPU support" // {
+                default = true;
+              };
               runtime = lib.mkOption {
                 type = lib.types.enum [ "level-zero" "opencl" "auto" ];
                 default = "auto";
@@ -102,16 +115,107 @@
               python313Packages.tinygrad
               # Add exo package from the flake
               inputs.self.packages.${system}.exo or (throw "exo package not available for ${system}")
+            ] ++ lib.optionals config.services.exo.intel.arc.enable [
+              # Monitoring and debugging tools for Intel Arc
+              intel-gpu-tools # intel_gpu_top for GPU monitoring
+              clinfo # OpenCL device information
             ];
+
+            # Global environment variables for tinygrad backend
+            environment.variables = lib.mkIf config.services.exo.intel.tinygrad.enable {
+              # Enable tinygrad backend
+              EXO_TINYGRAD_ENABLED = "true";
+
+              # Set tinygrad backend (GPU or CPU)
+              TINYGRAD_BACKEND = config.services.exo.intel.tinygrad.backend;
+
+              # Runtime-specific environment variables for Intel Arc
+              TINYGRAD_INTEL_RUNTIME = lib.mkIf config.services.exo.intel.arc.enable (
+                if config.services.exo.intel.arc.runtime == "level-zero" then "LEVEL_ZERO"
+                else if config.services.exo.intel.arc.runtime == "opencl" then "OPENCL"
+                else "AUTO" # Auto-detect best available runtime
+              );
+
+              # Enable tinygrad GPU optimizations
+              TINYGRAD_OPTIMIZE = lib.mkIf (config.services.exo.intel.tinygrad.backend == "GPU") "2";
+
+              # Disable tinygrad JIT cache to avoid permission issues
+              TINYGRAD_DISABLE_CACHE = "1";
+
+              # Level Zero specific environment variables
+              ZE_ENABLE_VALIDATION_LAYER = lib.mkIf
+                (
+                  config.services.exo.intel.arc.enable &&
+                  config.services.exo.intel.arc.runtime != "opencl"
+                ) "0"; # Disable validation layer for performance
+
+              ZE_AFFINITY_MASK = lib.mkIf
+                (
+                  config.services.exo.intel.arc.enable &&
+                  config.services.exo.intel.arc.runtime != "opencl"
+                ) "0"; # Use first GPU device
+
+              # OpenCL specific environment variables
+              OCL_ICD_VENDORS = lib.mkIf
+                (
+                  config.services.exo.intel.arc.enable &&
+                  config.services.exo.intel.arc.runtime != "level-zero"
+                ) "/etc/OpenCL/vendors"; # Point to ICD vendor files
+
+              # Intel GPU compute runtime settings
+              NEOReadDebugKeys = lib.mkIf config.services.exo.intel.arc.enable "1";
+
+              # Disable GPU hang detection for long-running inference
+              i915.enable_hangcheck = lib.mkIf config.services.exo.intel.arc.enable "0";
+            };
 
             # Intel Arc iGPU support
             hardware.graphics = lib.mkIf config.services.exo.intel.arc.enable {
               enable = true;
               extraPackages = with pkgs; [
-                intel-compute-runtime # OpenCL
-                level-zero # Level Zero
+                intel-compute-runtime # OpenCL runtime (provides libOpenCL.so)
+                level-zero # Level Zero runtime and loader
+                intel-media-driver # VA-API driver for Intel GPUs
+                ocl-icd # OpenCL ICD loader (provides libOpenCL.so dispatch)
               ];
             };
+
+            # OpenCL ICD configuration for Intel runtime
+            environment.etc."OpenCL/vendors/intel.icd" = lib.mkIf config.services.exo.intel.arc.enable {
+              text = "${pkgs.intel-compute-runtime}/lib/intel-opencl/libigdrcl.so";
+            };
+
+            # Udev rules for Intel Arc GPU and NPU device access
+            services.udev.extraRules =
+              (lib.optionalString config.services.exo.intel.arc.enable ''
+                # Intel GPU render nodes - allow access for compute workloads
+                SUBSYSTEM=="drm", KERNEL=="renderD*", ATTRS{vendor}=="0x8086", MODE="0666"
+                
+                # Intel GPU card nodes - for display and compute
+                SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ATTRS{vendor}=="0x8086", MODE="0666"
+              '')
+              +
+              (lib.optionalString config.services.exo.intel.npu.enable ''
+                # Intel NPU device permissions
+                SUBSYSTEM=="accel", KERNEL=="accel[0-9]*", GROUP="exo", MODE="0660"
+                SUBSYSTEM=="drm", KERNEL=="renderD*", ATTRS{vendor}=="0x8086", GROUP="exo", MODE="0660"
+              '');
+
+            # Kernel modules for Intel Arc GPU and NPU
+            boot.kernelModules =
+              (lib.optionals config.services.exo.intel.arc.enable [
+                "i915" # Intel GPU driver
+              ])
+              ++
+              (lib.optionals config.services.exo.intel.npu.enable [
+                "intel_vpu" # Intel NPU driver
+              ]);
+
+            # Kernel parameters for Intel GPU
+            boot.kernelParams = lib.mkIf config.services.exo.intel.arc.enable [
+              "i915.force_probe=*" # Force probe all Intel GPUs
+              "i915.enable_guc=3" # Enable GuC and HuC firmware loading
+            ];
 
             # Intel NPU support
             systemd.services.exo-npu = lib.mkIf config.services.exo.intel.npu.enable {
@@ -167,18 +271,6 @@
               };
             };
 
-            # Kernel modules for NPU
-            boot.kernelModules = lib.mkIf config.services.exo.intel.npu.enable [
-              "intel_vpu" # Intel NPU driver
-            ];
-
-            # Ensure NPU device permissions
-            services.udev.extraRules = lib.mkIf config.services.exo.intel.npu.enable ''
-              # Intel NPU device permissions
-              SUBSYSTEM=="accel", KERNEL=="accel[0-9]*", GROUP="exo", MODE="0660"
-              SUBSYSTEM=="drm", KERNEL=="renderD*", ATTRS{vendor}=="0x8086", GROUP="exo", MODE="0660"
-            '';
-
             # Create exo user if NPU service is enabled
             users.users.exo = lib.mkIf config.services.exo.intel.npu.enable {
               isSystemUser = true;
@@ -196,7 +288,7 @@
           fenixToolchain = inputs'.fenix.packages.complete;
           # Use pinned nixpkgs for swift-format (swift is broken on x86_64-linux in newer nixpkgs)
           pkgsSwift = import inputs.nixpkgs-swift { inherit system; };
-          
+
           # Create a separate pkgs instance for exo with anyio overlay
           # This avoids polluting the global pkgs
           pkgsExo = import inputs.nixpkgs {
@@ -213,7 +305,7 @@
                         inherit version;
                         hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
                       };
-                      doCheck = false;  # Skip failing test
+                      doCheck = false; # Skip failing test
                       postPatch = (old.postPatch or "") + ''
                         sed -i '/def test_bad_init_value/,/pytest.raises.*CapacityLimiter.*0/d' tests/test_synchronization.py
                       '';
@@ -230,7 +322,7 @@
             inherit system;
             config.allowUnfreePredicate = pkg: (pkg.pname or "") == "metal-toolchain";
           };
-          
+
           # Make pkgsExo available to other modules
           _module.args.pkgsExo = pkgsExo;
           treefmt = {
