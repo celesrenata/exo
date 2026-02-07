@@ -161,7 +161,15 @@
               huggingface-hub
               psutil
               loguru
-              anyio
+              # Pin anyio to 4.11.0 (required by exo)
+              (anyio.overridePythonAttrs (old: rec {
+                version = "4.11.0";
+                src = pkgs.fetchPypi {
+                  pname = "anyio";
+                  inherit version;
+                  hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
+                };
+              }))
               tiktoken
               hypercorn
               httpx
