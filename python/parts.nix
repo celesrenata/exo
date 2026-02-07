@@ -149,7 +149,7 @@
               sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
             '';
             
-            nativeBuildInputs = [ python.pkgs.setuptools python.pkgs.wheel pkgs.makeWrapper ];
+            nativeBuildInputs = [ python.pkgs.setuptools python.pkgs.wheel python.pkgs.pip pkgs.makeWrapper ];
             
             propagatedBuildInputs = with python.pkgs; [
               aiofiles
