@@ -29,17 +29,26 @@
 
       # Overlay to provide build systems and custom packages
       buildSystemsOverlay = final: prev: {
-        # Use our pure Nix-built MLX with Metal support (macOS only)
+        # Stub out MLX on Linux (not available)
+      } // lib.optionalAttrs pkgs.stdenv.isLinux {
+        mlx = pkgs.runCommand "mlx-stub" {} ''
+          mkdir -p $out/lib/python3.13/site-packages
+          touch $out/lib/python3.13/site-packages/mlx.py
+        '';
+        mlx-lm = pkgs.runCommand "mlx-lm-stub" {} ''
+          mkdir -p $out/lib/python3.13/site-packages
+          touch $out/lib/python3.13/site-packages/mlx_lm.py
+        '';
       } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+        # Use our pure Nix-built MLX with Metal support (macOS only)
         mlx = self'.packages.mlx;
-      } // {
-
-        # mlx-lm is a git dependency that needs setuptools
+        # mlx-lm is a git dependency that needs setuptools (macOS only)
         mlx-lm = prev.mlx-lm.overrideAttrs (old: {
           nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
             final.setuptools
           ];
         });
+      } // {
 
         # tinygrad with Intel backend support
         tinygrad = prev.tinygrad.overrideAttrs (old: {
