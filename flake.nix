@@ -100,7 +100,9 @@
             };
 
             npu = {
-              enable = lib.mkEnableOption "Intel NPU support (experimental)";
+              enable = lib.mkEnableOption "Intel NPU support (experimental)" // {
+                default = false;
+              };
               servicePort = lib.mkOption {
                 type = lib.types.port;
                 default = 52416;

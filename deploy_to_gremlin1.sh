@@ -76,6 +76,13 @@ create_nixos_config() {
         {
           networking.hostName = "gremlin-1";
           
+          # Boot loader configuration
+          boot.loader.systemd-boot.enable = true;
+          boot.loader.efi.canTouchEfiVariables = true;
+          
+          # System state version
+          system.stateVersion = "24.11";
+          
           # Enable Intel hardware support with tinygrad backend
           services.exo.intel = {
             enable = true;
@@ -92,9 +99,9 @@ create_nixos_config() {
               runtime = "auto";  # Auto-detect Level Zero or OpenCL
             };
             
-            # Intel NPU configuration (experimental)
+            # Intel NPU configuration (experimental - disabled by default)
             npu = {
-              enable = true;
+              enable = false;  # Disabled until NPU service is fully implemented
               servicePort = 52416;
             };
           };
