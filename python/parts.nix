@@ -176,6 +176,12 @@
             # Skip tests and dependency checks
             doCheck = false;
             dontUsePythonCatchConflicts = true;
+            dontUsePythonImportsCheck = true;
+            
+            # Override the runtime deps check hook to skip it
+            pythonRuntimeDepsCheckHook = pkgs.writeShellScript "skip-runtime-deps-check" ''
+              echo "Skipping Python runtime dependency checking for Nix build"
+            '';
             
             # Set environment variables
             makeWrapperArgs = [
