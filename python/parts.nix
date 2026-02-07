@@ -143,7 +143,13 @@
             format = "pyproject";
             src = inputs.self;
             
-            nativeBuildInputs = [ python.pkgs.setuptools ];
+            # Patch pyproject.toml to use setuptools instead of uv_build
+            postPatch = ''
+              sed -i 's/requires = \["uv_build.*"\]/requires = ["setuptools>=61.0", "wheel"]/' pyproject.toml
+              sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
+            '';
+            
+            nativeBuildInputs = [ python.pkgs.setuptools python.pkgs.wheel ];
             
             propagatedBuildInputs = with python.pkgs; [
               aiofiles
