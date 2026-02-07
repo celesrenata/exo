@@ -149,7 +149,7 @@
               sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
             '';
             
-            nativeBuildInputs = [ python.pkgs.setuptools python.pkgs.wheel ];
+            nativeBuildInputs = [ python.pkgs.setuptools python.pkgs.wheel pkgs.makeWrapper ];
             
             propagatedBuildInputs = with python.pkgs; [
               aiofiles
@@ -172,6 +172,23 @@
               tinygrad
               numpy
             ];
+            
+            # Install Rust bindings during build
+            preBuild = ''
+              echo "Installing Rust bindings..."
+              export TEMP_INSTALL_DIR=$TMPDIR/temp-python-install
+              mkdir -p $TEMP_INSTALL_DIR
+              
+              for wheel in ${self'.packages.exo_pyo3_bindings}/*.whl; do
+                if [ -f "$wheel" ]; then
+                  echo "Installing wheel: $wheel"
+                  python -m pip install --no-deps --no-build-isolation --target $TEMP_INSTALL_DIR "$wheel"
+                  export PYTHONPATH="$TEMP_INSTALL_DIR:$PYTHONPATH"
+                  echo "Added to PYTHONPATH: $TEMP_INSTALL_DIR"
+                  break
+                fi
+              done
+            '';
             
             # Skip tests and dependency checks
             doCheck = false;
