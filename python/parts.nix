@@ -121,13 +121,12 @@
         '';
     in
     {
-      # Python package only available on macOS (requires MLX/Metal)
-      packages = lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin
-        {
-          exo = exoPackage;
-          # Test environment for running pytest outside of Nix sandbox (needs GPU access)
-          exo-test-env = testVenv;
-        } // {
+      # Python packages
+      packages = {
+        # exo is available on all platforms (macOS with MLX, Linux with tinygrad)
+        exo = exoPackage;
+        # Test environment for running pytest outside of Nix sandbox (needs GPU access)
+        exo-test-env = testVenv;
         exo-bench = mkBenchScript "exo-bench" (inputs.self + /bench/exo_bench.py);
         exo-get-all-models-on-cluster = mkSimplePythonScript "exo-get-all-models-on-cluster" (inputs.self + /tests/get_all_models_on_cluster.py);
       };
