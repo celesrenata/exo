@@ -204,6 +204,7 @@
             # Set environment variables
             makeWrapperArgs = [
               "--set EXO_TINYGRAD_ENABLED true"
+              "--set EXO_RESOURCES_DIR ${inputs.self}/resources"
             ];
           }
         else
