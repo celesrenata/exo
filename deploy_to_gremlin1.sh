@@ -83,6 +83,20 @@ create_nixos_config() {
           # System state version
           system.stateVersion = "24.11";
           
+          # Enable SSH
+          services.openssh = {
+            enable = true;
+            settings = {
+              PermitRootLogin = "yes";
+              PasswordAuthentication = false;
+            };
+          };
+          
+          # Networking
+          networking.useDHCP = lib.mkDefault true;
+          networking.firewall.enable = true;
+          networking.firewall.allowedTCPPorts = [ 22 52415 52416 ];  # SSH, exo API, NPU service
+          
           # Enable Intel hardware support with tinygrad backend
           services.exo.intel = {
             enable = true;
