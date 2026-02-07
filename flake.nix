@@ -196,15 +196,13 @@
           fenixToolchain = inputs'.fenix.packages.complete;
           # Use pinned nixpkgs for swift-format (swift is broken on x86_64-linux in newer nixpkgs)
           pkgsSwift = import inputs.nixpkgs-swift { inherit system; };
-        in
-        {
-          # Allow unfree for metal-toolchain (needed for Darwin Metal packages)
-          # Apply anyio overlay to pin version to 4.11.0
-          _module.args.pkgs = import inputs.nixpkgs {
+          
+          # Create a separate pkgs instance for exo with anyio overlay
+          # This avoids polluting the global pkgs
+          pkgsExo = import inputs.nixpkgs {
             inherit system;
-            config.allowUnfreePredicate = pkg: (pkg.pname or "") == "metal-toolchain";
             overlays = [
-              # Overlay to pin anyio to 4.11.0 globally (required by exo)
+              # Overlay to pin anyio to 4.11.0 (required by exo)
               (final: prev: {
                 python313 = prev.python313.override {
                   packageOverrides = pself: psuper: {
@@ -225,6 +223,16 @@
               })
             ];
           };
+        in
+        {
+          # Allow unfree for metal-toolchain (needed for Darwin Metal packages)
+          _module.args.pkgs = import inputs.nixpkgs {
+            inherit system;
+            config.allowUnfreePredicate = pkg: (pkg.pname or "") == "metal-toolchain";
+          };
+          
+          # Make pkgsExo available to other modules
+          _module.args.pkgsExo = pkgsExo;
           treefmt = {
             projectRootFile = "flake.nix";
             programs = {

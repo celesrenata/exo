@@ -1,7 +1,7 @@
 { inputs, ... }:
 {
   perSystem =
-    { config, self', pkgs, lib, system, ... }:
+    { config, self', pkgs, pkgsExo, lib, system, ... }:
     let
       # Load workspace from uv.lock
       workspace = inputs.uv2nix.lib.workspace.loadWorkspace {
@@ -137,7 +137,8 @@
         # exo package - use different build methods per platform
         exo = if pkgs.stdenv.isLinux then
           # On Linux: use buildPythonApplication with explicit deps (like main branch)
-          python.pkgs.buildPythonApplication {
+          # Use pkgsExo which has anyio pinned to 4.11.0
+          pkgsExo.python313.pkgs.buildPythonApplication {
             pname = "exo";
             version = "0.3.0";
             format = "pyproject";
@@ -149,9 +150,9 @@
               sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
             '';
             
-            nativeBuildInputs = [ python.pkgs.setuptools python.pkgs.wheel python.pkgs.pip pkgs.makeWrapper ];
+            nativeBuildInputs = [ pkgsExo.python313.pkgs.setuptools pkgsExo.python313.pkgs.wheel pkgsExo.python313.pkgs.pip pkgs.makeWrapper ];
             
-            propagatedBuildInputs = with python.pkgs; [
+            propagatedBuildInputs = with pkgsExo.python313.pkgs; [
               aiofiles
               aiohttp
               pydantic
