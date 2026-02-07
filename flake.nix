@@ -164,9 +164,6 @@
 
               # Intel GPU compute runtime settings
               NEOReadDebugKeys = lib.mkIf config.services.exo.intel.arc.enable "1";
-
-              # Disable GPU hang detection for long-running inference
-              i915.enable_hangcheck = lib.mkIf config.services.exo.intel.arc.enable "0";
             };
 
             # Intel Arc iGPU support
