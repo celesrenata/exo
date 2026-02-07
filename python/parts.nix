@@ -166,6 +166,7 @@
               hypercorn
               httpx
               toml
+              tomlkit
               pillow
               safetensors
               transformers
