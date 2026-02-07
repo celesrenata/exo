@@ -137,6 +137,20 @@
         # exo package - use different build methods per platform
         exo = if pkgs.stdenv.isLinux then
           # On Linux: use buildPythonApplication with explicit deps (like main branch)
+          let
+            # Build dashboard
+            dashboard = pkgs.buildNpmPackage {
+              pname = "exo-dashboard";
+              version = "0.3.0";
+              src = inputs.self + /dashboard;
+              npmDepsHash = "sha256-koqsTfxfqJjo3Yq7x61q3duJ9Xtor/yOZcTjfBadZUs=";
+              buildPhase = "npm run build";
+              installPhase = ''
+                mkdir -p $out
+                cp -r build/* $out/
+              '';
+            };
+          in
           python.pkgs.buildPythonApplication {
             pname = "exo";
             version = "0.3.0";
@@ -205,6 +219,7 @@
             makeWrapperArgs = [
               "--set EXO_TINYGRAD_ENABLED true"
               "--set EXO_RESOURCES_DIR ${inputs.self}/resources"
+              "--set EXO_DASHBOARD_DIR ${dashboard}"
             ];
           }
         else
