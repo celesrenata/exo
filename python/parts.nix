@@ -173,6 +173,7 @@
               transformers
               tinygrad
               numpy
+              python-multipart
             ];
             
             # Install Rust bindings after main package
