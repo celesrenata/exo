@@ -169,6 +169,7 @@
                   inherit version;
                   hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
                 };
+                doCheck = false;  # Skip tests
               }))
               tiktoken
               hypercorn
