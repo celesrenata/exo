@@ -171,22 +171,23 @@
               transformers
               tinygrad
               numpy
-            ] ++ [
-              # Add Rust bindings as a Python package
-              (python.pkgs.buildPythonPackage {
-                pname = "exo-pyo3-bindings";
-                version = "0.1.0";
-                format = "wheel";
-                src = self'.packages.exo_pyo3_bindings;
-                unpackPhase = ''
-                  cp ${self'.packages.exo_pyo3_bindings}/*.whl .
-                '';
-              })
             ];
             
-            # Install Rust bindings during build (for build-time imports)
+            # Install Rust bindings after main package
+            postInstall = ''
+              echo "Installing Rust bindings..."
+              for wheel in ${self'.packages.exo_pyo3_bindings}/*.whl; do
+                if [ -f "$wheel" ]; then
+                  echo "Extracting wheel: $wheel"
+                  ${python.pkgs.pip}/bin/pip install --no-deps --no-build-isolation --target $out/lib/python3.13/site-packages "$wheel"
+                  break
+                fi
+              done
+            '';
+            
+            # Rust bindings will be installed in postInstall
             preBuild = ''
-              echo "Rust bindings will be available via propagatedBuildInputs"
+              echo "Building exo package..."
             '';
             
             # Skip tests and dependency checks
