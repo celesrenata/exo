@@ -134,8 +134,52 @@
     {
       # Python packages
       packages = {
-        # exo is available on all platforms (macOS with MLX, Linux with tinygrad)
-        exo = exoPackage;
+        # exo package - use different build methods per platform
+        exo = if pkgs.stdenv.isLinux then
+          # On Linux: use buildPythonApplication with explicit deps (like main branch)
+          python.pkgs.buildPythonApplication {
+            pname = "exo";
+            version = "0.3.0";
+            format = "pyproject";
+            src = inputs.self;
+            
+            nativeBuildInputs = [ python.pkgs.setuptools ];
+            
+            propagatedBuildInputs = with python.pkgs; [
+              aiofiles
+              aiohttp
+              pydantic
+              fastapi
+              filelock
+              rustworkx
+              huggingface-hub
+              psutil
+              loguru
+              anyio
+              tiktoken
+              hypercorn
+              httpx
+              toml
+              pillow
+              safetensors
+              transformers
+              tinygrad
+              numpy
+            ];
+            
+            # Skip tests and dependency checks
+            doCheck = false;
+            dontUsePythonCatchConflicts = true;
+            
+            # Set environment variables
+            makeWrapperArgs = [
+              "--set EXO_TINYGRAD_ENABLED true"
+            ];
+          }
+        else
+          # On macOS: use the uv2nix approach with MLX
+          exoPackage;
+          
         # Test environment for running pytest outside of Nix sandbox (needs GPU access)
         exo-test-env = testVenv;
         exo-bench = mkBenchScript "exo-bench" (inputs.self + /bench/exo_bench.py);
