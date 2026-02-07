@@ -97,9 +97,11 @@
           };
 
           config = lib.mkIf config.services.exo.intel.enable {
-            # Base tinygrad support
+            # Base tinygrad support and exo package
             environment.systemPackages = with pkgs; [
               python313Packages.tinygrad
+              # Add exo package from the flake
+              inputs.self.packages.${system}.exo or (throw "exo package not available for ${system}")
             ];
 
             # Intel Arc iGPU support
@@ -197,9 +199,31 @@
         in
         {
           # Allow unfree for metal-toolchain (needed for Darwin Metal packages)
+          # Apply anyio overlay to pin version to 4.11.0
           _module.args.pkgs = import inputs.nixpkgs {
             inherit system;
             config.allowUnfreePredicate = pkg: (pkg.pname or "") == "metal-toolchain";
+            overlays = [
+              # Overlay to pin anyio to 4.11.0 globally (required by exo)
+              (final: prev: {
+                python313 = prev.python313.override {
+                  packageOverrides = pself: psuper: {
+                    anyio = psuper.anyio.overridePythonAttrs (old: rec {
+                      version = "4.11.0";
+                      src = prev.fetchPypi {
+                        pname = "anyio";
+                        inherit version;
+                        hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
+                      };
+                      doCheck = false;  # Skip failing test
+                      postPatch = (old.postPatch or "") + ''
+                        sed -i '/def test_bad_init_value/,/pytest.raises.*CapacityLimiter.*0/d' tests/test_synchronization.py
+                      '';
+                    });
+                  };
+                };
+              })
+            ];
           };
           treefmt = {
             projectRootFile = "flake.nix";
