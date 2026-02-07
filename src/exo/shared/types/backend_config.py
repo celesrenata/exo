@@ -13,16 +13,16 @@ from pydantic import BaseModel, Field
 
 class BackendConfig(BaseModel, frozen=True, strict=True):
     """Configuration for inference backend selection.
-    
+
     This configuration determines which backend to use for inference
     and how to configure it for optimal performance on Intel Arc GPUs.
-    
+
     Attributes:
         backend_name: Name of backend to use ("mlx", "tinygrad", "dummy")
         device: Target device for tinygrad ("GPU", "CPU", "OPENCL", "LEVEL_ZERO")
         runtime: GPU runtime for tinygrad (Intel Arc specific)
         fallback_to_cpu: Whether to fall back to CPU if GPU unavailable
-        
+
     Example:
         >>> # Intel Arc iGPU with Level Zero
         >>> config = BackendConfig(
@@ -31,7 +31,7 @@ class BackendConfig(BaseModel, frozen=True, strict=True):
         ...     runtime="LEVEL_ZERO",
         ...     fallback_to_cpu=True
         ... )
-        
+
         >>> # Intel Arc iGPU with OpenCL fallback
         >>> config = BackendConfig(
         ...     backend_name="tinygrad",

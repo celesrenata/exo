@@ -1,0 +1,72 @@
+# Systemd service file for Intel NPU Inference Service
+# This is a reference implementation - NixOS users should use the flake module instead
+#
+# Installation (manual):
+# 1. Copy this file to /etc/systemd/system/exo-npu.service
+# 2. Create exo user: sudo useradd -r -s /bin/false exo
+# 3. Reload systemd: sudo systemctl daemon-reload
+# 4. Enable service: sudo systemctl enable exo-npu
+# 5. Start service: sudo systemctl start exo-npu
+
+[Unit]
+Description=exo Intel NPU Inference Service
+Documentation=https://github.com/exo-explore/exo
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=exo
+Group=exo
+
+# Command to run
+ExecStart=/usr/bin/python3 -m exo.worker.engines.npu.service --port 52416
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+# Network
+PrivateNetwork=false
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+# File system
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/cache/exo
+
+# Privileges
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Device access - NPU device
+DeviceAllow=/dev/accel/accel0 rw
+DeviceAllow=/dev/dri rw
+DevicePolicy=closed
+
+# Resource limits
+MemoryMax=8G
+MemoryHigh=6G
+CPUQuota=200%
+TasksMax=256
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=exo-npu
+
+# Environment
+Environment="NPU_SERVICE_PORT=52416"
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

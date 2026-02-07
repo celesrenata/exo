@@ -71,6 +71,123 @@
         ./python/parts.nix
       ];
 
+      flake.nixosModules.exo-intel =
+        { config, lib, pkgs, ... }:
+        {
+          options.services.exo.intel = {
+            enable = lib.mkEnableOption "Intel hardware acceleration for exo";
+
+            arc = {
+              enable = lib.mkEnableOption "Intel Arc iGPU support";
+              runtime = lib.mkOption {
+                type = lib.types.enum [ "level-zero" "opencl" "auto" ];
+                default = "auto";
+                description = "GPU runtime to use for Intel Arc (level-zero, opencl, or auto)";
+              };
+            };
+
+            npu = {
+              enable = lib.mkEnableOption "Intel NPU support (experimental)";
+              servicePort = lib.mkOption {
+                type = lib.types.port;
+                default = 52416;
+                description = "Port for NPU inference service";
+              };
+            };
+          };
+
+          config = lib.mkIf config.services.exo.intel.enable {
+            # Base tinygrad support
+            environment.systemPackages = with pkgs; [
+              python313Packages.tinygrad
+            ];
+
+            # Intel Arc iGPU support
+            hardware.graphics = lib.mkIf config.services.exo.intel.arc.enable {
+              enable = true;
+              extraPackages = with pkgs; [
+                intel-compute-runtime # OpenCL
+                level-zero # Level Zero
+              ];
+            };
+
+            # Intel NPU support
+            systemd.services.exo-npu = lib.mkIf config.services.exo.intel.npu.enable {
+              description = "exo Intel NPU Inference Service";
+              wantedBy = [ "multi-user.target" ];
+              after = [ "network.target" ];
+
+              serviceConfig = {
+                Type = "simple";
+                ExecStart = "${pkgs.python313}/bin/python -m exo.worker.engines.npu.service --port ${toString config.services.exo.intel.npu.servicePort}";
+                Restart = "on-failure";
+                RestartSec = "5s";
+                User = "exo";
+                Group = "exo";
+
+                # Service isolation for security
+                PrivateNetwork = false; # Needs localhost access for API
+                ProtectSystem = "strict"; # Read-only system directories
+                ProtectHome = true; # No access to home directories
+                NoNewPrivileges = true; # Cannot escalate privileges
+                PrivateTmp = true; # Private /tmp directory
+                ProtectKernelTunables = true; # Protect /proc/sys
+                ProtectKernelModules = true; # Cannot load kernel modules
+                ProtectControlGroups = true; # Read-only cgroups
+                RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ]; # Only needed address families
+                RestrictNamespaces = true; # Cannot create namespaces
+                LockPersonality = true; # Prevent personality changes
+                RestrictRealtime = true; # No realtime scheduling
+                RestrictSUIDSGID = true; # No SUID/SGID
+                RemoveIPC = true; # Clean up IPC on exit
+
+                # Resource limits
+                MemoryMax = "8G"; # Maximum 8GB memory
+                MemoryHigh = "6G"; # Soft limit at 6GB
+                CPUQuota = "200%"; # Maximum 2 CPU cores
+                TasksMax = "256"; # Maximum number of tasks
+
+                # Device access - NPU device
+                DeviceAllow = [
+                  "/dev/accel/accel0 rw" # NPU device node
+                  "/dev/dri rw" # DRI devices (may include NPU)
+                ];
+
+                # Logging
+                StandardOutput = "journal";
+                StandardError = "journal";
+                SyslogIdentifier = "exo-npu";
+              };
+
+              environment = {
+                NPU_SERVICE_PORT = toString config.services.exo.intel.npu.servicePort;
+                PYTHONUNBUFFERED = "1"; # Unbuffered output for logging
+              };
+            };
+
+            # Kernel modules for NPU
+            boot.kernelModules = lib.mkIf config.services.exo.intel.npu.enable [
+              "intel_vpu" # Intel NPU driver
+            ];
+
+            # Ensure NPU device permissions
+            services.udev.extraRules = lib.mkIf config.services.exo.intel.npu.enable ''
+              # Intel NPU device permissions
+              SUBSYSTEM=="accel", KERNEL=="accel[0-9]*", GROUP="exo", MODE="0660"
+              SUBSYSTEM=="drm", KERNEL=="renderD*", ATTRS{vendor}=="0x8086", GROUP="exo", MODE="0660"
+            '';
+
+            # Create exo user if NPU service is enabled
+            users.users.exo = lib.mkIf config.services.exo.intel.npu.enable {
+              isSystemUser = true;
+              group = "exo";
+              description = "exo NPU service user";
+            };
+
+            users.groups.exo = lib.mkIf config.services.exo.intel.npu.enable { };
+          };
+        };
+
       perSystem =
         { config, self', inputs', pkgs, lib, system, ... }:
         let

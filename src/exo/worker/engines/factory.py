@@ -27,20 +27,20 @@ def get_inference_backend(
     shard_downloader: Any,
 ) -> InferenceBackend:
     """Factory function to create appropriate inference backend.
-    
+
     This follows the pattern from exo-cuda's get_inference_engine function.
-    
+
     Args:
         backend_name: Name of backend to create ("mlx", "tinygrad", "dummy")
         shard_downloader: ShardDownloader instance for downloading model weights
-        
+
     Returns:
         An instance implementing the InferenceBackend interface
-        
+
     Raises:
         BackendNotAvailableError: If the requested backend is not available
         ValueError: If backend_name is unknown
-        
+
     Example:
         >>> from exo.download.shard_download import ShardDownloader
         >>> downloader = ShardDownloader()
@@ -58,15 +58,14 @@ def get_inference_backend(
 
     elif backend_name == "tinygrad":
         try:
+            import tinygrad.helpers
+
             from exo.worker.engines.tinygrad.tinygrad_backend import (
                 TinygradBackend,
             )
-            import tinygrad.helpers
 
             # Set tinygrad debug level from environment
-            tinygrad.helpers.DEBUG.value = int(
-                os.getenv("TINYGRAD_DEBUG", default="0")
-            )
+            tinygrad.helpers.DEBUG.value = int(os.getenv("TINYGRAD_DEBUG", default="0"))
 
             return TinygradBackend(shard_downloader)
         except ImportError as e:

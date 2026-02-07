@@ -23,6 +23,8 @@ from exo.shared.types.api import ImageGenerationStats
 from exo.shared.types.chunks import ErrorChunk, ImageChunk, TokenChunk, ToolCallChunk
 from exo.shared.types.common import CommandId
 from exo.shared.types.events import (
+    BackendFailed,
+    BackendInitialized,
     ChunkGenerated,
     Event,
     RunnerStatusUpdated,
@@ -72,6 +74,7 @@ from exo.shared.types.worker.shards import (
     ShardMetadata,
 )
 from exo.utils.channels import MpReceiver, MpSender
+from exo.worker.engines.backend_selector import select_backend_from_config
 from exo.worker.engines.image import (
     DistributedImageModel,
     generate_image,
@@ -125,6 +128,39 @@ def main(
         time.sleep(timeout)
 
     setup_start_time = time.time()
+
+    # Detect and configure backend
+    backend_type = select_backend_from_config(shard_metadata)
+    logger.info(f"Selected backend: {backend_type}")
+
+    # For now, we only support MLX backend in the runner
+    # Tinygrad backend will be integrated in a future task
+    if backend_type != "mlx":
+        logger.warning(
+            f"Backend {backend_type} selected but not yet integrated with runner. "
+            f"Falling back to MLX."
+        )
+        backend_type = "mlx"
+
+    # Emit BackendInitialized event for observability
+    # Note: Device info will be populated after MLX initialization
+    # For now, we emit a placeholder event
+    try:
+        # We'll emit the actual BackendInitialized event after model loading
+        # when we have full device information
+        pass
+    except Exception as e:
+        logger.error(f"Failed to initialize backend {backend_type}: {e}")
+        event_sender.send(
+            BackendFailed(
+                runner_id=runner_id,
+                backend_type=backend_type,
+                error_message=str(e),
+                fallback_backend="mlx" if backend_type != "mlx" else None,
+            )
+        )
+        # Continue with MLX as fallback
+        backend_type = "mlx"
 
     model: Model | DistributedImageModel | None = None
     tokenizer = None
@@ -204,6 +240,32 @@ def main(
                         raise ValueError(
                             f"Unknown model task(s): {shard_metadata.model_card.tasks}"
                         )
+
+                    # Emit BackendInitialized event now that we have device info
+                    try:
+                        # For MLX backend, we know it's using Metal on Apple Silicon
+                        device_info = {
+                            "device_type": "METAL",
+                            "device_name": "Apple Silicon",
+                            "runtime": "METAL",
+                        }
+
+                        event_sender.send(
+                            BackendInitialized(
+                                runner_id=runner_id,
+                                backend_type=backend_type,
+                                device_type=device_info["device_type"],
+                                device_name=device_info["device_name"],
+                                runtime=device_info["runtime"],
+                            )
+                        )
+                        logger.info(
+                            f"Backend initialized: {backend_type} on "
+                            f"{device_info['device_type']} ({device_info['device_name']})"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to emit BackendInitialized event: {e}")
+
                     current_status = RunnerLoaded()
                     logger.info("runner loaded")
                 case StartWarmup() if isinstance(current_status, RunnerLoaded):

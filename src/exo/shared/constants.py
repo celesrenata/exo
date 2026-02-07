@@ -68,3 +68,5 @@ EXO_ENABLE_IMAGE_MODELS = (
 )
 
 EXO_TRACING_ENABLED = os.getenv("EXO_TRACING_ENABLED", "false").lower() == "true"
+
+EXO_TINYGRAD_ENABLED = os.getenv("EXO_TINYGRAD_ENABLED", "false").lower() == "true"

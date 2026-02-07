@@ -38,6 +38,27 @@
             final.setuptools
           ];
         });
+
+        # tinygrad with Intel backend support
+        tinygrad = prev.tinygrad.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+            final.setuptools
+          ];
+          propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ lib.optionals pkgs.stdenv.isLinux [
+            # Add pyopencl for OpenCL support on Linux
+            final.pyopencl
+          ];
+        });
+
+        # pyopencl needs OpenCL headers and libraries
+        pyopencl = prev.pyopencl.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ lib.optionals pkgs.stdenv.isLinux [
+            pkgs.opencl-headers
+          ];
+          buildInputs = (old.buildInputs or [ ]) ++ lib.optionals pkgs.stdenv.isLinux [
+            pkgs.ocl-icd
+          ];
+        });
       };
 
       pythonSet = (pkgs.callPackage inputs.pyproject-nix.build.packages {
