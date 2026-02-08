@@ -101,14 +101,15 @@ def select_backend_from_config(
             logger.info(f"Using backend from shard metadata: {backend_attr}")
             return str(backend_attr)  # pyright: ignore[reportAny]
 
-    # Check environment variable
-    if EXO_TINYGRAD_ENABLED:
+    # Check environment variable directly (not cached constant)
+    # This allows runtime changes to the environment variable
+    import os
+    if os.environ.get("EXO_TINYGRAD_ENABLED", "false").lower() == "true":
         logger.info("EXO_TINYGRAD_ENABLED=true, using tinygrad backend")
         return "tinygrad"
 
     # Default to MLX (current behavior)
     logger.info("Using default MLX backend")
-    return "mlx"
     return "mlx"
 
 
