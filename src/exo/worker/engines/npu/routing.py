@@ -12,7 +12,9 @@ from exo.worker.engines.npu.discovery import NPUCapabilities
 logger = logging.getLogger(__name__)
 
 
-WorkloadType = Literal["llm_decode", "embedding", "vision", "audio", "image_generation", "unknown"]
+WorkloadType = Literal[
+    "llm_decode", "embedding", "vision", "audio", "image_generation", "unknown"
+]
 
 
 def classify_workload(task: Task) -> WorkloadType:

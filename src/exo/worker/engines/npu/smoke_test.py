@@ -157,7 +157,9 @@ def verify_npu_usage(core: Any, npu_device: str) -> None:
 
         # Verify NPU is in execution devices
         if not any("NPU" in str(d) for d in exec_devices):
-            raise RuntimeError(f"Model not executing on NPU! Execution devices: {exec_devices}")
+            raise RuntimeError(
+                f"Model not executing on NPU! Execution devices: {exec_devices}"
+            )
 
         logger.info("✅ Verified: Model is executing on NPU")
 
@@ -245,8 +247,12 @@ def compare_latency(core: Any, npu_device: str) -> None:
         logger.info(f"✅ NPU is {speedup:.2f}x faster than CPU")
     else:
         slowdown = npu_avg_ms / cpu_avg_ms
-        logger.warning(f"⚠️  NPU is {slowdown:.2f}x slower than CPU (may be due to simple model)")
-        logger.info("Note: NPU typically shows benefits with larger, more complex models")
+        logger.warning(
+            f"⚠️  NPU is {slowdown:.2f}x slower than CPU (may be due to simple model)"
+        )
+        logger.info(
+            "Note: NPU typically shows benefits with larger, more complex models"
+        )
 
     logger.info("-------------------------\n")
 
@@ -269,7 +275,9 @@ def test_with_real_model(core: Any, npu_device: str) -> None:
 
         # For now, skip this test if model not available
         logger.info("⚠️  Real model test skipped (requires pre-downloaded model)")
-        logger.info("To test with real models, download MobileNetV2 IR format and load it")
+        logger.info(
+            "To test with real models, download MobileNetV2 IR format and load it"
+        )
 
     except Exception as e:
         logger.warning(f"Real model test skipped: {e}")

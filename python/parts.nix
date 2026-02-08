@@ -31,11 +31,11 @@
       buildSystemsOverlay = final: prev: {
         # Stub out MLX on Linux (not available)
       } // lib.optionalAttrs pkgs.stdenv.isLinux {
-        mlx = pkgs.runCommand "mlx-stub" {} ''
+        mlx = pkgs.runCommand "mlx-stub" { } ''
           mkdir -p $out/lib/python3.13/site-packages
           touch $out/lib/python3.13/site-packages/mlx.py
         '';
-        mlx-lm = pkgs.runCommand "mlx-lm-stub" {} ''
+        mlx-lm = pkgs.runCommand "mlx-lm-stub" { } ''
           mkdir -p $out/lib/python3.13/site-packages
           touch $out/lib/python3.13/site-packages/mlx_lm.py
         '';
@@ -135,85 +135,87 @@
       # Python packages
       packages = {
         # exo package - use different build methods per platform
-        exo = if pkgs.stdenv.isLinux then
+        exo =
+          if pkgs.stdenv.isLinux then
           # On Linux: use buildPythonApplication with explicit deps (like main branch)
           # Use pkgsExo which has anyio pinned to 4.11.0
-          pkgsExo.python313.pkgs.buildPythonApplication {
-            pname = "exo";
-            version = "0.3.0";
-            format = "pyproject";
-            src = inputs.self;
-            
-            # Patch pyproject.toml to use setuptools instead of uv_build
-            postPatch = ''
-              sed -i 's/requires = \["uv_build.*"\]/requires = ["setuptools>=61.0", "wheel"]/' pyproject.toml
-              sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
-            '';
-            
-            nativeBuildInputs = [ pkgsExo.python313.pkgs.setuptools pkgsExo.python313.pkgs.wheel pkgsExo.python313.pkgs.pip pkgs.makeWrapper ];
-            
-            propagatedBuildInputs = with pkgsExo.python313.pkgs; [
-              aiofiles
-              aiohttp
-              pydantic
-              fastapi
-              filelock
-              rustworkx
-              huggingface-hub
-              psutil
-              loguru
-              anyio  # Pinned to 4.11.0 via global overlay in flake.nix
-              tiktoken
-              hypercorn
-              httpx
-              toml
-              tomlkit
-              pillow
-              safetensors
-              transformers
-              tinygrad
-              numpy
-              python-multipart
-            ];
-            
-            # Install Rust bindings after main package
-            postInstall = ''
-              echo "Installing Rust bindings..."
-              for wheel in ${self'.packages.exo_pyo3_bindings}/*.whl; do
-                if [ -f "$wheel" ]; then
-                  echo "Extracting wheel: $wheel"
-                  ${python.pkgs.pip}/bin/pip install --no-deps --no-build-isolation --target $out/lib/python3.13/site-packages "$wheel"
-                  break
-                fi
-              done
-            '';
-            
-            # Rust bindings will be installed in postInstall
-            preBuild = ''
-              echo "Building exo package..."
-            '';
-            
-            # Skip tests and dependency checks
-            doCheck = false;
-            dontUsePythonCatchConflicts = true;
-            dontUsePythonImportsCheck = true;
-            
-            # Override the runtime deps check hook to skip it
-            pythonRuntimeDepsCheckHook = pkgs.writeShellScript "skip-runtime-deps-check" ''
-              echo "Skipping Python runtime dependency checking for Nix build"
-            '';
-            
-            # Set environment variables
-            makeWrapperArgs = [
-              "--set EXO_TINYGRAD_ENABLED true"
-              "--set EXO_RESOURCES_DIR ${inputs.self}/resources"
-              "--set EXO_DASHBOARD_DIR ${self'.packages.dashboard}"
-            ];
-          }
-        else
+            pkgsExo.python313.pkgs.buildPythonApplication
+              {
+                pname = "exo";
+                version = "0.3.0";
+                format = "pyproject";
+                src = inputs.self;
+
+                # Patch pyproject.toml to use setuptools instead of uv_build
+                postPatch = ''
+                  sed -i 's/requires = \["uv_build.*"\]/requires = ["setuptools>=61.0", "wheel"]/' pyproject.toml
+                  sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
+                '';
+
+                nativeBuildInputs = [ pkgsExo.python313.pkgs.setuptools pkgsExo.python313.pkgs.wheel pkgsExo.python313.pkgs.pip pkgs.makeWrapper ];
+
+                propagatedBuildInputs = with pkgsExo.python313.pkgs; [
+                  aiofiles
+                  aiohttp
+                  pydantic
+                  fastapi
+                  filelock
+                  rustworkx
+                  huggingface-hub
+                  psutil
+                  loguru
+                  anyio # Pinned to 4.11.0 via global overlay in flake.nix
+                  tiktoken
+                  hypercorn
+                  httpx
+                  toml
+                  tomlkit
+                  pillow
+                  safetensors
+                  transformers
+                  tinygrad
+                  numpy
+                  python-multipart
+                ];
+
+                # Install Rust bindings after main package
+                postInstall = ''
+                  echo "Installing Rust bindings..."
+                  for wheel in ${self'.packages.exo_pyo3_bindings}/*.whl; do
+                    if [ -f "$wheel" ]; then
+                      echo "Extracting wheel: $wheel"
+                      ${python.pkgs.pip}/bin/pip install --no-deps --no-build-isolation --target $out/lib/python3.13/site-packages "$wheel"
+                      break
+                    fi
+                  done
+                '';
+
+                # Rust bindings will be installed in postInstall
+                preBuild = ''
+                  echo "Building exo package..."
+                '';
+
+                # Skip tests and dependency checks
+                doCheck = false;
+                dontUsePythonCatchConflicts = true;
+                dontUsePythonImportsCheck = true;
+
+                # Override the runtime deps check hook to skip it
+                pythonRuntimeDepsCheckHook = pkgs.writeShellScript "skip-runtime-deps-check" ''
+                  echo "Skipping Python runtime dependency checking for Nix build"
+                '';
+
+                # Set environment variables
+                makeWrapperArgs = [
+                  "--set EXO_TINYGRAD_ENABLED true"
+                  "--set EXO_RESOURCES_DIR ${inputs.self}/resources"
+                  "--set EXO_DASHBOARD_DIR ${self'.packages.dashboard}"
+                ];
+              }
+          else
           # On macOS: use the uv2nix approach with MLX
-          exoPackage;
-          
+            exoPackage;
+
         # Test environment for running pytest outside of Nix sandbox (needs GPU access)
         exo-test-env = testVenv;
         exo-bench = mkBenchScript "exo-bench" (inputs.self + /bench/exo_bench.py);

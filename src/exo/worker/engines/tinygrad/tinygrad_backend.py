@@ -4,7 +4,6 @@ This module implements the InferenceBackend protocol using tinygrad,
 with support for Intel Arc GPU acceleration via Level Zero and OpenCL.
 """
 
-import logging
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -127,6 +126,9 @@ class TinygradBackend(InferenceBackend):
         Sets environment variables to enable GPU execution with the
         appropriate runtime (Level Zero, OpenCL, or CUDA).
         """
+        if not self.device_capabilities:
+            return
+
         self.device = "GPU"
         self.runtime = self.device_capabilities.runtime
 
@@ -175,6 +177,9 @@ class TinygradBackend(InferenceBackend):
 
     def _configure_metal(self) -> None:
         """Configure tinygrad for Apple Metal execution."""
+        if not self.device_capabilities:
+            return
+
         self.device = "METAL"
         self.runtime = "METAL"
         os.environ["METAL"] = "1"
@@ -188,6 +193,9 @@ class TinygradBackend(InferenceBackend):
 
     def _configure_cpu(self) -> None:
         """Configure tinygrad for CPU execution."""
+        if not self.device_capabilities:
+            return
+
         self.device = "CPU"
         self.runtime = None
         # Ensure GPU is disabled
@@ -317,9 +325,9 @@ class TinygradBackend(InferenceBackend):
 
         # Load model and tokenizer
         # This will be implemented in model_loader.py
-        from exo.worker.engines.tinygrad.model_loader import load_model_and_tokenizer
+        from exo.worker.engines.tinygrad.model_loader import load_tinygrad_model
 
-        self.model, self.tokenizer = await load_model_and_tokenizer(
+        self.model, self.tokenizer = await load_tinygrad_model(
             shard_metadata,
             path,
             self.device,

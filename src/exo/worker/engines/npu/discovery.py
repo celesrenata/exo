@@ -82,7 +82,9 @@ def discover_npu() -> NPUCapabilities:
 
     # Check OpenVINO availability
     openvino_available, openvino_version = _check_openvino()
-    software_stack: Literal["OPENVINO", "NONE"] = "OPENVINO" if openvino_available else "NONE"
+    software_stack: Literal["OPENVINO", "NONE"] = (
+        "OPENVINO" if openvino_available else "NONE"
+    )
 
     if openvino_available:
         logger.info(f"OpenVINO available: {openvino_version}")
@@ -93,10 +95,14 @@ def discover_npu() -> NPUCapabilities:
     supported_model_types = _determine_supported_model_types(openvino_available)
 
     # NPU is available if we have device, drivers, and software stack
-    available = device_path is not None and len(kernel_modules) > 0 and openvino_available
+    available = (
+        device_path is not None and len(kernel_modules) > 0 and openvino_available
+    )
 
     if available:
-        logger.info(f"Intel NPU is available with {len(supported_model_types)} supported model types")
+        logger.info(
+            f"Intel NPU is available with {len(supported_model_types)} supported model types"
+        )
     else:
         logger.info("Intel NPU hardware detected but not fully functional")
 
@@ -108,7 +114,9 @@ def discover_npu() -> NPUCapabilities:
         software_stack=software_stack,
         openvino_version=openvino_version,
         supported_model_types=supported_model_types,
-        error_message=None if available else "NPU hardware present but OpenVINO not available",
+        error_message=None
+        if available
+        else "NPU hardware present but OpenVINO not available",
     )
 
 
@@ -123,14 +131,18 @@ def _find_npu_device() -> str | None:
         Path to NPU device or None if not found
     """
     # Check for dedicated NPU device node
-    accel_devices = list(Path("/dev/accel").glob("accel*")) if Path("/dev/accel").exists() else []
+    accel_devices = (
+        list(Path("/dev/accel").glob("accel*")) if Path("/dev/accel").exists() else []
+    )
     if accel_devices:
         # Return first accel device
         return str(accel_devices[0])
 
     # Check for render nodes (may be shared with GPU)
     # We'll need to verify it's actually NPU later
-    render_devices = list(Path("/dev/dri").glob("renderD*")) if Path("/dev/dri").exists() else []
+    render_devices = (
+        list(Path("/dev/dri").glob("renderD*")) if Path("/dev/dri").exists() else []
+    )
     if render_devices:
         # Check if any render device is associated with NPU
         for device in render_devices:
@@ -262,7 +274,9 @@ def _check_openvino() -> tuple[bool, str | None]:
             logger.debug(f"OpenVINO NPU device available: {available_devices}")
             return True, version
         else:
-            logger.debug(f"OpenVINO available but no NPU device found. Available: {available_devices}")
+            logger.debug(
+                f"OpenVINO available but no NPU device found. Available: {available_devices}"
+            )
             return False, version
 
     except ImportError:

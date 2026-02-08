@@ -214,7 +214,7 @@ try:
 except Exception as e:
     print(f'Error: {e}')
 " 2>&1)
-  
+
   if echo "$DEVICE_TEST" | grep -q "Device:"; then
     pass "Tinygrad device detection: $DEVICE_TEST"
   else

@@ -59,7 +59,9 @@ class NPUServiceClient:
     to the NPU service over HTTP.
     """
 
-    def __init__(self, host: str = "localhost", port: int = 52416, timeout: float = 30.0):
+    def __init__(
+        self, host: str = "localhost", port: int = 52416, timeout: float = 30.0
+    ):
         """Initialize NPU service client.
 
         Args:
@@ -174,7 +176,9 @@ class NPUServiceClient:
             raise RuntimeError("Client not initialized. Use async context manager.")
 
         try:
-            async with self._session.post(f"{self.base_url}/models/{model_id}/load") as response:
+            async with self._session.post(
+                f"{self.base_url}/models/{model_id}/load"
+            ) as response:
                 response.raise_for_status()
                 data = await response.json()
                 return ModelInfo(**data)
@@ -196,7 +200,9 @@ class NPUServiceClient:
             raise RuntimeError("Client not initialized. Use async context manager.")
 
         try:
-            async with self._session.delete(f"{self.base_url}/models/{model_id}") as response:
+            async with self._session.delete(
+                f"{self.base_url}/models/{model_id}"
+            ) as response:
                 response.raise_for_status()
 
         except aiohttp.ClientError as e:
@@ -205,6 +211,7 @@ class NPUServiceClient:
 
 
 # Server-side API implementation (to be added to service.py)
+
 
 async def handle_infer(request_data: dict[str, Any], service: Any) -> dict[str, Any]:
     """Handle inference request.
@@ -285,8 +292,14 @@ async def handle_list_models(service: Any) -> dict[str, Any]:
             ModelInfo(
                 model_id=model_id,
                 loaded=True,
-                input_shapes={name: info["shape"] for name, info in metadata.get("inputs", {}).items()},
-                output_shapes={name: info["shape"] for name, info in metadata.get("outputs", {}).items()},
+                input_shapes={
+                    name: info["shape"]
+                    for name, info in metadata.get("inputs", {}).items()
+                },
+                output_shapes={
+                    name: info["shape"]
+                    for name, info in metadata.get("outputs", {}).items()
+                },
             ).model_dump()
         )
 
@@ -312,8 +325,12 @@ async def handle_load_model(model_id: str, service: Any) -> dict[str, Any]:
     return ModelInfo(
         model_id=model_id,
         loaded=True,
-        input_shapes={name: info["shape"] for name, info in metadata.get("inputs", {}).items()},
-        output_shapes={name: info["shape"] for name, info in metadata.get("outputs", {}).items()},
+        input_shapes={
+            name: info["shape"] for name, info in metadata.get("inputs", {}).items()
+        },
+        output_shapes={
+            name: info["shape"] for name, info in metadata.get("outputs", {}).items()
+        },
     ).model_dump()
 
 

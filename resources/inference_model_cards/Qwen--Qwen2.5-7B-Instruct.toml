@@ -1,0 +1,12 @@
+model_id = "Qwen/Qwen2.5-7B-Instruct"
+n_layers = 28
+hidden_size = 3584
+supports_tensor = false
+tasks = ["TextGeneration"]
+family = "qwen"
+quantization = ""
+base_model = "Qwen2.5 7B"
+capabilities = ["text"]
+
+[storage_size]
+in_bytes = 7610000000

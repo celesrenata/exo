@@ -21,7 +21,7 @@
     } | null;
     nodes?: Record<string, NodeInfo>;
     sharding?: "Pipeline" | "Tensor";
-    runtime?: "MlxRing" | "MlxIbv" | "MlxJaccl";
+    runtime?: "MlxRing" | "MlxIbv" | "MlxJaccl" | "TinygradRing";
     onLaunch?: () => void;
     tags?: string[];
     apiPreview?: PlacementPreview | null;
@@ -570,7 +570,9 @@
           ? "MLX Ring"
           : runtime === "MlxIbv" || runtime === "MlxJaccl"
             ? "MLX RDMA"
-            : runtime}
+            : runtime === "TinygradRing"
+              ? "Tinygrad Ring"
+              : runtime}
       </span>
     </div>
 

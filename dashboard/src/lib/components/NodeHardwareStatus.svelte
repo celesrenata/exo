@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { NodeHardware } from '$lib/types/hardware';
+  import type { NodeHardware } from "$lib/types/hardware";
   import {
     formatBackendInfo,
     getBackendStatusColor,
     formatMemoryUsage,
-    formatTokensPerSecond
-  } from '$lib/types/hardware';
+    formatTokensPerSecond,
+  } from "$lib/types/hardware";
 
   interface Props {
     hardware: NodeHardware;
@@ -23,8 +23,8 @@
   const memoryDisplay = $derived(
     formatMemoryUsage(
       hardware.activeBackend.memoryUsedMB,
-      hardware.activeBackend.memoryTotalMB
-    )
+      hardware.activeBackend.memoryTotalMB,
+    ),
   );
 
   // Check if we have performance metrics
@@ -32,18 +32,28 @@
 
   // Format performance metrics
   const avgThroughput = $derived(
-    hardware.metrics ? formatTokensPerSecond(hardware.metrics.avgTokensPerSecond) : 'N/A'
+    hardware.metrics
+      ? formatTokensPerSecond(hardware.metrics.avgTokensPerSecond)
+      : "N/A",
   );
 
   const recentThroughput = $derived(
-    hardware.metrics ? formatTokensPerSecond(hardware.metrics.recentTokensPerSecond) : 'N/A'
+    hardware.metrics
+      ? formatTokensPerSecond(hardware.metrics.recentTokensPerSecond)
+      : "N/A",
   );
 </script>
 
 <div class="hardware-status">
   <div class="header">
     <h3 class="node-id">Node {hardware.nodeId}</h3>
-    <div class="status-indicator" class:green={statusColor === 'green'} class:yellow={statusColor === 'yellow'} class:gray={statusColor === 'gray'} class:blue={statusColor === 'blue'}></div>
+    <div
+      class="status-indicator"
+      class:green={statusColor === "green"}
+      class:yellow={statusColor === "yellow"}
+      class:gray={statusColor === "gray"}
+      class:blue={statusColor === "blue"}
+    ></div>
   </div>
 
   <div class="backend-info">
@@ -76,8 +86,13 @@
       <div class="info-row">
         <span class="label">GPU Utilization:</span>
         <div class="utilization-bar">
-          <div class="utilization-fill" style="width: {hardware.activeBackend.utilizationPercent}%"></div>
-          <span class="utilization-text">{hardware.activeBackend.utilizationPercent.toFixed(0)}%</span>
+          <div
+            class="utilization-fill"
+            style="width: {hardware.activeBackend.utilizationPercent}%"
+          ></div>
+          <span class="utilization-text"
+            >{hardware.activeBackend.utilizationPercent.toFixed(0)}%</span
+          >
         </div>
       </div>
     {/if}
@@ -105,7 +120,9 @@
       {#if hardware.metrics.avgGpuUtilization !== undefined}
         <div class="info-row">
           <span class="label">Avg GPU Usage:</span>
-          <span class="value">{hardware.metrics.avgGpuUtilization.toFixed(1)}%</span>
+          <span class="value"
+            >{hardware.metrics.avgGpuUtilization.toFixed(1)}%</span
+          >
         </div>
       {/if}
     </div>
@@ -234,7 +251,11 @@
     top: 0;
     left: 0;
     height: 100%;
-    background: linear-gradient(90deg, var(--color-success), var(--color-primary));
+    background: linear-gradient(
+      90deg,
+      var(--color-success),
+      var(--color-primary)
+    );
     transition: width 0.3s ease;
   }
 

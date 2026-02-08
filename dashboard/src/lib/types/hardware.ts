@@ -8,17 +8,17 @@
 /**
  * Backend type identifier
  */
-export type BackendType = 'mlx' | 'tinygrad' | 'npu';
+export type BackendType = "mlx" | "tinygrad" | "npu";
 
 /**
  * Device type identifier
  */
-export type DeviceType = 'CPU' | 'GPU' | 'NPU' | 'METAL';
+export type DeviceType = "CPU" | "GPU" | "NPU" | "METAL";
 
 /**
  * GPU runtime identifier
  */
-export type RuntimeType = 'LEVEL_ZERO' | 'OPENCL' | 'METAL' | 'CUDA';
+export type RuntimeType = "LEVEL_ZERO" | "OPENCL" | "METAL" | "CUDA";
 
 /**
  * Information about an active inference backend
@@ -125,7 +125,7 @@ export function formatBackendInfo(backend: BackendInfo): string {
     parts.push(`(${backend.runtime})`);
   }
 
-  return parts.join(' ');
+  return parts.join(" ");
 }
 
 /**
@@ -133,31 +133,31 @@ export function formatBackendInfo(backend: BackendInfo): string {
  */
 export function getBackendStatusColor(backend: BackendInfo): string {
   // GPU with Level Zero = green (optimal)
-  if (backend.device === 'GPU' && backend.runtime === 'LEVEL_ZERO') {
-    return 'green';
+  if (backend.device === "GPU" && backend.runtime === "LEVEL_ZERO") {
+    return "green";
   }
 
   // GPU with other runtime = yellow (good but not optimal)
-  if (backend.device === 'GPU') {
-    return 'yellow';
+  if (backend.device === "GPU") {
+    return "yellow";
   }
 
   // Metal = green (optimal for macOS)
-  if (backend.device === 'METAL') {
-    return 'green';
+  if (backend.device === "METAL") {
+    return "green";
   }
 
   // CPU = gray (fallback)
-  if (backend.device === 'CPU') {
-    return 'gray';
+  if (backend.device === "CPU") {
+    return "gray";
   }
 
   // NPU = blue (experimental)
-  if (backend.device === 'NPU') {
-    return 'blue';
+  if (backend.device === "NPU") {
+    return "blue";
   }
 
-  return 'gray';
+  return "gray";
 }
 
 /**

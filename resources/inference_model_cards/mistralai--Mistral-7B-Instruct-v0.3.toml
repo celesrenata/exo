@@ -1,0 +1,12 @@
+model_id = "mistralai/Mistral-7B-Instruct-v0.3"
+n_layers = 32
+hidden_size = 4096
+supports_tensor = false
+tasks = ["TextGeneration"]
+family = "mistral"
+quantization = ""
+base_model = "Mistral 7B"
+capabilities = ["text"]
+
+[storage_size]
+in_bytes = 7000000000

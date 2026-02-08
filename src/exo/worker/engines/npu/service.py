@@ -56,12 +56,16 @@ class NPUInferenceService:
             cache_dir: Directory to cache compiled models
         """
         self.port = port
-        self.cache_dir = Path(cache_dir) if cache_dir else Path.home() / ".cache" / "exo" / "npu"
+        self.cache_dir = (
+            Path(cache_dir) if cache_dir else Path.home() / ".cache" / "exo" / "npu"
+        )
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.openvino_core: Any | None = None
         self.loaded_models: dict[ModelId, Any] = {}  # ModelId -> compiled model
-        self.model_metadata: dict[ModelId, dict[str, Any]] = {}  # Model input/output info
+        self.model_metadata: dict[
+            ModelId, dict[str, Any]
+        ] = {}  # Model input/output info
 
         self._running = False
         self._server: Any | None = None
@@ -84,7 +88,9 @@ class NPUInferenceService:
             # Verify NPU device is available
             available_devices = self.openvino_core.available_devices()
             if not any("NPU" in device for device in available_devices):
-                raise RuntimeError(f"NPU device not found. Available devices: {available_devices}")
+                raise RuntimeError(
+                    f"NPU device not found. Available devices: {available_devices}"
+                )
 
             logger.info(f"OpenVINO initialized. Available devices: {available_devices}")
 
@@ -208,8 +214,20 @@ class NPUInferenceService:
 
             # Store metadata about inputs/outputs
             self.model_metadata[model_id] = {
-                "inputs": {inp.any_name: {"shape": inp.shape, "dtype": inp.element_type.to_dtype()} for inp in model.inputs},
-                "outputs": {out.any_name: {"shape": out.shape, "dtype": out.element_type.to_dtype()} for out in model.outputs},
+                "inputs": {
+                    inp.any_name: {
+                        "shape": inp.shape,
+                        "dtype": inp.element_type.to_dtype(),
+                    }
+                    for inp in model.inputs
+                },
+                "outputs": {
+                    out.any_name: {
+                        "shape": out.shape,
+                        "dtype": out.element_type.to_dtype(),
+                    }
+                    for out in model.outputs
+                },
             }
 
             logger.info(f"Model {model_id} loaded and compiled for NPU")
@@ -247,7 +265,9 @@ class NPUInferenceService:
 
         raise FileNotFoundError(f"Model {model_id} not found in cache")
 
-    def _prepare_inputs(self, input_data: dict[str, Any], metadata: dict[str, Any]) -> dict[str, np.ndarray]:
+    def _prepare_inputs(
+        self, input_data: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, np.ndarray]:
         """Prepare input tensors for inference.
 
         Args:
@@ -269,14 +289,18 @@ class NPUInferenceService:
             # Validate shape and dtype match metadata
             expected_dtype = metadata["inputs"][name]["dtype"]
             if data.dtype != expected_dtype:
-                logger.debug(f"Converting input {name} from {data.dtype} to {expected_dtype}")
+                logger.debug(
+                    f"Converting input {name} from {data.dtype} to {expected_dtype}"
+                )
                 data = data.astype(expected_dtype)
 
             input_tensors[name] = data
 
         return input_tensors
 
-    def _extract_outputs(self, infer_request: Any, metadata: dict[str, Any]) -> dict[str, Any]:
+    def _extract_outputs(
+        self, infer_request: Any, metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         """Extract output tensors from inference request.
 
         Args:
@@ -369,7 +393,9 @@ class NPUInferenceService:
 
             # Store app and start server in background
             self._app = app
-            config = uvicorn.Config(app, host="0.0.0.0", port=self.port, log_level="info")
+            config = uvicorn.Config(
+                app, host="0.0.0.0", port=self.port, log_level="info"
+            )
             self._server = uvicorn.Server(config)
 
             # Start server in background task
@@ -397,9 +423,22 @@ async def main() -> None:
     import os
 
     parser = argparse.ArgumentParser(description="Intel NPU Inference Service")
-    parser.add_argument("--port", type=int, default=int(os.getenv("NPU_SERVICE_PORT", "52416")), help="Port to listen on")
-    parser.add_argument("--cache-dir", type=str, default=None, help="Model cache directory")
-    parser.add_argument("--log-level", type=str, default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Logging level")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("NPU_SERVICE_PORT", "52416")),
+        help="Port to listen on",
+    )
+    parser.add_argument(
+        "--cache-dir", type=str, default=None, help="Model cache directory"
+    )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level",
+    )
 
     args = parser.parse_args()
 

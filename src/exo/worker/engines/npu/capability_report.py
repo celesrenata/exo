@@ -163,7 +163,13 @@ def _get_driver_details(kernel_modules: list[str]) -> dict[str, Any]:
                         key, value = line.split(":", 1)
                         key = key.strip()
                         value = value.strip()
-                        if key in ["version", "description", "author", "license", "firmware"]:
+                        if key in [
+                            "version",
+                            "description",
+                            "author",
+                            "license",
+                            "firmware",
+                        ]:
                             module_info[key] = value
 
                 details[module] = module_info

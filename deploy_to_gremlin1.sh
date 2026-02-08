@@ -94,8 +94,29 @@ create_nixos_config() {
           ./modules/ups.nix
           # Add exo Intel hardware support module
           exo.nixosModules.exo-intel
-          # Exo Intel hardware configuration
+          # Configuration block
           {
+            # Graphics configuration for existing modules
+            gremlin.graphics = {
+              intel.enable = true;
+              intel.sriov = true;
+              nvidia.enable = hasNvidia;
+            };
+            
+            # CPU power management
+            boot.kernelParams = [ "intel_pstate=disable" ];
+            powerManagement.cpuFreqGovernor = pkgs.lib.mkForce "userspace";
+            systemd.services.disable-turbo = {
+              description = "Disable CPU Turbo Boost";
+              wantedBy = [ "multi-user.target" ];
+              script = "echo 0 > /sys/devices/system/cpu/cpufreq/boost";
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+              };
+            };
+            
+            # Exo Intel hardware configuration
             services.exo.intel = {
               enable = true;
               tinygrad = {
