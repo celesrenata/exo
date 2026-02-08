@@ -1,19 +1,12 @@
+from __future__ import annotations
+
 import base64
 import json
 import time
 from collections.abc import Generator
 from functools import cache
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
-import mlx.core as mx
-from mlx_lm.models.gpt_oss import Model as GptOssModel
-from mlx_lm.tokenizer_utils import TokenizerWrapper
-from openai_harmony import (  # pyright: ignore[reportMissingTypeStubs]
-    HarmonyEncodingName,
-    Role,
-    StreamableParser,
-    load_harmony_encoding,
-)
 from pydantic import ValidationError
 
 from exo.shared.constants import EXO_MAX_CHUNK_SIZE, EXO_TRACING_ENABLED
@@ -46,7 +39,7 @@ from exo.shared.types.tasks import (
     TextGeneration,
 )
 from exo.shared.types.text_generation import TextGenerationTaskParams
-from exo.shared.types.worker.instances import BoundInstance
+from exo.shared.types.worker.instances import BoundInstance, TinygradRingInstance
 from exo.shared.types.worker.runner_response import (
     GenerationResponse,
     ImageGenerationResponse,
@@ -75,23 +68,24 @@ from exo.shared.types.worker.shards import (
 )
 from exo.utils.channels import MpReceiver, MpSender
 from exo.worker.engines.backend_selector import select_backend_from_config
-from exo.worker.engines.image import (
-    DistributedImageModel,
-    generate_image,
-    initialize_image_model,
-    warmup_image_generator,
-)
-from exo.worker.engines.mlx import Model
-from exo.worker.engines.mlx.cache import KVPrefixCache
-from exo.worker.engines.mlx.generator.generate import mlx_generate, warmup_inference
-from exo.worker.engines.mlx.utils_mlx import (
-    apply_chat_template,
-    detect_thinking_prompt_suffix,
-    initialize_mlx,
-    load_mlx_items,
-    mlx_force_oom,
-)
 from exo.worker.runner.bootstrap import logger
+
+# Lazy imports for MLX backend - only imported when needed
+if TYPE_CHECKING:
+    import mlx.core as mx
+    from mlx_lm.models.gpt_oss import Model as GptOssModel
+    from mlx_lm.tokenizer_utils import TokenizerWrapper
+    from openai_harmony import (  # pyright: ignore[reportMissingTypeStubs]
+        HarmonyEncodingName,
+        Role,
+        StreamableParser,
+    )
+
+    from exo.worker.engines.image import (
+        DistributedImageModel,
+    )
+    from exo.worker.engines.mlx import Model
+    from exo.worker.engines.mlx.cache import KVPrefixCache
 
 
 def _is_primary_output_node(shard_metadata: ShardMetadata) -> bool:
@@ -129,22 +123,63 @@ def main(
 
     setup_start_time = time.time()
 
-    # Detect and configure backend
-    backend_type = select_backend_from_config(shard_metadata)
-    logger.info(f"Selected backend: {backend_type}")
+    # Detect backend type from instance
+    # Handle both direct instance and Pydantic tagged union
+    instance_type_name = type(instance).__name__
+    is_tinygrad = (
+        isinstance(instance, TinygradRingInstance) 
+        or instance_type_name == "TinygradRingInstance"
+        or (hasattr(instance, "__class__") and instance.__class__.__name__ == "TinygradRingInstance")
+    )
+    
+    if is_tinygrad:
+        backend_type = "tinygrad"
+        logger.info(f"Using Tinygrad backend for TinygradRingInstance (type: {instance_type_name})")
 
-    # For now, we only support MLX backend in the runner
-    # Tinygrad backend will be integrated in a future task
-    if backend_type != "mlx":
-        logger.warning(
-            f"Backend {backend_type} selected but not yet integrated with runner. "
-            f"Falling back to MLX."
-        )
+        # Lazy-load Tinygrad backend modules
+        from exo.worker.engines.tinygrad.tinygrad_backend import TinygradBackend
+        from exo.worker.engines.tinygrad.model_loader import load_tinygrad_model
+        from exo.worker.engines.tinygrad.generator import tinygrad_generate
+        from exo.worker.engines.tinygrad.device_config import detect_capabilities
+
+        logger.info("Tinygrad backend modules loaded")
+    else:
+        # MLX backend - import MLX modules only when needed
         backend_type = "mlx"
+        logger.info(f"Using MLX backend")
+
+        # Import MLX-specific modules
+        import mlx.core as mx
+        from mlx_lm.models.gpt_oss import Model as GptOssModel
+        from mlx_lm.tokenizer_utils import TokenizerWrapper
+        from openai_harmony import (  # pyright: ignore[reportMissingTypeStubs]
+            HarmonyEncodingName,
+            Role,
+            StreamableParser,
+            load_harmony_encoding,
+        )
+
+        from exo.worker.engines.image import (
+            DistributedImageModel,
+            generate_image,
+            initialize_image_model,
+            warmup_image_generator,
+        )
+        from exo.worker.engines.mlx import Model
+        from exo.worker.engines.mlx.cache import KVPrefixCache
+        from exo.worker.engines.mlx.generator.generate import (
+            mlx_generate,
+            warmup_inference,
+        )
+        from exo.worker.engines.mlx.utils_mlx import (
+            apply_chat_template,
+            detect_thinking_prompt_suffix,
+            initialize_mlx,
+            load_mlx_items,
+            mlx_force_oom,
+        )
 
     # Emit BackendInitialized event for observability
-    # Note: Device info will be populated after MLX initialization
-    # For now, we emit a placeholder event
     try:
         # We'll emit the actual BackendInitialized event after model loading
         # when we have full device information
@@ -156,16 +191,28 @@ def main(
                 runner_id=runner_id,
                 backend_type=backend_type,
                 error_message=str(e),
-                fallback_backend="mlx" if backend_type != "mlx" else None,
+                fallback_backend=None,
             )
         )
-        # Continue with MLX as fallback
-        backend_type = "mlx"
+        raise
 
-    model: Model | DistributedImageModel | None = None
-    tokenizer = None
-    group = None
-    kv_prefix_cache: KVPrefixCache | None = None
+    # Initialize backend-specific variables
+    if backend_type == "tinygrad":
+        # Tinygrad backend variables
+        tinygrad_model: Any = None
+        tinygrad_tokenizer: Any = None
+        model = None
+        tokenizer = None
+        group = None
+        kv_prefix_cache = None
+    else:
+        # MLX backend variables
+        model: Model | DistributedImageModel | None = None
+        tokenizer = None
+        group = None
+        kv_prefix_cache: KVPrefixCache | None = None
+        tinygrad_model = None
+        tinygrad_tokenizer = None
 
     current_status: RunnerStatus = RunnerIdle()
     logger.info("runner created")
@@ -222,49 +269,126 @@ def main(
                         )
                         time.sleep(0.5)
 
-                    if ModelTask.TextGeneration in shard_metadata.model_card.tasks:
-                        model, tokenizer = load_mlx_items(
-                            bound_instance, group, on_timeout=on_model_load_timeout
-                        )
-                        logger.info(
-                            f"model has_tool_calling={tokenizer.has_tool_calling}"
-                        )
-                        kv_prefix_cache = KVPrefixCache(group)
+                    if backend_type == "tinygrad":
+                        # Tinygrad backend model loading
+                        try:
+                            if (
+                                ModelTask.TextGeneration
+                                in shard_metadata.model_card.tasks
+                            ):
+                                # Detect device capabilities
+                                device_caps = detect_capabilities()
+                                device = device_caps.device_type
 
-                    elif (
-                        ModelTask.TextToImage in shard_metadata.model_card.tasks
-                        or ModelTask.ImageToImage in shard_metadata.model_card.tasks
-                    ):
-                        model = initialize_image_model(bound_instance)
-                    else:
-                        raise ValueError(
-                            f"Unknown model task(s): {shard_metadata.model_card.tasks}"
-                        )
+                                logger.info(
+                                    f"Loading tinygrad model on {device} "
+                                    f"({device_caps.device_name}, runtime={device_caps.runtime})"
+                                )
 
-                    # Emit BackendInitialized event now that we have device info
-                    try:
-                        # For MLX backend, we know it's using Metal on Apple Silicon
-                        device_info = {
-                            "device_type": "METAL",
-                            "device_name": "Apple Silicon",
-                            "runtime": "METAL",
-                        }
+                                # Get model checkpoint path from shard downloader
+                                from exo.download.shard_download import ShardDownloader
 
-                        event_sender.send(
-                            BackendInitialized(
-                                runner_id=runner_id,
-                                backend_type=backend_type,
-                                device_type=device_info["device_type"],
-                                device_name=device_info["device_name"],
-                                runtime=device_info["runtime"],
+                                downloader = ShardDownloader()
+
+                                # Run async operations in sync context
+                                import asyncio
+
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                try:
+                                    checkpoint_path = loop.run_until_complete(
+                                        downloader.ensure_shard(shard_metadata)
+                                    )
+
+                                    # Load model and tokenizer
+                                    tinygrad_model, tinygrad_tokenizer = (
+                                        loop.run_until_complete(
+                                            load_tinygrad_model(
+                                                shard_metadata,
+                                                checkpoint_path,
+                                                device,
+                                            )
+                                        )
+                                    )
+                                finally:
+                                    loop.close()
+
+                                logger.info(
+                                    f"Tinygrad model loaded successfully on {device}"
+                                )
+
+                                # Emit BackendInitialized event
+                                event_sender.send(
+                                    BackendInitialized(
+                                        runner_id=runner_id,
+                                        backend_type=backend_type,
+                                        device_type=device_caps.device_type,
+                                        device_name=device_caps.device_name,
+                                        runtime=device_caps.runtime or "CPU",
+                                    )
+                                )
+                            else:
+                                raise ValueError(
+                                    f"Tinygrad backend only supports TextGeneration, got: {shard_metadata.model_card.tasks}"
+                                )
+                        except Exception as e:
+                            logger.error(f"Failed to load tinygrad model: {e}")
+                            event_sender.send(
+                                RunnerStatusUpdated(
+                                    runner_id=runner_id,
+                                    runner_status=RunnerFailed(
+                                        error_message=f"Model loading failed: {e}"
+                                    ),
+                                )
                             )
-                        )
-                        logger.info(
-                            f"Backend initialized: {backend_type} on "
-                            f"{device_info['device_type']} ({device_info['device_name']})"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to emit BackendInitialized event: {e}")
+                            raise
+                    else:
+                        # MLX backend model loading
+                        if ModelTask.TextGeneration in shard_metadata.model_card.tasks:
+                            model, tokenizer = load_mlx_items(
+                                bound_instance, group, on_timeout=on_model_load_timeout
+                            )
+                            logger.info(
+                                f"model has_tool_calling={tokenizer.has_tool_calling}"
+                            )
+                            kv_prefix_cache = KVPrefixCache(group)
+
+                        elif (
+                            ModelTask.TextToImage in shard_metadata.model_card.tasks
+                            or ModelTask.ImageToImage in shard_metadata.model_card.tasks
+                        ):
+                            model = initialize_image_model(bound_instance)
+                        else:
+                            raise ValueError(
+                                f"Unknown model task(s): {shard_metadata.model_card.tasks}"
+                            )
+
+                        # Emit BackendInitialized event now that we have device info
+                        try:
+                            # For MLX backend, we know it's using Metal on Apple Silicon
+                            device_info = {
+                                "device_type": "METAL",
+                                "device_name": "Apple Silicon",
+                                "runtime": "METAL",
+                            }
+
+                            event_sender.send(
+                                BackendInitialized(
+                                    runner_id=runner_id,
+                                    backend_type=backend_type,
+                                    device_type=device_info["device_type"],
+                                    device_name=device_info["device_name"],
+                                    runtime=device_info["runtime"],
+                                )
+                            )
+                            logger.info(
+                                f"Backend initialized: {backend_type} on "
+                                f"{device_info['device_type']} ({device_info['device_name']})"
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to emit BackendInitialized event: {e}"
+                            )
 
                     current_status = RunnerLoaded()
                     logger.info("runner loaded")
@@ -321,125 +445,220 @@ def main(
                     )
                     event_sender.send(TaskAcknowledged(task_id=task.task_id))
 
-                    assert model and not isinstance(model, DistributedImageModel)
-                    assert tokenizer
+                    if backend_type == "tinygrad":
+                        # Tinygrad backend text generation
+                        assert tinygrad_model is not None
+                        assert tinygrad_tokenizer is not None
 
-                    try:
-                        _check_for_debug_prompts(task_params)
+                        try:
+                            # Build prompt from messages
+                            # For now, use simple concatenation - can be improved with chat templates
+                            prompt_parts = []
+                            for msg in task_params.input:
+                                prompt_parts.append(f"{msg.role}: {msg.content}")
+                            prompt = "\n".join(prompt_parts) + "\nassistant:"
 
-                        # Build prompt once - used for both generation and thinking detection
-                        prompt = apply_chat_template(tokenizer, task_params)
-
-                        # Generate responses using the actual MLX generation
-                        mlx_generator = mlx_generate(
-                            model=model,
-                            tokenizer=tokenizer,
-                            task=task_params,
-                            prompt=prompt,
-                            kv_prefix_cache=kv_prefix_cache,
-                            group=group,
-                        )
-
-                        # For other thinking models (GLM, etc.), check if we need to
-                        # prepend the thinking tag that was consumed by the chat template
-                        if detect_thinking_prompt_suffix(prompt, tokenizer):
-                            mlx_generator = parse_thinking_models(
-                                mlx_generator, tokenizer
+                            logger.info(
+                                f"Generating with tinygrad, prompt length: {len(prompt)}"
                             )
 
-                        # Kimi-K2 has tool call sections - we don't care about them
-                        if "kimi" in shard_metadata.model_card.model_id.lower():
-                            mlx_generator = filter_kimi_tokens(mlx_generator)
-                            patch_kimi_tokenizer(tokenizer)
+                            # Get device from capabilities
+                            device_caps = detect_capabilities()
+                            device = device_caps.device_type
 
-                        # GLM models need patched parser (upstream has bug with None regex match)
-                        elif "glm" in shard_metadata.model_card.model_id.lower():
-                            patch_glm_tokenizer(tokenizer)
-
-                        # GPT-OSS specific parsing to match other model formats.
-                        elif isinstance(model, GptOssModel):
-                            mlx_generator = parse_gpt_oss(mlx_generator)
-
-                        if tokenizer.has_tool_calling and not isinstance(
-                            model, GptOssModel
-                        ):
-                            assert tokenizer.tool_call_start
-                            assert tokenizer.tool_call_end
-                            assert tokenizer.tool_parser  # pyright: ignore[reportAny]
-                            mlx_generator = parse_tool_calls(
-                                mlx_generator,
-                                tokenizer.tool_call_start,
-                                tokenizer.tool_call_end,
-                                tokenizer.tool_parser,  # pyright: ignore[reportAny]
+                            # Generate tokens using tinygrad
+                            tinygrad_generator = tinygrad_generate(
+                                model=tinygrad_model,
+                                tokenizer=tinygrad_tokenizer,
+                                prompt=prompt,
+                                max_tokens=task_params.max_tokens or 100,
+                                temperature=task_params.temperature or 1.0,
+                                top_k=task_params.top_k,
+                                top_p=task_params.top_p,
+                                device=device,
+                                model_id=str(shard_metadata.model_card.model_id),
                             )
 
-                        completion_tokens = 0
-                        for response in mlx_generator:
-                            match response:
-                                case GenerationResponse():
-                                    completion_tokens += 1
-                                    if (
-                                        device_rank == 0
-                                        and response.finish_reason == "error"
-                                    ):
-                                        event_sender.send(
-                                            ChunkGenerated(
-                                                command_id=command_id,
-                                                chunk=ErrorChunk(
-                                                    error_message=response.text,
-                                                    model=shard_metadata.model_card.model_id,
-                                                ),
+                            # Forward responses to event sender
+                            for response in tinygrad_generator:
+                                match response:
+                                    case GenerationResponse():
+                                        if (
+                                            device_rank == 0
+                                            and response.finish_reason == "error"
+                                        ):
+                                            event_sender.send(
+                                                ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=ErrorChunk(
+                                                        error_message=response.text,
+                                                        model=shard_metadata.model_card.model_id,
+                                                    ),
+                                                )
                                             )
-                                        )
-
-                                    elif device_rank == 0:
-                                        assert response.finish_reason not in (
-                                            "error",
-                                            "tool_calls",
-                                            "function_call",
-                                        )
-                                        event_sender.send(
-                                            ChunkGenerated(
-                                                command_id=command_id,
-                                                chunk=TokenChunk(
-                                                    model=shard_metadata.model_card.model_id,
-                                                    text=response.text,
-                                                    token_id=response.token,
-                                                    usage=response.usage,
-                                                    finish_reason=response.finish_reason,
-                                                    stats=response.stats,
-                                                    logprob=response.logprob,
-                                                    top_logprobs=response.top_logprobs,
-                                                ),
+                                        elif device_rank == 0:
+                                            event_sender.send(
+                                                ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=TokenChunk(
+                                                        model=shard_metadata.model_card.model_id,
+                                                        text=response.text,
+                                                        token_id=response.token,
+                                                        usage=response.usage,
+                                                        finish_reason=response.finish_reason,
+                                                        stats=response.stats,
+                                                        logprob=response.logprob,
+                                                        top_logprobs=response.top_logprobs,
+                                                    ),
+                                                )
                                             )
-                                        )
-                                case ToolCallResponse():
-                                    if device_rank == 0:
-                                        event_sender.send(
-                                            ChunkGenerated(
-                                                command_id=command_id,
-                                                chunk=ToolCallChunk(
-                                                    tool_calls=response.tool_calls,
-                                                    model=shard_metadata.model_card.model_id,
-                                                    usage=response.usage,
-                                                ),
+                                    case ToolCallResponse():
+                                        if device_rank == 0:
+                                            event_sender.send(
+                                                ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=ToolCallChunk(
+                                                        tool_calls=response.tool_calls,
+                                                        model=shard_metadata.model_card.model_id,
+                                                        usage=response.usage,
+                                                    ),
+                                                )
                                             )
-                                        )
-
-                    # can we make this more explicit?
-                    except Exception as e:
-                        if device_rank == 0:
-                            event_sender.send(
-                                ChunkGenerated(
-                                    command_id=command_id,
-                                    chunk=ErrorChunk(
-                                        model=shard_metadata.model_card.model_id,
-                                        finish_reason="error",
-                                        error_message=str(e),
-                                    ),
+                        except Exception as e:
+                            logger.error(f"Tinygrad generation failed: {e}")
+                            if device_rank == 0:
+                                event_sender.send(
+                                    ChunkGenerated(
+                                        command_id=command_id,
+                                        chunk=ErrorChunk(
+                                            model=shard_metadata.model_card.model_id,
+                                            finish_reason="error",
+                                            error_message=str(e),
+                                        ),
+                                    )
                                 )
+                            raise
+                    else:
+                        # MLX backend text generation
+                        assert model and not isinstance(model, DistributedImageModel)
+                        assert tokenizer
+
+                        try:
+                            _check_for_debug_prompts(task_params)
+
+                            # Build prompt once - used for both generation and thinking detection
+                            prompt = apply_chat_template(tokenizer, task_params)
+
+                            # Generate responses using the actual MLX generation
+                            mlx_generator = mlx_generate(
+                                model=model,
+                                tokenizer=tokenizer,
+                                task=task_params,
+                                prompt=prompt,
+                                kv_prefix_cache=kv_prefix_cache,
+                                group=group,
                             )
-                        raise
+
+                            # For other thinking models (GLM, etc.), check if we need to
+                            # prepend the thinking tag that was consumed by the chat template
+                            if detect_thinking_prompt_suffix(prompt, tokenizer):
+                                mlx_generator = parse_thinking_models(
+                                    mlx_generator, tokenizer
+                                )
+
+                            # Kimi-K2 has tool call sections - we don't care about them
+                            if "kimi" in shard_metadata.model_card.model_id.lower():
+                                mlx_generator = filter_kimi_tokens(mlx_generator)
+                                patch_kimi_tokenizer(tokenizer)
+
+                            # GLM models need patched parser (upstream has bug with None regex match)
+                            elif "glm" in shard_metadata.model_card.model_id.lower():
+                                patch_glm_tokenizer(tokenizer)
+
+                            # GPT-OSS specific parsing to match other model formats.
+                            elif isinstance(model, GptOssModel):
+                                mlx_generator = parse_gpt_oss(mlx_generator)
+
+                            if tokenizer.has_tool_calling and not isinstance(
+                                model, GptOssModel
+                            ):
+                                assert tokenizer.tool_call_start
+                                assert tokenizer.tool_call_end
+                                assert tokenizer.tool_parser  # pyright: ignore[reportAny]
+                                mlx_generator = parse_tool_calls(
+                                    mlx_generator,
+                                    tokenizer.tool_call_start,
+                                    tokenizer.tool_call_end,
+                                    tokenizer.tool_parser,  # pyright: ignore[reportAny]
+                                )
+
+                            completion_tokens = 0
+                            for response in mlx_generator:
+                                match response:
+                                    case GenerationResponse():
+                                        completion_tokens += 1
+                                        if (
+                                            device_rank == 0
+                                            and response.finish_reason == "error"
+                                        ):
+                                            event_sender.send(
+                                                ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=ErrorChunk(
+                                                        error_message=response.text,
+                                                        model=shard_metadata.model_card.model_id,
+                                                    ),
+                                                )
+                                            )
+
+                                        elif device_rank == 0:
+                                            assert response.finish_reason not in (
+                                                "error",
+                                                "tool_calls",
+                                                "function_call",
+                                            )
+                                            event_sender.send(
+                                                ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=TokenChunk(
+                                                        model=shard_metadata.model_card.model_id,
+                                                        text=response.text,
+                                                        token_id=response.token,
+                                                        usage=response.usage,
+                                                        finish_reason=response.finish_reason,
+                                                        stats=response.stats,
+                                                        logprob=response.logprob,
+                                                        top_logprobs=response.top_logprobs,
+                                                    ),
+                                                )
+                                            )
+                                    case ToolCallResponse():
+                                        if device_rank == 0:
+                                            event_sender.send(
+                                                ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=ToolCallChunk(
+                                                        tool_calls=response.tool_calls,
+                                                        model=shard_metadata.model_card.model_id,
+                                                        usage=response.usage,
+                                                    ),
+                                                )
+                                            )
+
+                        # can we make this more explicit?
+                        except Exception as e:
+                            if device_rank == 0:
+                                event_sender.send(
+                                    ChunkGenerated(
+                                        command_id=command_id,
+                                        chunk=ErrorChunk(
+                                            model=shard_metadata.model_card.model_id,
+                                            finish_reason="error",
+                                            error_message=str(e),
+                                        ),
+                                    )
+                                )
+                            raise
 
                     current_status = RunnerReady()
                     logger.info("runner ready")
@@ -576,7 +795,32 @@ def main(
                     )
                     event_sender.send(TaskAcknowledged(task_id=task.task_id))
 
+                    # Clean up backend-specific resources
+                    if backend_type == "tinygrad":
+                        # Clean up tinygrad resources
+                        logger.info("Cleaning up tinygrad resources")
+                        del tinygrad_model, tinygrad_tokenizer
+
+                        # Clear any tinygrad caches if available
+                        try:
+                            # Tinygrad doesn't have a global cache clear like MLX
+                            # but we can try to free GPU memory
+                            import gc
+
+                            gc.collect()
+                            logger.info("Tinygrad resources cleaned up")
+                        except Exception as e:
+                            logger.warning(f"Error during tinygrad cleanup: {e}")
+                    else:
+                        # Clean up MLX resources
+                        del model, tokenizer, group
+                        mx.clear_cache()
+                        import gc
+
+                        gc.collect()
+
                     current_status = RunnerShutdown()
+                    logger.info("runner shutdown complete")
                 case _:
                     raise ValueError(
                         f"Received {task.__class__.__name__} outside of state machine in {current_status=}"
@@ -588,11 +832,7 @@ def main(
                 RunnerStatusUpdated(runner_id=runner_id, runner_status=current_status)
             )
             if isinstance(current_status, RunnerShutdown):
-                del model, tokenizer, group
-                mx.clear_cache()
-                import gc
-
-                gc.collect()
+                # Final cleanup already done in Shutdown case
                 break
 
 
