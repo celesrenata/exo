@@ -425,7 +425,7 @@ class API:
                     current_instances=self.state.instances,
                     required_nodes=required_nodes,
                 )
-            except ValueError as exc:
+            except Exception as exc:
                 if (model_card.model_id, sharding, instance_meta, 0) not in seen:
                     previews.append(
                         PlacementPreview(
@@ -433,7 +433,7 @@ class API:
                             sharding=sharding,
                             instance_meta=instance_meta,
                             instance=None,
-                            error=str(exc),
+                            error=f"{type(exc).__name__}: {str(exc)}",
                         )
                     )
                 seen.add((model_card.model_id, sharding, instance_meta, 0))
