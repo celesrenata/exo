@@ -14,6 +14,7 @@ class InstanceId(Id):
 class InstanceMeta(str, Enum):
     MlxRing = "MlxRing"
     MlxJaccl = "MlxJaccl"
+    TinygradRing = "TinygradRing"
 
 
 class BaseInstance(TaggedModel):
@@ -34,8 +35,13 @@ class MlxJacclInstance(BaseInstance):
     jaccl_coordinators: dict[NodeId, str]
 
 
+class TinygradRingInstance(BaseInstance):
+    hosts_by_node: dict[NodeId, list[Host]]
+    ephemeral_port: int
+
+
 # TODO: Single node instance
-Instance = MlxRingInstance | MlxJacclInstance
+Instance = MlxRingInstance | MlxJacclInstance | TinygradRingInstance
 
 
 class BoundInstance(CamelCaseModel):

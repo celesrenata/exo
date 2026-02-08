@@ -35,6 +35,7 @@ from exo.shared.types.worker.instances import (
     InstanceMeta,
     MlxJacclInstance,
     MlxRingInstance,
+    TinygradRingInstance,
 )
 from exo.shared.types.worker.shards import Sharding
 
@@ -132,7 +133,8 @@ def place_instance(
     instance_id = InstanceId()
     target_instances = dict(deepcopy(current_instances))
 
-    if len(selected_cycle) == 1:
+    # For single node, default to MlxRing only if not explicitly set to TinygradRing
+    if len(selected_cycle) == 1 and command.instance_meta == InstanceMeta.MlxJaccl:
         command.instance_meta = InstanceMeta.MlxRing
 
     # TODO: Single node instances
@@ -163,6 +165,22 @@ def place_instance(
                 node_network=node_network,
             )
             target_instances[instance_id] = MlxRingInstance(
+                instance_id=instance_id,
+                shard_assignments=shard_assignments,
+                hosts_by_node=hosts_by_node,
+                ephemeral_port=ephemeral_port,
+            )
+        case InstanceMeta.TinygradRing:
+            ephemeral_port = random_ephemeral_port()
+            hosts_by_node = get_mlx_ring_hosts_by_node(
+                selected_cycle=selected_cycle,
+                cycle_digraph=cycle_digraph,
+                ephemeral_port=ephemeral_port,
+                node_network=node_network,
+            )
+            from exo.shared.types.worker.instances import TinygradRingInstance
+
+            target_instances[instance_id] = TinygradRingInstance(
                 instance_id=instance_id,
                 shard_assignments=shard_assignments,
                 hosts_by_node=hosts_by_node,
