@@ -41,7 +41,7 @@ class TinygradBackend(InferenceBackend):
         tokenizer: Loaded tokenizer instance
 
     Example:
-        >>> from exo.download.shard_download import ShardDownloader
+        >>> from exo.download.shard_downloader import ShardDownloader
         >>> downloader = ShardDownloader()
         >>> backend = TinygradBackend(downloader)
         >>> # Backend will auto-detect Intel Arc and configure Level Zero

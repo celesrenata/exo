@@ -286,7 +286,7 @@ def main(
                                 )
 
                                 # Get model checkpoint path from shard downloader
-                                from exo.download.shard_download import ShardDownloader
+                                from exo.download.shard_downloader import ShardDownloader
 
                                 downloader = ShardDownloader()
 

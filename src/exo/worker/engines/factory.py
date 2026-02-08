@@ -42,7 +42,7 @@ def get_inference_backend(
         ValueError: If backend_name is unknown
 
     Example:
-        >>> from exo.download.shard_download import ShardDownloader
+        >>> from exo.download.shard_downloader import ShardDownloader
         >>> downloader = ShardDownloader()
         >>> backend = get_inference_backend("tinygrad", downloader)
     """
