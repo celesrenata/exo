@@ -216,6 +216,32 @@
               "i915.enable_guc=3" # Enable GuC and HuC firmware loading
             ];
 
+            # Main exo service
+            systemd.services.exo = lib.mkIf config.services.exo.intel.enable {
+              description = "exo Distributed AI Inference Service";
+              wantedBy = [ "multi-user.target" ];
+              after = [ "network.target" ];
+
+              serviceConfig = {
+                Type = "simple";
+                ExecStart = "${inputs.self.packages.${pkgs.system}.exo}/bin/exo -vv";
+                Restart = "on-failure";
+                RestartSec = "5s";
+                User = "root"; # Needs root for GPU access
+                Group = "root";
+
+                # Environment variables
+                Environment = [
+                  "EXO_TINYGRAD_ENABLED=true"
+                ];
+
+                # Logging
+                StandardOutput = "journal";
+                StandardError = "journal";
+                SyslogIdentifier = "exo";
+              };
+            };
+
             # Intel NPU support
             systemd.services.exo-npu = lib.mkIf config.services.exo.intel.npu.enable {
               description = "exo Intel NPU Inference Service";
