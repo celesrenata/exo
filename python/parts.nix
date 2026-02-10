@@ -175,6 +175,7 @@
                   tinygrad
                   numpy
                   python-multipart
+                  openai-harmony
                 ];
 
                 # Install Rust bindings after main package
