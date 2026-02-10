@@ -6,8 +6,11 @@ from loguru import logger
 
 from exo.shared.types.common import NodeId
 from exo.shared.types.events import (
+    BackendFailed,
+    BackendInitialized,
     ChunkGenerated,
     Event,
+    GPUMetricsCollected,
     IndexedEvent,
     InputChunkReceived,
     InstanceCreated,
@@ -63,6 +66,9 @@ def event_apply(event: Event, state: State) -> State:
             | InputChunkReceived()
             | TracesCollected()
             | TracesMerged()
+            | BackendInitialized()
+            | BackendFailed()
+            | GPUMetricsCollected()
         ):  # Pass-through events that don't modify state
             return state
         case InstanceCreated():
