@@ -176,6 +176,7 @@
                   numpy
                   python-multipart
                   openai-harmony
+                  pyopencl
                 ];
 
                 # Install Rust bindings after main package
