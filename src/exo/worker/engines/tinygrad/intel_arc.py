@@ -189,10 +189,10 @@ def check_opencl_available() -> bool:
             logger.debug("OpenCL platforms found but no devices available")
             return False
 
-    except ImportError:
-        logger.debug("pyopencl not installed")
+    except ImportError as e:
+        logger.warning(f"pyopencl not available: {e}")
     except Exception as e:
-        logger.debug(f"OpenCL check failed: {e}")
+        logger.warning(f"OpenCL check failed: {e}", exc_info=True)
 
     # Check for OpenCL library directly
     try:
