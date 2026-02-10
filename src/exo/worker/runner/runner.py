@@ -286,9 +286,9 @@ def main(
                                 )
 
                                 # Get model checkpoint path from shard downloader
-                                from exo.download.shard_downloader import ShardDownloader
+                                from exo.download.impl_shard_downloader import ResumableShardDownloader
 
-                                downloader = ShardDownloader()
+                                downloader = ResumableShardDownloader()
 
                                 # Run async operations in sync context
                                 import asyncio
