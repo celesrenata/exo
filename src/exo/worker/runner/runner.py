@@ -396,16 +396,22 @@ def main(
 
                     logger.info(f"warming up inference for instance: {instance}")
                     if ModelTask.TextGeneration in shard_metadata.model_card.tasks:
-                        assert not isinstance(model, DistributedImageModel)
+                        if backend_type == "mlx":
+                            assert not isinstance(model, DistributedImageModel)
                         assert tokenizer
 
-                        toks = warmup_inference(
-                            model=model,
-                            tokenizer=tokenizer,
-                            group=group,
-                            # kv_prefix_cache=kv_prefix_cache,  # supply for warmup-time prefix caching
-                        )
-                        logger.info(f"warmed up by generating {toks} tokens")
+                        if backend_type == "mlx":
+                            toks = warmup_inference(
+                                model=model,
+                                tokenizer=tokenizer,
+                                group=group,
+                                # kv_prefix_cache=kv_prefix_cache,  # supply for warmup-time prefix caching
+                            )
+                            logger.info(f"warmed up by generating {toks} tokens")
+                        else:
+                            # Tinygrad backend - skip warmup for now
+                            logger.info("Skipping warmup for tinygrad backend")
+                        
                         logger.info(
                             f"runner initialized in {time.time() - setup_start_time} seconds"
                         )
