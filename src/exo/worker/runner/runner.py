@@ -397,7 +397,8 @@ def main(
                     logger.info(f"warming up inference for instance: {instance}")
                     if ModelTask.TextGeneration in shard_metadata.model_card.tasks:
                         if backend_type == "mlx":
-                            assert not isinstance(model, DistributedImageModel)
+                            # Check model type for MLX
+                            assert model.__class__.__name__ != "DistributedImageModel"
                         assert tokenizer
 
                         if backend_type == "mlx":
@@ -419,12 +420,15 @@ def main(
                         ModelTask.TextToImage in shard_metadata.model_card.tasks
                         or ModelTask.ImageToImage in shard_metadata.model_card.tasks
                     ):
-                        assert isinstance(model, DistributedImageModel)
-                        image = warmup_image_generator(model=model)
-                        if image is not None:
-                            logger.info(f"warmed up by generating {image.size} image")
+                        if backend_type == "mlx":
+                            assert isinstance(model, DistributedImageModel)
+                            image = warmup_image_generator(model=model)
+                            if image is not None:
+                                logger.info(f"warmed up by generating {image.size} image")
+                            else:
+                                logger.info("warmup completed (non-primary node)")
                         else:
-                            logger.info("warmup completed (non-primary node)")
+                            raise ValueError("Image generation only supported with MLX backend")
 
                     current_status = RunnerReady()
                     logger.info("runner ready")
@@ -661,6 +665,8 @@ def main(
                 case ImageGeneration(
                     task_params=task_params, command_id=command_id
                 ) if isinstance(current_status, RunnerReady):
+                    if backend_type != "mlx":
+                        raise ValueError("Image generation only supported with MLX backend")
                     assert isinstance(model, DistributedImageModel)
                     logger.info(f"received image generation request: {str(task)[:500]}")
                     current_status = RunnerRunning()
@@ -724,6 +730,8 @@ def main(
                 case ImageEdits(task_params=task_params, command_id=command_id) if (
                     isinstance(current_status, RunnerReady)
                 ):
+                    if backend_type != "mlx":
+                        raise ValueError("Image edits only supported with MLX backend")
                     assert isinstance(model, DistributedImageModel)
                     logger.info(f"received image edits request: {str(task)[:500]}")
                     current_status = RunnerRunning()
