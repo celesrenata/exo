@@ -197,22 +197,12 @@ def main(
         raise
 
     # Initialize backend-specific variables
-    if backend_type == "tinygrad":
-        # Tinygrad backend variables
-        tinygrad_model: Any = None
-        tinygrad_tokenizer: Any = None
-        model = None
-        tokenizer = None
-        group = None
-        kv_prefix_cache = None
-    else:
-        # MLX backend variables
-        model: Model | DistributedImageModel | None = None
-        tokenizer = None
-        group = None
-        kv_prefix_cache: KVPrefixCache | None = None
-        tinygrad_model = None
-        tinygrad_tokenizer = None
+    model: Any = None
+    tokenizer: Any = None
+    group: Any = None
+    kv_prefix_cache: Any = None
+    tinygrad_model: Any = None
+    tinygrad_tokenizer: Any = None
 
     current_status: RunnerStatus = RunnerIdle()
     logger.info("runner created")
