@@ -168,7 +168,6 @@
                   tiktoken
                   hypercorn
                   httpx
-                  toml
                   tomlkit
                   pillow
                   safetensors
