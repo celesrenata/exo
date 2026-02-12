@@ -2425,12 +2425,20 @@ def assign_weights_to_model(
 
     # Iterate through expected weights and load them
     for hf_name, param in weight_map.items():
-        if hf_name not in weights:
+        # Handle weight tying: lm_head.weight can be tied to embed_tokens.weight
+        if hf_name == "lm_head.weight" and hf_name not in weights:
+            if "model.embed_tokens.weight" in weights:
+                logger.info("Using model.embed_tokens.weight for lm_head.weight (weight tying)")
+                np_weight = weights["model.embed_tokens.weight"]
+            else:
+                logger.warning(f"Weight not found in checkpoint: {hf_name}")
+                continue
+        elif hf_name not in weights:
             logger.warning(f"Weight not found in checkpoint: {hf_name}")
             continue
-
-        # Get numpy weight array
-        np_weight = weights[hf_name]
+        else:
+            # Get numpy weight array
+            np_weight = weights[hf_name]
 
         # Get expected shape from parameter
         expected_shape = param.shape
@@ -2752,6 +2760,10 @@ def validate_weights(
     missing_weights: list[str] = []
     for expected_name in weight_map.keys():
         if expected_name not in weights:
+            # Handle weight tying: lm_head.weight can be tied to embed_tokens.weight
+            if expected_name == "lm_head.weight" and "model.embed_tokens.weight" in weights:
+                logger.info("lm_head.weight is tied to model.embed_tokens.weight (weight tying)")
+                continue
             missing_weights.append(expected_name)
 
     # Check for shape mismatches
