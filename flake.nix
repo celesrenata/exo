@@ -113,9 +113,9 @@
 
           config = lib.mkIf config.services.exo.intel.enable {
             # Base tinygrad support and exo package
+            # Note: Using patched tinygrad from pkgsExo overlay (includes Intel Arc >4GB fix)
             environment.systemPackages = with pkgs; [
-              python313Packages.tinygrad
-              # Add exo package from the flake
+              # Add exo package from the flake (includes patched tinygrad)
               inputs.self.packages.${system}.exo or (throw "exo package not available for ${system}")
             ] ++ lib.optionals config.services.exo.intel.arc.enable [
               # Monitoring and debugging tools for Intel Arc
@@ -317,7 +317,7 @@
           # Use pinned nixpkgs for swift-format (swift is broken on x86_64-linux in newer nixpkgs)
           pkgsSwift = import inputs.nixpkgs-swift { inherit system; };
 
-          # Create a separate pkgs instance for exo with anyio overlay
+          # Create a separate pkgs instance for exo with anyio and tinygrad overlays
           # This avoids polluting the global pkgs
           pkgsExo = import inputs.nixpkgs {
             inherit system;
@@ -337,6 +337,13 @@
                       postPatch = (old.postPatch or "") + ''
                         sed -i '/def test_bad_init_value/,/pytest.raises.*CapacityLimiter.*0/d' tests/test_synchronization.py
                       '';
+                    });
+                    
+                    # Patch tinygrad for Intel Arc >4GB buffer support
+                    tinygrad = psuper.tinygrad.overridePythonAttrs (old: {
+                      patches = (old.patches or []) ++ [
+                        ./patches/tinygrad-intel-arc-4gb-fix.patch
+                      ];
                     });
                   };
                 };
