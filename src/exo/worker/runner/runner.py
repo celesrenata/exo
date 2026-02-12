@@ -513,9 +513,8 @@ def main(
                                 f"Generating with tinygrad, prompt length: {len(prompt)}"
                             )
 
-                            # Get device from capabilities
-                            device_caps = detect_capabilities()
-                            device = device_caps.device_type
+                            # Get device from environment (already set in bootstrap)
+                            device = os.environ.get("TINYGRAD_BACKEND", "CPU")
 
                             # Generate tokens using tinygrad
                             tinygrad_generator = tinygrad_generate(
