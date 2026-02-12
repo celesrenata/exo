@@ -302,6 +302,36 @@ def _load_safetensors_sync(weights_path: Path) -> dict[str, "np.ndarray[Any, Any
         raise RuntimeError(f"Failed to load safetensors: {e}") from e
 
 
+def _convert_bfloat16_to_float32(tensor: "np.ndarray[Any, Any]") -> "np.ndarray[Any, Any]":
+    """Convert bfloat16 tensor to float32.
+    
+    bfloat16 is not natively supported by numpy, but safetensors can load it.
+    We convert it to float32 for compatibility with tinygrad.
+    
+    Args:
+        tensor: Input tensor in bfloat16 format
+        
+    Returns:
+        Tensor converted to float32
+    """
+    try:
+        # Try direct conversion if numpy supports it
+        return tensor.astype(np.float32)
+    except (AttributeError, TypeError):
+        # Fallback: bfloat16 is stored as uint16, manually convert
+        # bfloat16 format: 1 sign bit, 8 exponent bits, 7 mantissa bits
+        # float32 format: 1 sign bit, 8 exponent bits, 23 mantissa bits
+        # Conversion: shift left by 16 bits to expand mantissa
+        if tensor.dtype == np.uint16:
+            # Reinterpret as uint32 and shift left 16 bits
+            uint32_data = tensor.astype(np.uint32) << 16
+            # Reinterpret as float32
+            return uint32_data.view(np.float32)
+        else:
+            logger.warning(f"Unexpected dtype for bfloat16 conversion: {tensor.dtype}, using direct cast")
+            return tensor.astype(np.float32)
+
+
 def _load_single_safetensors(weights_path: Path) -> dict[str, "np.ndarray[Any, Any]"]:
     """Load weights from a single safetensors file.
 
@@ -316,7 +346,13 @@ def _load_single_safetensors(weights_path: Path) -> dict[str, "np.ndarray[Any, A
     weights = {}
     with safe_open(weights_path, framework="numpy") as f:
         for key in f.keys():
-            weights[key] = f.get_tensor(key)
+            tensor = f.get_tensor(key)
+            # Convert bfloat16 to float32 if needed (numpy doesn't support bfloat16 natively)
+            if hasattr(tensor, 'dtype') and str(tensor.dtype) == 'bfloat16':
+                logger.debug(f"Converting {key} from bfloat16 to float32")
+                # bfloat16 is stored as uint16, convert to float32
+                tensor = _convert_bfloat16_to_float32(tensor)
+            weights[key] = tensor
 
     logger.debug(f"Loaded {len(weights)} weight tensors from {weights_path}")
     return weights
@@ -357,7 +393,12 @@ def _load_sharded_safetensors(
         with safe_open(shard_path, framework="numpy") as f:
             for key in f.keys():
                 if key in weight_map and weight_map[key] == shard_file:
-                    weights[key] = f.get_tensor(key)
+                    tensor = f.get_tensor(key)
+                    # Convert bfloat16 to float32 if needed (numpy doesn't support bfloat16 natively)
+                    if hasattr(tensor, 'dtype') and str(tensor.dtype) == 'bfloat16':
+                        logger.debug(f"Converting {key} from bfloat16 to float32")
+                        tensor = _convert_bfloat16_to_float32(tensor)
+                    weights[key] = tensor
 
     logger.debug(
         f"Loaded {len(weights)} weight tensors from {len(shard_files)} shard files"
