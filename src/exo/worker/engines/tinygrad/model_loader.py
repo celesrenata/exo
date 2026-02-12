@@ -341,21 +341,23 @@ def _load_single_safetensors(weights_path: Path) -> dict[str, "np.ndarray[Any, A
     Returns:
         Dictionary mapping weight names to numpy arrays
     """
-    from safetensors import safe_open
-
-    weights = {}
-    # Use 'numpy' framework and handle bfloat16 manually (like exo-cuda)
-    with safe_open(weights_path, framework="numpy") as f:
-        for key in f.keys():
-            tensor = f.get_tensor(key)
-            # Handle bfloat16 conversion manually
-            if hasattr(tensor, 'dtype') and tensor.dtype.name == 'bfloat16':
+    from safetensors.numpy import load_file
+    
+    try:
+        # Try loading with numpy backend (handles most dtypes including bfloat16)
+        weights = load_file(str(weights_path))
+        logger.debug(f"Loaded {len(weights)} weight tensors from {weights_path}")
+        
+        # Convert any bfloat16 tensors to float32
+        for key, tensor in weights.items():
+            if hasattr(tensor, 'dtype') and 'bfloat16' in str(tensor.dtype):
                 logger.debug(f"Converting {key} from bfloat16 to float32")
-                tensor = _convert_bfloat16_to_float32(tensor)
-            weights[key] = tensor
-
-    logger.debug(f"Loaded {len(weights)} weight tensors from {weights_path}")
-    return weights
+                weights[key] = _convert_bfloat16_to_float32(tensor)
+        
+        return weights
+    except Exception as e:
+        logger.error(f"Failed to load safetensors file {weights_path}: {e}")
+        raise
 
 
 def _load_sharded_safetensors(
@@ -370,8 +372,7 @@ def _load_sharded_safetensors(
         Dictionary mapping weight names to numpy arrays
     """
     import json
-
-    from safetensors import safe_open
+    from safetensors.numpy import load_file
 
     # Load index file
     with open(index_path) as f:
@@ -390,16 +391,22 @@ def _load_sharded_safetensors(
             logger.warning(f"Shard file not found: {shard_path}")
             continue
 
-        # Use 'numpy' framework and handle bfloat16 manually (like exo-cuda)
-        with safe_open(shard_path, framework="numpy") as f:
-            for key in f.keys():
+        try:
+            # Load entire shard file with numpy backend
+            shard_weights = load_file(str(shard_path))
+            
+            # Only keep weights that belong to this shard according to index
+            for key in shard_weights.keys():
                 if key in weight_map and weight_map[key] == shard_file:
-                    tensor = f.get_tensor(key)
-                    # Handle bfloat16 conversion manually
-                    if hasattr(tensor, 'dtype') and tensor.dtype.name == 'bfloat16':
+                    tensor = shard_weights[key]
+                    # Handle bfloat16 conversion
+                    if hasattr(tensor, 'dtype') and 'bfloat16' in str(tensor.dtype):
                         logger.debug(f"Converting {key} from bfloat16 to float32")
                         tensor = _convert_bfloat16_to_float32(tensor)
                     weights[key] = tensor
+        except Exception as e:
+            logger.error(f"Failed to load shard {shard_path}: {e}")
+            raise
 
     logger.debug(
         f"Loaded {len(weights)} weight tensors from {len(shard_files)} shard files"
