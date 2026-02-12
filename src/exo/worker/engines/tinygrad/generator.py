@@ -188,9 +188,14 @@ def tinygrad_generate(
             )
 
             # Create generation stats
+            from exo.shared.types.common import Memory
+
             stats = GenerationStats(
-                prefill_tokens_per_sec=0.0,  # Not tracked separately in tinygrad
-                generation_tokens_per_sec=tokens_per_sec,
+                prompt_tps=0.0,  # Not tracked separately in tinygrad
+                generation_tps=tokens_per_sec,
+                prompt_tokens=prompt_token_count,
+                generation_tokens=completion_tokens,
+                peak_memory_usage=Memory(in_bytes=0),  # TODO: Track actual memory usage
             )
 
             # If tool calls detected at end, yield ToolCallResponse instead
