@@ -266,14 +266,45 @@ def main(
                                 ModelTask.TextGeneration
                                 in shard_metadata.model_card.tasks
                             ):
-                                # Detect device capabilities
-                                device_caps = detect_capabilities()
-                                device = device_caps.device_type
-
-                                logger.info(
-                                    f"Loading tinygrad model on {device} "
-                                    f"({device_caps.device_name}, runtime={device_caps.runtime})"
-                                )
+                                # Check if device was already configured in bootstrap
+                                # (via environment variables or detection)
+                                tinygrad_backend = os.environ.get("TINYGRAD_BACKEND", "CPU")
+                                
+                                if tinygrad_backend == "GPU":
+                                    # GPU mode - determine runtime from environment
+                                    if os.environ.get("OPENCL") == "1":
+                                        runtime = "OPENCL"
+                                        device_name = "GPU (OpenCL)"
+                                    elif os.environ.get("LEVEL_ZERO") == "1":
+                                        runtime = "LEVEL_ZERO"
+                                        device_name = "Intel Arc GPU (Level Zero)"
+                                    elif os.environ.get("CUDA") == "1":
+                                        runtime = "CUDA"
+                                        device_name = "NVIDIA GPU (CUDA)"
+                                    else:
+                                        runtime = "OPENCL"  # Default GPU runtime
+                                        device_name = "GPU"
+                                    
+                                    logger.info(
+                                        f"Loading tinygrad model on GPU "
+                                        f"({device_name}, runtime={runtime})"
+                                    )
+                                    device = "GPU"
+                                elif tinygrad_backend == "METAL":
+                                    logger.info(
+                                        f"Loading tinygrad model on METAL "
+                                        f"(Apple Metal GPU)"
+                                    )
+                                    device = "METAL"
+                                else:
+                                    # CPU fallback
+                                    import multiprocessing
+                                    cpu_count = multiprocessing.cpu_count()
+                                    logger.info(
+                                        f"Loading tinygrad model on CPU "
+                                        f"(CPU ({cpu_count} cores), runtime=None)"
+                                    )
+                                    device = "CPU"
 
                                 # Get model checkpoint path from shard downloader
                                 from exo.download.impl_shard_downloader import ResumableShardDownloader
