@@ -188,7 +188,7 @@ def tinygrad_generate(
             )
 
             # Create generation stats
-            from exo.shared.types.common import Memory
+            from exo.shared.types.memory import Memory
 
             stats = GenerationStats(
                 prompt_tps=0.0,  # Not tracked separately in tinygrad
