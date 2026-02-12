@@ -243,7 +243,7 @@ def tinygrad_generate(
         )
 
 
-async def infer_tensor(
+def infer_tensor(
     model: Any,
     input_data: "np.ndarray[Any, Any]",
     inference_state: dict[str, Any] | None,
@@ -269,7 +269,7 @@ async def infer_tensor(
         RuntimeError: If inference fails
 
     Example:
-        >>> output, state = await infer_tensor(
+        >>> output, state = infer_tensor(
         ...     model,
         ...     input_tokens,
         ...     previous_state,
