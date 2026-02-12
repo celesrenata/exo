@@ -500,6 +500,11 @@ def _create_model_structure(
             self.model_size = model_size
             self.vocab_size = 128256  # Default vocab size for Llama models
             
+            # Check what device tinygrad is actually using
+            from tinygrad import Device
+            logger.info(f"Tinygrad Device.DEFAULT: {Device.DEFAULT}")
+            logger.info(f"Model device parameter: {device}")
+            
             logger.warning(
                 "Using placeholder model - this will generate random output! "
                 "A real transformer implementation is needed for proper inference."
@@ -529,15 +534,22 @@ def _create_model_structure(
                 batch_size = 1
                 seq_len = 1
             
-            # Return random logits with correct shape on the same device as input
-            # In a real implementation, this would be the output of the transformer
+            # Create tensor on the correct device
+            canonicalized_device = Device.canonicalize(self.device)
             logger.debug(
-                f"Placeholder model returning random logits on {self.device}: "
-                f"[{batch_size}, {seq_len}, {self.vocab_size}]"
+                f"Creating tensor on device: {canonicalized_device} "
+                f"(requested: {self.device}, Device.DEFAULT: {Device.DEFAULT})"
             )
             
-            # Create tensor on the correct device
-            return Tensor.randn(batch_size, seq_len, self.vocab_size, device=Device.canonicalize(self.device))
+            result = Tensor.randn(batch_size, seq_len, self.vocab_size, device=canonicalized_device)
+            
+            # Log actual device after creation
+            actual_device = result.device if hasattr(result, 'device') else 'unknown'
+            logger.debug(
+                f"Tensor created with device: {actual_device}, shape: [{batch_size}, {seq_len}, {self.vocab_size}]"
+            )
+            
+            return result
 
     return PlaceholderModel(
         n_layers=shard_metadata.n_layers,
