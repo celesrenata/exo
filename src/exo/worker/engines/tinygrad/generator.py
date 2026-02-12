@@ -243,7 +243,7 @@ def tinygrad_generate(
         )
 
 
-def infer_tensor(
+async def infer_tensor(
     model: Any,
     input_data: "np.ndarray[Any, Any]",
     inference_state: dict[str, Any] | None,
@@ -262,14 +262,14 @@ def infer_tensor(
 
     Returns:
         Tuple of (output_logits, new_inference_state)
-        - output_logits: Logits for next token prediction (shape: [batch_size, vocab_size])
+        - output_logits: Logits for next token prediction (shape: [batch_size, seq_len, vocab_size])
         - new_inference_state: Updated state for next inference
 
     Raises:
         RuntimeError: If inference fails
 
     Example:
-        >>> output, state = infer_tensor(
+        >>> output, state = await infer_tensor(
         ...     model,
         ...     input_tokens,
         ...     previous_state,
@@ -285,24 +285,29 @@ def infer_tensor(
         )
 
         # Convert numpy array to tinygrad Tensor
-        input_tensor = Tensor(input_data)
+        input_tensor = Tensor(input_data, requires_grad=False)
 
-        # Initialize or update inference state
-        if inference_state is None:
-            inference_state = _initialize_inference_state(model)
+        # Extract KV cache from inference state
+        kv_cache = None
+        if inference_state is not None:
+            kv_cache = inference_state.get("kv_cache")
 
-        # Run forward pass
-        output_logits = _forward_pass(
+        # Run forward pass (synchronous tinygrad operations)
+        # We don't need to run in a thread since tinygrad operations are fast
+        output_logits, updated_cache = _forward_pass(
             model,
             input_tensor,
-            inference_state,
+            kv_cache,
         )
 
         # Convert output back to numpy
         output_np = output_logits.numpy()
 
-        # Update inference state (KV cache)
-        new_state = _update_inference_state(inference_state, output_logits)
+        # Update inference state with new cache
+        new_state = {
+            "kv_cache": updated_cache,
+            "position": updated_cache.get_seq_length() if updated_cache else 0,
+        }
 
         logger.debug(f"Inference complete, output shape: {output_np.shape}")
 
@@ -351,8 +356,8 @@ def _initialize_inference_state(model: Any) -> dict[str, Any]:
 def _forward_pass(
     model: Any,
     input_tensor: Any,
-    inference_state: dict,
-) -> Any:
+    kv_cache: Any | None,
+) -> tuple[Any, Any]:
     """Execute forward pass through the model with KV cache.
 
     This function runs the model's forward method, passing the KV cache
@@ -360,35 +365,26 @@ def _forward_pass(
     value tensors from previous tokens.
 
     Args:
-        model: Model instance
+        model: Model instance (LlamaTransformer)
         input_tensor: Input tensor (shape: [batch_size, seq_len])
-        inference_state: Current inference state with KV cache
+        kv_cache: Current KV cache (KVCache object or None)
 
     Returns:
-        Output logits tensor (shape: [batch_size, seq_len, vocab_size])
+        Tuple of (output_logits, updated_cache)
+        - output_logits: Output logits tensor (shape: [batch_size, seq_len, vocab_size])
+        - updated_cache: Updated KVCache object
     """
     try:
-        kv_cache = inference_state.get("kv_cache")
-
-        # Check if model supports KV cache
-        if hasattr(model, "forward_with_cache"):
-            # Model has explicit cache support
-            output, updated_cache = model.forward_with_cache(input_tensor, kv_cache)
-            # Update cache in state (will be handled by _update_inference_state)
-            inference_state["_updated_cache"] = updated_cache
-            return output
-        elif kv_cache is not None and len(kv_cache) > 0:
-            # Try passing cache as keyword argument
-            try:
-                output = model(input_tensor, cache=kv_cache)
-                return output
-            except TypeError:
-                # Model doesn't accept cache parameter, fall back to regular forward
-                pass
-
-        # Fall back to regular forward pass without cache
-        output = model(input_tensor)
-        return output
+        # LlamaTransformer expects (input_ids, cache, position_ids, attention_mask)
+        # and returns (logits, updated_cache)
+        output_logits, updated_cache = model(
+            input_ids=input_tensor,
+            cache=kv_cache,
+            position_ids=None,  # Model will auto-generate based on cache
+            attention_mask=None,  # No masking for now
+        )
+        
+        return output_logits, updated_cache
 
     except Exception as e:
         logger.error(f"Forward pass failed: {e}")
@@ -398,8 +394,15 @@ def _forward_pass(
         # Create dummy logits (batch_size, seq_len, vocab_size)
         batch_size = input_tensor.shape[0]
         seq_len = input_tensor.shape[1] if len(input_tensor.shape) > 1 else 1
-        vocab_size = 50000
-        return Tensor.randn(batch_size, seq_len, vocab_size)
+        vocab_size = 128256  # Default Llama vocab size
+        
+        dummy_logits = Tensor.randn(batch_size, seq_len, vocab_size)
+        
+        # Return dummy cache as well
+        from exo.worker.engines.tinygrad.llama_transformer import KVCache
+        dummy_cache = kv_cache if kv_cache is not None else KVCache(num_layers=28)
+        
+        return dummy_logits, dummy_cache
 
 
 def _update_inference_state(

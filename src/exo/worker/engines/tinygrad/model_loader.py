@@ -292,7 +292,11 @@ def _load_safetensors_sync(weights_path: Path) -> dict[str, "np.ndarray[Any, Any
     try:
         # Check if this is an index file (sharded model)
         if weights_path.name.endswith(".index.json"):
-            return _load_sharded_safetensors(weights_path)
+            # Use the new sharded loading function from llama_transformer
+            from exo.worker.engines.tinygrad.llama_transformer import load_sharded_weights
+            
+            checkpoint_dir = weights_path.parent
+            return load_sharded_weights(checkpoint_dir, weights_path)
         else:
             return _load_single_safetensors(weights_path)
     except ImportError:
@@ -407,61 +411,14 @@ def _safetensors_dtype_to_numpy(dtype_str: str) -> np.dtype:
     return dtype_map.get(dtype_str, np.float32)
 
 
-def _load_sharded_safetensors(
-    index_path: Path,
-) -> dict[str, "np.ndarray[Any, Any]"]:
-    """Load weights from sharded safetensors files.
-
-    Args:
-        index_path: Path to model.safetensors.index.json
-
-    Returns:
-        Dictionary mapping weight names to numpy arrays
-    """
-    import json
-
-    # Load index file
-    with open(index_path) as f:
-        index = json.load(f)
-
-    weight_map = index.get("weight_map", {})
-    checkpoint_dir = index_path.parent
-
-    # Load weights from all shard files
-    weights = {}
-    shard_files = set(weight_map.values())
-
-    for shard_file in shard_files:
-        shard_path = checkpoint_dir / shard_file
-        if not shard_path.exists():
-            logger.warning(f"Shard file not found: {shard_path}")
-            continue
-
-        try:
-            # Load entire shard file using manual loader
-            shard_weights = _load_single_safetensors(shard_path)
-            
-            # Only keep weights that belong to this shard according to index
-            for key in shard_weights.keys():
-                if key in weight_map and weight_map[key] == shard_file:
-                    weights[key] = shard_weights[key]
-        except Exception as e:
-            logger.error(f"Failed to load shard {shard_path}: {e}")
-            raise
-
-    logger.debug(
-        f"Loaded {len(weights)} weight tensors from {len(shard_files)} shard files"
-    )
-    return weights
-
 
 def _create_model_structure(
     shard_metadata: ShardMetadata, device: str, model_size: str
 ) -> Any:
     """Create model structure based on shard metadata.
 
-    This creates a placeholder model structure. In a full implementation,
-    this would create proper transformer layers using tinygrad.
+    This creates a LlamaTransformer model structure without weights.
+    Used when no weights file is found.
 
     Args:
         shard_metadata: Metadata describing the model shard
@@ -480,95 +437,30 @@ def _create_model_structure(
         device=device,
     )
 
-    # Placeholder model structure
-    # Real implementation would use tinygrad to create transformer layers
-    # For now, return random logits with correct shape
-    class PlaceholderModel:
-        def __init__(
-            self,
-            n_layers: int,
-            hidden_size: int,
-            start_layer: int,
-            end_layer: int,
-            device: str,
-        ):
-            self.n_layers = n_layers
-            self.hidden_size = hidden_size
-            self.start_layer = start_layer
-            self.end_layer = end_layer
-            self.device = device
-            self.model_size = model_size
-            self.vocab_size = 128256  # Default vocab size for Llama models
-            
-            # Check what device tinygrad is actually using
-            from tinygrad import Device
-            logger.info(f"Tinygrad Device.DEFAULT: {Device.DEFAULT}")
-            logger.info(f"Model device parameter: {device}")
-            
-            # Try to get more info about the device
-            try:
-                # Check if GPU device is actually initialized
-                from tinygrad.runtime.ops_gpu import GPUDevice
-                logger.info(f"GPUDevice available: True")
-            except Exception as e:
-                logger.warning(f"GPUDevice not available: {e}")
-            
-            logger.warning(
-                "Using placeholder model - this will generate random output! "
-                "A real transformer implementation is needed for proper inference."
-            )
-
-        def embed(self, x: Any) -> Any:
-            """Embed tokens (placeholder)."""
-            return x
-
-        def forward(self, h: Any, **kwargs: Any) -> Any:
-            """Forward pass (placeholder)."""
-            return h
-
-        def __call__(self, x: Any) -> Any:
-            """Forward pass through model.
-            
-            Returns logits with shape [batch_size, seq_len, vocab_size].
-            This is a placeholder that returns random logits.
-            """
-            from tinygrad import Tensor, Device
-            
-            # Get input shape
-            if hasattr(x, 'shape'):
-                batch_size = x.shape[0] if len(x.shape) > 0 else 1
-                seq_len = x.shape[1] if len(x.shape) > 1 else 1
-            else:
-                batch_size = 1
-                seq_len = 1
-            
-            # Create tensor on the correct device
-            canonicalized_device = Device.canonicalize(self.device)
-            logger.debug(
-                f"Creating tensor on device: {canonicalized_device} "
-                f"(requested: {self.device}, Device.DEFAULT: {Device.DEFAULT})"
-            )
-            
-            result = Tensor.randn(batch_size, seq_len, self.vocab_size, device=canonicalized_device)
-            
-            # Realize the tensor to force actual computation on GPU
-            result.realize()
-            
-            # Log actual device after creation
-            actual_device = result.device if hasattr(result, 'device') else 'unknown'
-            logger.debug(
-                f"Tensor realized on device: {actual_device}, shape: [{batch_size}, {seq_len}, {self.vocab_size}]"
-            )
-            
-            return result
-
-    return PlaceholderModel(
-        n_layers=shard_metadata.n_layers,
-        hidden_size=shard_metadata.model_card.hidden_size,
-        start_layer=shard_metadata.start_layer,
-        end_layer=shard_metadata.end_layer,
-        device=device,
+    from exo.worker.engines.tinygrad.llama_transformer import (
+        LlamaTransformer,
+        parse_config_from_dict,
+        get_default_config,
     )
+
+    # Parse configuration from model card or use defaults
+    config_dict = shard_metadata.model_card.config
+    if config_dict:
+        config = parse_config_from_dict(config_dict)
+        logger.info("Parsed config from model card")
+    else:
+        config = get_default_config(model_size)
+        logger.info(f"Using default config for {model_size}")
+
+    # Create transformer model with random initialization
+    model = LlamaTransformer(config)
+    
+    logger.warning(
+        "Created model with random initialization - weights not loaded! "
+        "Model will not produce meaningful output until weights are loaded."
+    )
+
+    return model
 
 
 def _create_model_with_weights(
@@ -599,19 +491,51 @@ def _create_model_with_weights(
         end_layer=shard_metadata.end_layer,
     )
 
-    # Create base model structure
-    model = _create_model_structure(shard_metadata, device, model_size)
+    # Create actual LlamaTransformer with weights
+    from exo.worker.engines.tinygrad.llama_transformer import (
+        LlamaTransformer,
+        parse_config_from_dict,
+        get_default_config,
+        assign_weights_to_model,
+        check_required_weights,
+        get_weight_statistics,
+    )
+
+    # Parse configuration from model card or use defaults
+    config_dict = shard_metadata.model_card.config
+    if config_dict:
+        config = parse_config_from_dict(config_dict)
+        logger.info("Parsed config from model card")
+    else:
+        config = get_default_config(model_size)
+        logger.info(f"Using default config for {model_size}")
+
+    # Create transformer model
+    model = LlamaTransformer(config)
+    logger.info("Created LlamaTransformer instance")
 
     # Filter weights for this shard (pipeline sharding)
     shard_weights = _filter_weights_for_shard(weights, shard_metadata)
 
-    # Apply weights to model
-    _apply_weights_to_model(model, shard_weights, device)
+    # Get weight statistics for debugging
+    stats = get_weight_statistics(shard_weights)
+    logger.info(
+        f"Loading {stats['num_weights']} weights "
+        f"({stats['total_parameters']:,} parameters, "
+        f"{stats['total_size_gb']:.2f} GB)"
+    )
+
+    # Validate weights before loading
+    check_required_weights(model, shard_weights)
+
+    # Assign weights to model
+    num_loaded, num_expected = assign_weights_to_model(model, shard_weights, device)
 
     logger.info(
-        "Model created with weights",
+        "Successfully created LlamaTransformer with weights",
         model_size=model_size,
-        n_weights=len(shard_weights),
+        num_loaded=num_loaded,
+        num_expected=num_expected,
         device=device,
     )
 
@@ -696,44 +620,6 @@ def _extract_layer_number(weight_name: str) -> int | None:
 
     return None
 
-
-def _apply_weights_to_model(
-    model: Any,
-    weights: dict[str, "np.ndarray[Any, Any]"],
-    device: str,
-) -> None:
-    """Apply loaded weights to model.
-
-    This is a placeholder implementation. In a full implementation,
-    this would convert numpy arrays to tinygrad Tensors and load them
-    into the model parameters.
-
-    Args:
-        model: Model instance
-        weights: Dictionary of weight tensors
-        device: Target device
-    """
-    logger.debug(
-        f"Applying {len(weights)} weight tensors to model on {device}",
-        device=device,
-        n_weights=len(weights),
-    )
-
-    # Placeholder: In real implementation, would do:
-    # 1. Convert numpy arrays to tinygrad Tensors
-    # 2. Map weight names to model parameters
-    # 3. Load tensors into model with proper device placement
-    #
-    # Example (pseudo-code):
-    # from tinygrad import Tensor
-    # for name, weight in weights.items():
-    #     tensor = Tensor(weight, device=device)
-    #     set_parameter(model, name, tensor)
-
-    # Store weights in model for now
-    if not hasattr(model, "_weights"):
-        model._weights = {}
-    model._weights.update(weights)
 
 
 async def encode_prompt(tokenizer: Any, prompt: str) -> "np.ndarray[Any, Any]":
