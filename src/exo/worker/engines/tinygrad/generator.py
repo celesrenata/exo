@@ -470,6 +470,12 @@ def _sample_token(
     if top_p is not None:
         probs = _apply_top_p(probs, top_p)
 
+    # Ensure probs is an array (not a scalar)
+    probs = np.asarray(probs)
+    if probs.ndim == 0:
+        # If somehow we got a scalar, return 0
+        return 0
+
     # Sample from distribution
     token = np.random.choice(len(probs), p=probs)
 
@@ -508,7 +514,12 @@ def _apply_top_k(probs: "np.ndarray[Any, Any]", k: int) -> "np.ndarray[Any, Any]
     filtered_probs[top_k_indices] = probs[top_k_indices]
 
     # Renormalize
-    return filtered_probs / np.sum(filtered_probs)
+    prob_sum = np.sum(filtered_probs)
+    if prob_sum > 0:
+        return filtered_probs / prob_sum
+    else:
+        # Fallback to uniform distribution if all probs are zero
+        return np.ones_like(probs) / len(probs)
 
 
 def _apply_top_p(probs: "np.ndarray[Any, Any]", p: float) -> "np.ndarray[Any, Any]":
@@ -536,7 +547,12 @@ def _apply_top_p(probs: "np.ndarray[Any, Any]", p: float) -> "np.ndarray[Any, An
     filtered_probs[sorted_indices[: cutoff_idx + 1]] = sorted_probs[: cutoff_idx + 1]
 
     # Renormalize
-    return filtered_probs / np.sum(filtered_probs)
+    prob_sum = np.sum(filtered_probs)
+    if prob_sum > 0:
+        return filtered_probs / prob_sum
+    else:
+        # Fallback to uniform distribution if all probs are zero
+        return np.ones_like(probs) / len(probs)
 
 
 def _detect_tool_calls(generated_text: str, tokenizer: Any) -> list[Any] | None:
