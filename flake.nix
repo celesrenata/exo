@@ -234,6 +234,8 @@
                 Environment = [
                   "EXO_TINYGRAD_ENABLED=true"
                   "LD_LIBRARY_PATH=${pkgs.ocl-icd}/lib:${pkgs.intel-compute-runtime}/lib"
+                  "OPENCL=1"
+                  "GPU=1"
                 ];
 
                 # Logging
