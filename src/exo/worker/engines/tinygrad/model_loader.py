@@ -482,6 +482,7 @@ def _create_model_structure(
 
     # Placeholder model structure
     # Real implementation would use tinygrad to create transformer layers
+    # For now, return random logits with correct shape
     class PlaceholderModel:
         def __init__(
             self,
@@ -497,6 +498,12 @@ def _create_model_structure(
             self.end_layer = end_layer
             self.device = device
             self.model_size = model_size
+            self.vocab_size = 128256  # Default vocab size for Llama models
+            
+            logger.warning(
+                "Using placeholder model - this will generate random output! "
+                "A real transformer implementation is needed for proper inference."
+            )
 
         def embed(self, x: Any) -> Any:
             """Embed tokens (placeholder)."""
@@ -507,9 +514,28 @@ def _create_model_structure(
             return h
 
         def __call__(self, x: Any) -> Any:
-            """Forward pass through model."""
-            h = self.embed(x)
-            return self.forward(h)
+            """Forward pass through model.
+            
+            Returns logits with shape [batch_size, seq_len, vocab_size].
+            This is a placeholder that returns random logits.
+            """
+            from tinygrad import Tensor
+            
+            # Get input shape
+            if hasattr(x, 'shape'):
+                batch_size = x.shape[0] if len(x.shape) > 0 else 1
+                seq_len = x.shape[1] if len(x.shape) > 1 else 1
+            else:
+                batch_size = 1
+                seq_len = 1
+            
+            # Return random logits with correct shape
+            # In a real implementation, this would be the output of the transformer
+            logger.debug(
+                f"Placeholder model returning random logits: "
+                f"[{batch_size}, {seq_len}, {self.vocab_size}]"
+            )
+            return Tensor.randn(batch_size, seq_len, self.vocab_size)
 
     return PlaceholderModel(
         n_layers=shard_metadata.n_layers,
