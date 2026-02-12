@@ -429,7 +429,13 @@ def main(
                     current_status = RunnerLoaded()
                     logger.info("runner loaded")
                 case StartWarmup() if isinstance(current_status, RunnerLoaded):
-                    assert model
+                    # Verify model and tokenizer are loaded based on backend type
+                    if backend_type == "tinygrad":
+                        assert tinygrad_model
+                        assert tinygrad_tokenizer
+                    else:
+                        assert model
+                        assert tokenizer
 
                     current_status = RunnerWarmingUp()
                     logger.info("runner warming up")
@@ -445,7 +451,6 @@ def main(
                         if backend_type == "mlx":
                             # Check model type for MLX
                             assert model.__class__.__name__ != "DistributedImageModel"
-                        assert tokenizer
 
                         if backend_type == "mlx":
                             toks = warmup_inference(
