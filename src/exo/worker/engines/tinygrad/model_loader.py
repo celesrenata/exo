@@ -344,21 +344,15 @@ def _load_single_safetensors(weights_path: Path) -> dict[str, "np.ndarray[Any, A
     from safetensors import safe_open
 
     weights = {}
-    # Use 'pt' framework which handles bfloat16, then convert to numpy
-    with safe_open(weights_path, framework="pt") as f:
+    # Use 'numpy' framework and handle bfloat16 manually (like exo-cuda)
+    with safe_open(weights_path, framework="numpy") as f:
         for key in f.keys():
             tensor = f.get_tensor(key)
-            # Convert torch tensor to numpy, handling bfloat16
-            if hasattr(tensor, 'dtype') and 'bfloat16' in str(tensor.dtype):
+            # Handle bfloat16 conversion manually
+            if hasattr(tensor, 'dtype') and tensor.dtype.name == 'bfloat16':
                 logger.debug(f"Converting {key} from bfloat16 to float32")
-                tensor = tensor.float()  # Convert to float32 in torch
-            # Convert to numpy
-            if hasattr(tensor, 'numpy'):
-                weights[key] = tensor.numpy()
-            elif hasattr(tensor, 'cpu'):
-                weights[key] = tensor.cpu().numpy()
-            else:
-                weights[key] = np.array(tensor)
+                tensor = _convert_bfloat16_to_float32(tensor)
+            weights[key] = tensor
 
     logger.debug(f"Loaded {len(weights)} weight tensors from {weights_path}")
     return weights
@@ -396,22 +390,16 @@ def _load_sharded_safetensors(
             logger.warning(f"Shard file not found: {shard_path}")
             continue
 
-        # Use 'pt' framework which handles bfloat16, then convert to numpy
-        with safe_open(shard_path, framework="pt") as f:
+        # Use 'numpy' framework and handle bfloat16 manually (like exo-cuda)
+        with safe_open(shard_path, framework="numpy") as f:
             for key in f.keys():
                 if key in weight_map and weight_map[key] == shard_file:
                     tensor = f.get_tensor(key)
-                    # Convert torch tensor to numpy, handling bfloat16
-                    if hasattr(tensor, 'dtype') and 'bfloat16' in str(tensor.dtype):
+                    # Handle bfloat16 conversion manually
+                    if hasattr(tensor, 'dtype') and tensor.dtype.name == 'bfloat16':
                         logger.debug(f"Converting {key} from bfloat16 to float32")
-                        tensor = tensor.float()  # Convert to float32 in torch
-                    # Convert to numpy
-                    if hasattr(tensor, 'numpy'):
-                        weights[key] = tensor.numpy()
-                    elif hasattr(tensor, 'cpu'):
-                        weights[key] = tensor.cpu().numpy()
-                    else:
-                        weights[key] = np.array(tensor)
+                        tensor = _convert_bfloat16_to_float32(tensor)
+                    weights[key] = tensor
 
     logger.debug(
         f"Loaded {len(weights)} weight tensors from {len(shard_files)} shard files"
