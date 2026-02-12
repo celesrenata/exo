@@ -29,74 +29,88 @@ def entrypoint(
         # Tinygrad backend configuration
         os.environ["EXO_TINYGRAD_ENABLED"] = "true"
 
-        # Detect hardware capabilities and configure backend
-        from exo.worker.engines.tinygrad.device_config import detect_capabilities
+        # Check if GPU mode is forced via environment variables (e.g., from systemd)
+        opencl_forced = os.environ.get("OPENCL") == "1"
+        gpu_forced = os.environ.get("GPU") == "1"
 
-        capabilities = detect_capabilities()
-
-        # Set TINYGRAD_BACKEND based on detected device
-        if not os.environ.get("TINYGRAD_BACKEND"):
-            if capabilities.device_type == "GPU":
-                os.environ["TINYGRAD_BACKEND"] = "GPU"
-            elif capabilities.device_type == "METAL":
-                os.environ["TINYGRAD_BACKEND"] = "METAL"
-            else:
-                os.environ["TINYGRAD_BACKEND"] = "CPU"
-
-        # Set runtime-specific environment variables
-        if capabilities.runtime == "LEVEL_ZERO":
-            os.environ["LEVEL_ZERO"] = "1"
-            os.environ["GPU"] = "1"
+        if opencl_forced and gpu_forced:
+            # Force OpenCL GPU mode without detection
             logger.info(
-                "Device selection: Intel Arc GPU with Level Zero runtime",
+                "Device selection: GPU with OpenCL runtime (forced via environment)",
                 backend_type="tinygrad",
-                device_type=capabilities.device_type,
-                runtime=capabilities.runtime,
-                device_name=capabilities.device_name,
-                memory_gb=capabilities.memory_gb,
+                device_type="GPU",
+                runtime="OPENCL",
             )
-        elif capabilities.runtime == "OPENCL":
-            os.environ["OPENCL"] = "1"
-            os.environ["GPU"] = "1"
-            logger.info(
-                "Device selection: GPU with OpenCL runtime",
-                backend_type="tinygrad",
-                device_type=capabilities.device_type,
-                runtime=capabilities.runtime,
-                device_name=capabilities.device_name,
-                memory_gb=capabilities.memory_gb,
-            )
-        elif capabilities.runtime == "CUDA":
-            os.environ["CUDA"] = "1"
-            os.environ["GPU"] = "1"
-            logger.info(
-                "Device selection: NVIDIA GPU with CUDA runtime",
-                backend_type="tinygrad",
-                device_type=capabilities.device_type,
-                runtime=capabilities.runtime,
-                device_name=capabilities.device_name,
-                memory_gb=capabilities.memory_gb,
-            )
-        elif capabilities.runtime == "METAL":
-            os.environ["METAL"] = "1"
-            logger.info(
-                "Device selection: Apple Metal GPU",
-                backend_type="tinygrad",
-                device_type=capabilities.device_type,
-                runtime=capabilities.runtime,
-                device_name=capabilities.device_name,
-                memory_gb=capabilities.memory_gb,
-            )
+            os.environ["TINYGRAD_BACKEND"] = "GPU"
+            capabilities = None  # Skip capabilities detection
         else:
-            # CPU fallback
-            logger.info(
-                "Device selection: CPU (no GPU runtime available)",
-                backend_type="tinygrad",
-                device_type=capabilities.device_type,
-                device_name=capabilities.device_name,
-                memory_gb=capabilities.memory_gb,
-                compute_units=capabilities.compute_units,
-            )
+            # Detect hardware capabilities and configure backend
+            from exo.worker.engines.tinygrad.device_config import detect_capabilities
+
+            capabilities = detect_capabilities()
+
+            # Set TINYGRAD_BACKEND based on detected device
+            if not os.environ.get("TINYGRAD_BACKEND"):
+                if capabilities.device_type == "GPU":
+                    os.environ["TINYGRAD_BACKEND"] = "GPU"
+                elif capabilities.device_type == "METAL":
+                    os.environ["TINYGRAD_BACKEND"] = "METAL"
+                else:
+                    os.environ["TINYGRAD_BACKEND"] = "CPU"
+
+            # Set runtime-specific environment variables
+            if capabilities.runtime == "LEVEL_ZERO":
+                os.environ["LEVEL_ZERO"] = "1"
+                os.environ["GPU"] = "1"
+                logger.info(
+                    "Device selection: Intel Arc GPU with Level Zero runtime",
+                    backend_type="tinygrad",
+                    device_type=capabilities.device_type,
+                    runtime=capabilities.runtime,
+                    device_name=capabilities.device_name,
+                    memory_gb=capabilities.memory_gb,
+                )
+            elif capabilities.runtime == "OPENCL":
+                os.environ["OPENCL"] = "1"
+                os.environ["GPU"] = "1"
+                logger.info(
+                    "Device selection: GPU with OpenCL runtime",
+                    backend_type=capabilities.device_type,
+                    runtime=capabilities.runtime,
+                    device_name=capabilities.device_name,
+                    memory_gb=capabilities.memory_gb,
+                )
+            elif capabilities.runtime == "CUDA":
+                os.environ["CUDA"] = "1"
+                os.environ["GPU"] = "1"
+                logger.info(
+                    "Device selection: NVIDIA GPU with CUDA runtime",
+                    backend_type="tinygrad",
+                    device_type=capabilities.device_type,
+                    runtime=capabilities.runtime,
+                    device_name=capabilities.device_name,
+                    memory_gb=capabilities.memory_gb,
+                )
+            elif capabilities.runtime == "METAL":
+                os.environ["METAL"] = "1"
+                logger.info(
+                    "Device selection: Apple Metal GPU",
+                    backend_type="tinygrad",
+                    device_type=capabilities.device_type,
+                    runtime=capabilities.runtime,
+                    device_name=capabilities.device_name,
+                    memory_gb=capabilities.memory_gb,
+                )
+            else:
+                # CPU fallback
+                logger.info(
+                    "Device selection: CPU (no GPU runtime available)",
+                    backend_type="tinygrad",
+                    device_type=capabilities.device_type,
+                    device_name=capabilities.device_name,
+                    memory_gb=capabilities.memory_gb,
+                    compute_units=capabilities.compute_units,
+                )
 
         logger.info(f"Tinygrad backend: {os.environ.get('TINYGRAD_BACKEND')}")
     else:
