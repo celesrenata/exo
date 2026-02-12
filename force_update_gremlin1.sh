@@ -5,7 +5,7 @@ echo "=== Force Update gremlin-1 to Latest Commit ==="
 echo ""
 
 GREMLIN_HOST="root@10.1.1.12"
-LATEST_COMMIT="8784e691"
+LATEST_COMMIT="5ca3626e"
 
 echo "Latest commit: $LATEST_COMMIT"
 echo ""
@@ -18,25 +18,24 @@ echo "Step 2: Rebuild NixOS system..."
 ssh $GREMLIN_HOST "cd /etc/nixos && nixos-rebuild switch --flake .#gremlin-1" 2>&1 | grep -E "building|copying.*exo|Done|store.*exo" | tail -20
 
 echo ""
-echo "Step 3: Find new exo package path..."
-NEW_PACKAGE=$(ssh $GREMLIN_HOST "ls -dt /nix/store/*-exo-0.3.0 2>/dev/null | head -1")
-echo "New package: $NEW_PACKAGE"
+echo "Step 3: Check exo package..."
+ssh $GREMLIN_HOST "which exo"
 
 echo ""
-echo "Step 4: Kill old exo process..."
-ssh $GREMLIN_HOST "pkill -f '.exo-wrapped' || true"
+echo "Step 4: Restart exo service..."
+ssh $GREMLIN_HOST "systemctl restart exo"
 
 echo ""
-echo "Step 5: Start new exo process..."
-ssh $GREMLIN_HOST "cd /tmp && EXO_TINYGRAD_ENABLED=true nohup $NEW_PACKAGE/bin/exo -vv > /tmp/exo.log 2>&1 &"
-
-echo ""
-echo "Step 6: Wait for startup..."
+echo "Step 5: Wait for startup..."
 sleep 10
 
 echo ""
-echo "Step 7: Check if exo is running..."
-ssh $GREMLIN_HOST "tail -30 /tmp/exo.log | grep -E 'hello from|Tinygrad|backend|error' || echo 'No relevant log entries yet'"
+echo "Step 6: Check service status..."
+ssh $GREMLIN_HOST "systemctl status exo --no-pager -l | head -30"
+
+echo ""
+echo "Step 7: Check logs..."
+ssh $GREMLIN_HOST "journalctl -u exo -n 50 --no-pager | grep -E 'hello from|Tinygrad|backend|error|Dashboard' || echo 'No relevant log entries yet'"
 
 echo ""
 echo "=== Update Complete ==="
