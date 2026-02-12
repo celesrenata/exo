@@ -5,7 +5,7 @@ echo "=== Force Update gremlin-1 to Latest Commit ==="
 echo ""
 
 GREMLIN_HOST="root@10.1.1.12"
-LATEST_COMMIT="5ca3626e"
+LATEST_COMMIT="8847499e"
 
 echo "Latest commit: $LATEST_COMMIT"
 echo ""
