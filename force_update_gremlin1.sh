@@ -5,7 +5,7 @@ echo "=== Force Update gremlin-1 to Latest Commit ==="
 echo ""
 
 GREMLIN_HOST="root@10.1.1.12"
-LATEST_COMMIT="88276688"
+LATEST_COMMIT=$(git log --oneline -1 | awk '{print $1}')
 
 echo "Latest commit: $LATEST_COMMIT"
 echo ""
