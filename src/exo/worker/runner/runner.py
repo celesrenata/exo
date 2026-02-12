@@ -522,7 +522,7 @@ def main(
                                 model=tinygrad_model,
                                 tokenizer=tinygrad_tokenizer,
                                 prompt=prompt,
-                                max_tokens=task_params.max_tokens or 100,
+                                max_tokens=task_params.max_output_tokens or 100,
                                 temperature=task_params.temperature or 1.0,
                                 top_k=task_params.top_k,
                                 top_p=task_params.top_p,
