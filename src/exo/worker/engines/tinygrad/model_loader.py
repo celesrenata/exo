@@ -443,14 +443,11 @@ def _create_model_structure(
         get_default_config,
     )
 
-    # Parse configuration from model card or use defaults
-    config_dict = shard_metadata.model_card.config
-    if config_dict:
-        config = parse_config_from_dict(config_dict)
-        logger.info("Parsed config from model card")
-    else:
-        config = get_default_config(model_size)
-        logger.info(f"Using default config for {model_size}")
+    # Parse configuration - use defaults for now
+    # Note: ModelCard doesn't have a config attribute
+    # TODO: Load config from checkpoint_dir/config.json if available
+    config = get_default_config(model_size)
+    logger.info(f"Using default config for {model_size}")
 
     # Create transformer model with random initialization
     model = LlamaTransformer(config)
@@ -501,14 +498,11 @@ def _create_model_with_weights(
         get_weight_statistics,
     )
 
-    # Parse configuration from model card or use defaults
-    config_dict = shard_metadata.model_card.config
-    if config_dict:
-        config = parse_config_from_dict(config_dict)
-        logger.info("Parsed config from model card")
-    else:
-        config = get_default_config(model_size)
-        logger.info(f"Using default config for {model_size}")
+    # Parse configuration - use defaults for now
+    # Note: ModelCard doesn't have a config attribute
+    # TODO: Load config from checkpoint_dir/config.json if available
+    config = get_default_config(model_size)
+    logger.info(f"Using default config for {model_size}")
 
     # Create transformer model
     model = LlamaTransformer(config)
