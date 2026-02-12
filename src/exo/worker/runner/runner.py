@@ -323,7 +323,7 @@ def main(
                                     )
 
                                     # Load model and tokenizer
-                                    tinygrad_model, tinygrad_tokenizer = (
+                                    model, tokenizer = (
                                         loop.run_until_complete(
                                             load_tinygrad_model(
                                                 shard_metadata,
