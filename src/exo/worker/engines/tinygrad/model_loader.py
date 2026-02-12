@@ -505,6 +505,14 @@ def _create_model_structure(
             logger.info(f"Tinygrad Device.DEFAULT: {Device.DEFAULT}")
             logger.info(f"Model device parameter: {device}")
             
+            # Try to get more info about the device
+            try:
+                # Check if GPU device is actually initialized
+                from tinygrad.runtime.ops_gpu import GPUDevice
+                logger.info(f"GPUDevice available: True")
+            except Exception as e:
+                logger.warning(f"GPUDevice not available: {e}")
+            
             logger.warning(
                 "Using placeholder model - this will generate random output! "
                 "A real transformer implementation is needed for proper inference."
@@ -543,10 +551,13 @@ def _create_model_structure(
             
             result = Tensor.randn(batch_size, seq_len, self.vocab_size, device=canonicalized_device)
             
+            # Realize the tensor to force actual computation on GPU
+            result.realize()
+            
             # Log actual device after creation
             actual_device = result.device if hasattr(result, 'device') else 'unknown'
             logger.debug(
-                f"Tensor created with device: {actual_device}, shape: [{batch_size}, {seq_len}, {self.vocab_size}]"
+                f"Tensor realized on device: {actual_device}, shape: [{batch_size}, {seq_len}, {self.vocab_size}]"
             )
             
             return result
