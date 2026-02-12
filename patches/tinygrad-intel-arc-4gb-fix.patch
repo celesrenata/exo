@@ -1,12 +1,34 @@
 --- a/tinygrad/runtime/ops_gpu.py
 +++ b/tinygrad/runtime/ops_gpu.py
-@@ -69,7 +69,10 @@ class CLAllocator(LRUAllocator['CLDevice']):
+@@ -20,7 +20,9 @@ class CLCompiler(Compiler):
+     super().__init__(f"compile_cl_{compile_key}")
+   def compile(self, src:str) -> bytes:
+     program = checked(cl.clCreateProgramWithSource(self.dev.context, 1, to_char_p_p([src.encode()]), None, status := ctypes.c_int32()), status)
+-    build_status: int = cl.clBuildProgram(program, 1, self.dev.device_id, None, cl.clBuildProgram.argtypes[4](), None)
++    # Intel Arc GPU fix: Enable >4GB buffer support in kernels
++    build_options = b"-cl-intel-greater-than-4GB-buffer-required"
++    build_status: int = cl.clBuildProgram(program, 1, self.dev.device_id, build_options, cl.clBuildProgram.argtypes[4](), None)
+     if build_status != 0:
+       cl.clGetProgramBuildInfo(program, self.dev.device_id, cl.CL_PROGRAM_BUILD_LOG, 0, None, log_size := ctypes.c_size_t())
+       cl.clGetProgramBuildInfo(program, self.dev.device_id, cl.CL_PROGRAM_BUILD_LOG,
+@@ -37,7 +39,9 @@ class CLProgram:
+                                                         to_char_p_p([lib], ctypes.c_ubyte), binary_status := ctypes.c_int32(),
+                                                         errcode_ret := ctypes.c_int32()), errcode_ret)
+     check(binary_status.value)
+-    check(cl.clBuildProgram(self.program, 1, device.device_id, None, cl.clBuildProgram.argtypes[4](), None)) # NOTE: OSX requires this
++    # Intel Arc GPU fix: Enable >4GB buffer support in kernels
++    build_options = b"-cl-intel-greater-than-4GB-buffer-required"
++    check(cl.clBuildProgram(self.program, 1, device.device_id, build_options, cl.clBuildProgram.argtypes[4](), None)) # NOTE: OSX requires this
+     self.kernel = checked(cl.clCreateKernel(self.program, name.encode(), status := ctypes.c_int32()), status)
+ 
+   def __del__(self):
+@@ -69,7 +73,10 @@ class CLAllocator(LRUAllocator['CLDevice']):
        return (checked(cl.clCreateImage2D(self.dev.context, cl.CL_MEM_READ_WRITE,
                                          cl.cl_image_format(cl.CL_RGBA, {2: cl.CL_HALF_FLOAT, 4: cl.CL_FLOAT}[options.image.itemsize]),
                                          options.image.shape[1], options.image.shape[0], 0, None, status := ctypes.c_int32()), status), options)
 -    return (checked(cl.clCreateBuffer(self.dev.context, cl.CL_MEM_READ_WRITE, size, None, status := ctypes.c_int32()), status), options)
 +    # Intel Arc GPU fix: Enable >4GB buffer allocations
-+    # Add CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL flag (1 << 23)
++    # Add undocumented Intel flag (1 << 23) - community workaround for >4GB buffers
 +    flags = cl.CL_MEM_READ_WRITE | (1 << 23)
 +    return (checked(cl.clCreateBuffer(self.dev.context, flags, size, None, status := ctypes.c_int32()), status), options)
    @suppress_finalizing

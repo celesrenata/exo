@@ -188,7 +188,7 @@ curl -X POST http://10.1.1.12:52415/v1/chat/completions \
 
 ## Current Status
 
-After applying patch (commit 669c899f):
+After applying patch (commit 73de1cfe):
 - ✓ Patch applied successfully to tinygrad v0.11.0
 - ✓ Build completed without errors
 - ✓ Service starts successfully
@@ -197,17 +197,27 @@ After applying patch (commit 669c899f):
 
 ### Progress
 The error changed from `-4 (CL_MEM_OBJECT_ALLOCATION_FAILURE)` to `-30 (CL_INVALID_VALUE)`, which means:
-- The >4GB buffer allocation flag is working
-- The buffer was created successfully
-- The issue is now with the compiler build options
+- The buffer allocation was attempted with the flag
+- The flag alone is insufficient
+
+### ChatGPT Research Findings
+
+From ChatGPT with web search (February 2026):
+
+1. **Flag Value**: `(1 << 23)` is NOT officially documented by Intel or Khronos as `CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL`. It's a community-discovered workaround from Reddit (April 2023).
+
+2. **CL_INVALID_VALUE Cause**: The flag is not recognized by the driver, or the combination is invalid. The driver may reject undocumented flags.
+
+3. **Prerequisites**: BOTH are required according to community reports:
+   - Buffer flag: `(1 << 23)` in `clCreateBuffer`
+   - Compiler option: `-cl-intel-greater-than-4GB-buffer-required` in `clBuildProgram`
+
+4. **Why Both Needed**: The compiler option informs the driver that the application intends to use >4GB buffers, enabling internal handling adjustments.
+
+5. **No Official Alternative**: Standard OpenCL enforces `CL_DEVICE_MAX_MEM_ALLOC_SIZE` (4GB on Intel Arc). No official way to exceed this without vendor extensions.
 
 ### Next Steps
-The `-cl-intel-greater-than-4GB-buffer-required` compiler option may be:
-1. Not supported on this Intel Arc iGPU
-2. Requires a different format
-3. Needs to be passed as NULL with the flag only
-
-Try removing the compiler option and keeping only the buffer flag.
+Apply BOTH the buffer flag AND the compiler option together in the patch.
 
 ## References
 
