@@ -339,14 +339,28 @@ def main(
                                     f"Tinygrad model loaded successfully on {device}"
                                 )
 
+                                # Determine device info for BackendInitialized event
+                                if device == "GPU":
+                                    backend_device_type = "GPU"
+                                    backend_device_name = device_name
+                                    backend_runtime = runtime
+                                elif device == "METAL":
+                                    backend_device_type = "GPU"
+                                    backend_device_name = "Apple Metal GPU"
+                                    backend_runtime = "METAL"
+                                else:
+                                    backend_device_type = "CPU"
+                                    backend_device_name = "CPU"
+                                    backend_runtime = "CPU"
+
                                 # Emit BackendInitialized event
                                 event_sender.send(
                                     BackendInitialized(
                                         runner_id=runner_id,
                                         backend_type=backend_type,
-                                        device_type=device_caps.device_type,
-                                        device_name=device_caps.device_name,
-                                        runtime=device_caps.runtime or "CPU",
+                                        device_type=backend_device_type,
+                                        device_name=backend_device_name,
+                                        runtime=backend_runtime,
                                     )
                                 )
                             else:
