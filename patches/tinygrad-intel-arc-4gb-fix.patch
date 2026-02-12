@@ -1,5 +1,3 @@
-diff --git a/tinygrad/runtime/ops_gpu.py b/tinygrad/runtime/ops_gpu.py
-index 0000000..1111111 100644
 --- a/tinygrad/runtime/ops_gpu.py
 +++ b/tinygrad/runtime/ops_gpu.py
 @@ -20,7 +20,9 @@ class CLCompiler(Compiler):
