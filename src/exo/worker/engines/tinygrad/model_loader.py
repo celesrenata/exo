@@ -519,7 +519,7 @@ def _create_model_structure(
             Returns logits with shape [batch_size, seq_len, vocab_size].
             This is a placeholder that returns random logits.
             """
-            from tinygrad import Tensor
+            from tinygrad import Tensor, Device
             
             # Get input shape
             if hasattr(x, 'shape'):
@@ -529,13 +529,15 @@ def _create_model_structure(
                 batch_size = 1
                 seq_len = 1
             
-            # Return random logits with correct shape
+            # Return random logits with correct shape on the same device as input
             # In a real implementation, this would be the output of the transformer
             logger.debug(
-                f"Placeholder model returning random logits: "
+                f"Placeholder model returning random logits on {self.device}: "
                 f"[{batch_size}, {seq_len}, {self.vocab_size}]"
             )
-            return Tensor.randn(batch_size, seq_len, self.vocab_size)
+            
+            # Create tensor on the correct device
+            return Tensor.randn(batch_size, seq_len, self.vocab_size, device=Device.canonicalize(self.device))
 
     return PlaceholderModel(
         n_layers=shard_metadata.n_layers,
