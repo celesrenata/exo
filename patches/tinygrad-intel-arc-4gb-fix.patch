@@ -22,10 +22,10 @@
      self.kernel = checked(cl.clCreateKernel(self.program, name.encode(), status := ctypes.c_int32()), status)
  
    def __del__(self):
-@@ -68,7 +72,10 @@ class CLAllocator(LRUAllocator['CLDevice']):
-   def _alloc(self, size:int, options:BufferSpec) -> tuple[ctypes._CData, BufferSpec]:
-     # Recalculate real size for texture
-     if options.image is not None: size = options.image.pitch * options.image.shape[0]
+@@ -69,7 +73,10 @@ class CLAllocator(LRUAllocator['CLDevice']):
+       return (checked(cl.clCreateImage2D(self.dev.context, cl.CL_MEM_READ_WRITE,
+                                         cl.cl_image_format(cl.CL_RGBA, {2: cl.CL_HALF_FLOAT, 4: cl.CL_FLOAT}[options.image.itemsize]),
+                                         options.image.shape[1], options.image.shape[0], 0, None, status := ctypes.c_int32()), status), options)
 -    return (checked(cl.clCreateBuffer(self.dev.context, cl.CL_MEM_READ_WRITE, size, None, status := ctypes.c_int32()), status), options)
 +    # Intel Arc GPU fix: Enable >4GB buffer allocations
 +    # Add CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL flag (1 << 23)
