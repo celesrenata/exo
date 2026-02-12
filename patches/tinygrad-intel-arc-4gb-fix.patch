@@ -1,8 +1,8 @@
-diff --git a/tinygrad/runtime/ops_cl.py b/tinygrad/runtime/ops_cl.py
+diff --git a/tinygrad/runtime/ops_gpu.py b/tinygrad/runtime/ops_gpu.py
 index 0000000..1111111 100644
---- a/tinygrad/runtime/ops_cl.py
-+++ b/tinygrad/runtime/ops_cl.py
-@@ -23,7 +23,9 @@ class CLCompiler(Compiler):
+--- a/tinygrad/runtime/ops_gpu.py
++++ b/tinygrad/runtime/ops_gpu.py
+@@ -20,7 +20,9 @@ class CLCompiler(Compiler):
      super().__init__(f"compile_cl_{compile_key}")
    def compile(self, src:str) -> bytes:
      program = checked(cl.clCreateProgramWithSource(self.dev.context, 1, to_char_p_p([src.encode()]), None, status := ctypes.c_int32()), status)
@@ -13,7 +13,7 @@ index 0000000..1111111 100644
      if build_status != 0:
        cl.clGetProgramBuildInfo(program, self.dev.device_id, cl.CL_PROGRAM_BUILD_LOG, 0, None, log_size := ctypes.c_size_t())
        cl.clGetProgramBuildInfo(program, self.dev.device_id, cl.CL_PROGRAM_BUILD_LOG,
-@@ -42,7 +44,9 @@ class CLProgram:
+@@ -37,7 +39,9 @@ class CLProgram:
                                                          to_char_p_p([lib], ctypes.c_ubyte), binary_status := ctypes.c_int32(),
                                                          errcode_ret := ctypes.c_int32()), errcode_ret)
      check(binary_status.value)
@@ -24,7 +24,7 @@ index 0000000..1111111 100644
      self.kernel = checked(cl.clCreateKernel(self.program, name.encode(), status := ctypes.c_int32()), status)
  
    def __del__(self):
-@@ -77,7 +81,10 @@ class CLAllocator(LRUAllocator['CLDevice']):
+@@ -68,7 +72,10 @@ class CLAllocator(LRUAllocator['CLDevice']):
    def _alloc(self, size:int, options:BufferSpec) -> tuple[ctypes._CData, BufferSpec]:
      # Recalculate real size for texture
      if options.image is not None: size = options.image.pitch * options.image.shape[0]
