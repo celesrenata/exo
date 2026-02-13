@@ -1,16 +1,118 @@
 --- a/tinygrad/runtime/ops_gpu.py
 +++ b/tinygrad/runtime/ops_gpu.py
-@@ -69,7 +69,12 @@ class CLAllocator(LRUAllocator['CLDevice']):
+@@ -1,6 +1,7 @@
+ import ctypes, functools, contextlib
+ from typing import Tuple, TypeVar, Optional
+ from tinygrad.helpers import DEBUG, getenv, from_mv, to_mv, init_c_var, round_up, data64_le, prod, ImageDType, dtypes, DType
++import sys, traceback, time
+ from tinygrad.device import Buffer, BufferOptions, Compiler, Allocator, BufferSpec
+ from tinygrad.renderer.cstyle import CStyleLanguage
+ from tinygrad.runtime.ops_gpu_common import CLDevice, CLAllocator as _CLAllocator, CLProgram, CLCodegen
+@@ -8,6 +9,48 @@ from tinygrad.runtime.autogen import opencl
+ cl = opencl.cl
+ check = opencl.check
+ 
++# Intel Arc GPU diagnostic tracking
++_allocation_count = 0
++_total_allocated = 0
++_largest_allocation = 0
++_allocations_over_100mb = []
++_device_info_logged = False
++
++def _log_device_info(device):
++  """Log device information at startup for diagnostic purposes."""
++  global _device_info_logged
++  if _device_info_logged:
++    return
++  _device_info_logged = True
++  
++  try:
++    device_name = device.name if hasattr(device, 'name') else "Unknown"
++    print(f"[INTEL ARC DEBUG] ===== DEVICE INFORMATION =====", flush=True)
++    print(f"[INTEL ARC DEBUG] Device: {device_name}", flush=True)
++    if hasattr(device, 'vendor'):
++      print(f"[INTEL ARC DEBUG] Vendor: {device.vendor}", flush=True)
++    if hasattr(device, 'max_mem_alloc_size'):
++      max_alloc_gb = device.max_mem_alloc_size / (1024 ** 3)
++      print(f"[INTEL ARC DEBUG] Max allocation size: {max_alloc_gb:.2f} GB", flush=True)
++    if hasattr(device, 'global_mem_size'):
++      total_mem_gb = device.global_mem_size / (1024 ** 3)
++      print(f"[INTEL ARC DEBUG] Total memory: {total_mem_gb:.2f} GB", flush=True)
++    print(f"[INTEL ARC DEBUG] ==============================", flush=True)
++  except Exception as e:
++    print(f"[INTEL ARC DEBUG] Error logging device info: {e}", flush=True)
++
++def _log_allocation_summary():
++  """Log summary of allocations for diagnostic purposes."""
++  print(f"[INTEL ARC DEBUG] ===== ALLOCATION SUMMARY =====", flush=True)
++  print(f"[INTEL ARC DEBUG] Total allocations: {_allocation_count}", flush=True)
++  print(f"[INTEL ARC DEBUG] Total allocated: {_total_allocated / (1024**3):.2f} GB", flush=True)
++  print(f"[INTEL ARC DEBUG] Largest allocation: {_largest_allocation / (1024**3):.3f} GB", flush=True)
++  print(f"[INTEL ARC DEBUG] Allocations >100MB: {len(_allocations_over_100mb)}", flush=True)
++  if _allocations_over_100mb:
++    print(f"[INTEL ARC DEBUG] Top 5 largest allocations:", flush=True)
++    for i, (size, context) in enumerate(sorted(_allocations_over_100mb, reverse=True)[:5], 1):
++      print(f"[INTEL ARC DEBUG]   {i}. {size / (1024**3):.3f} GB - {context}", flush=True)
++  print(f"[INTEL ARC DEBUG] ==============================", flush=True)
++
+ class CLDevice(CLDevice):
+   def __init__(self, device:str=""):
+     self.device_id = int(device.split(":")[1]) if ":" in device else 0
+@@ -69,7 +112,56 @@ class CLAllocator(LRUAllocator['CLDevice']):
        return (checked(cl.clCreateImage2D(self.dev.context, cl.CL_MEM_READ_WRITE,
                                          cl.cl_image_format(cl.CL_RGBA, {2: cl.CL_HALF_FLOAT, 4: cl.CL_FLOAT}[options.image.itemsize]),
                                          options.image.shape[1], options.image.shape[0], 0, None, status := ctypes.c_int32()), status), options)
 -    return (checked(cl.clCreateBuffer(self.dev.context, cl.CL_MEM_READ_WRITE, size, None, status := ctypes.c_int32()), status), options)
-+    # Intel Arc GPU fix: Enable >4GB buffer allocations
-+    # Apply Intel-specific flag (1 << 23) conditionally for buffers >4GB
-+    # Testing without compiler option to isolate the issue
++    
++    # Log device info on first allocation
++    _log_device_info(self.dev)
++    
++    # Track allocation statistics
++    global _allocation_count, _total_allocated, _largest_allocation, _allocations_over_100mb
++    _allocation_count += 1
++    _total_allocated += size
++    _largest_allocation = max(_largest_allocation, size)
++    
++    # Calculate sizes for logging
++    size_mb = size / (1024 * 1024)
++    size_gb = size / (1024 * 1024 * 1024)
++    
++    # Capture context information for large allocations
++    context_info = ""
++    if size_mb > 100:
++      try:
++        # Get stack trace to identify where allocation is coming from
++        stack = traceback.extract_stack()
++        # Find the most relevant frame (skip this file)
++        relevant_frames = [f for f in stack if 'ops_gpu.py' not in f.filename]
++        if relevant_frames:
++          frame = relevant_frames[-1]
++          context_info = f"{frame.filename}:{frame.lineno} in {frame.name}"
++        
++        # Try to get tensor shape from options if available
++        if hasattr(options, 'shape'):
++          context_info += f" shape={options.shape}"
++        if hasattr(options, 'dtype'):
++          context_info += f" dtype={options.dtype}"
++      except Exception as e:
++        context_info = f"(context capture failed: {e})"
++    
++    # Log allocations >100MB (Requirement 1.1)
++    if size_mb > 100:
++      print(f"[INTEL ARC DEBUG] Allocation #{_allocation_count}: {size} bytes ({size_mb:.2f} MB / {size_gb:.3f} GB)", flush=True)
++      if context_info:
++        print(f"[INTEL ARC DEBUG]   Context: {context_info}", flush=True)
++      _allocations_over_100mb.append((size, context_info))
++    
++    # Warn on allocations >4GB (Requirement 1.3)
++    if size_gb > 4.0:
++      print(f"[INTEL ARC DEBUG] WARNING: Buffer >4GB detected!", flush=True)
++      print(f"[INTEL ARC DEBUG]   Size: {size_gb:.3f} GB ({size} bytes)", flush=True)
++      print(f"[INTEL ARC DEBUG]   Context: {context_info}", flush=True)
++      print(f"[INTEL ARC DEBUG]   This may exceed Intel Arc GPU limits", flush=True)
++    
++    # Attempt allocation
 +    flags = cl.CL_MEM_READ_WRITE
-+    if size > 4 * 1024 * 1024 * 1024:  # >4GB
-+        flags |= (1 << 23)  # CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL
 +    return (checked(cl.clCreateBuffer(self.dev.context, flags, size, None, status := ctypes.c_int32()), status), options)
    @suppress_finalizing
    def _free(self, opaque:tuple[ctypes._CData, BufferSpec], options:BufferSpec): check(cl.clReleaseMemObject(opaque[0]))
