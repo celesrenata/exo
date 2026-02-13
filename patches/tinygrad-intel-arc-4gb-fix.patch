@@ -1,17 +1,18 @@
 --- a/tinygrad/runtime/ops_gpu.py
 +++ b/tinygrad/runtime/ops_gpu.py
 @@ -1,6 +1,7 @@
- import ctypes, functools, contextlib
- from typing import Tuple, TypeVar, Optional
- from tinygrad.helpers import DEBUG, getenv, from_mv, to_mv, init_c_var, round_up, data64_le, prod, ImageDType, dtypes, DType
+ from __future__ import annotations
+ from typing import cast
+ import ctypes, functools, hashlib
 +import sys, traceback, time
- from tinygrad.device import Buffer, BufferOptions, Compiler, Allocator, BufferSpec
- from tinygrad.renderer.cstyle import CStyleLanguage
- from tinygrad.runtime.ops_gpu_common import CLDevice, CLAllocator as _CLAllocator, CLProgram, CLCodegen
-@@ -8,6 +9,48 @@ from tinygrad.runtime.autogen import opencl
- cl = opencl.cl
- check = opencl.check
- 
+ from tinygrad.runtime.autogen import opencl as cl
+ from tinygrad.helpers import init_c_var, to_char_p_p, from_mv, OSX, DEBUG, getenv, mv_address, suppress_finalizing
+ from tinygrad.renderer.cstyle import OpenCLRenderer, IntelRenderer
+@@ -14,6 +15,48 @@ cl_errors = {attr: k for k in dir(cl) if k.startswith("CL_") and isinstance(att
+ def check(status):
+   if status != 0: raise RuntimeError(f"OpenCL Error {status}: {cl_errors.get(status, 'Unknown error')}")
+ def checked(ret, status): return (check(status.value), ret)[1]
++
 +# Intel Arc GPU diagnostic tracking
 +_allocation_count = 0
 +_total_allocated = 0
@@ -27,17 +28,11 @@
 +  _device_info_logged = True
 +  
 +  try:
-+    device_name = device.name if hasattr(device, 'name') else "Unknown"
++    device_name = device.device_name if hasattr(device, 'device_name') else "Unknown"
 +    print(f"[INTEL ARC DEBUG] ===== DEVICE INFORMATION =====", flush=True)
 +    print(f"[INTEL ARC DEBUG] Device: {device_name}", flush=True)
-+    if hasattr(device, 'vendor'):
-+      print(f"[INTEL ARC DEBUG] Vendor: {device.vendor}", flush=True)
-+    if hasattr(device, 'max_mem_alloc_size'):
-+      max_alloc_gb = device.max_mem_alloc_size / (1024 ** 3)
-+      print(f"[INTEL ARC DEBUG] Max allocation size: {max_alloc_gb:.2f} GB", flush=True)
-+    if hasattr(device, 'global_mem_size'):
-+      total_mem_gb = device.global_mem_size / (1024 ** 3)
-+      print(f"[INTEL ARC DEBUG] Total memory: {total_mem_gb:.2f} GB", flush=True)
++    if hasattr(device, 'driver_version'):
++      print(f"[INTEL ARC DEBUG] Driver: {device.driver_version}", flush=True)
 +    print(f"[INTEL ARC DEBUG] ==============================", flush=True)
 +  except Exception as e:
 +    print(f"[INTEL ARC DEBUG] Error logging device info: {e}", flush=True)
@@ -54,11 +49,10 @@
 +    for i, (size, context) in enumerate(sorted(_allocations_over_100mb, reverse=True)[:5], 1):
 +      print(f"[INTEL ARC DEBUG]   {i}. {size / (1024**3):.3f} GB - {context}", flush=True)
 +  print(f"[INTEL ARC DEBUG] ==============================", flush=True)
-+
- class CLDevice(CLDevice):
-   def __init__(self, device:str=""):
-     self.device_id = int(device.split(":")[1]) if ":" in device else 0
-@@ -69,7 +112,56 @@ class CLAllocator(LRUAllocator['CLDevice']):
+ 
+ class CLCompiler(Compiler):
+   def __init__(self, dev:CLDevice, compile_key:str):
+@@ -73,7 +116,56 @@ class CLAllocator(LRUAllocator['CLDevice']):
        return (checked(cl.clCreateImage2D(self.dev.context, cl.CL_MEM_READ_WRITE,
                                          cl.cl_image_format(cl.CL_RGBA, {2: cl.CL_HALF_FLOAT, 4: cl.CL_FLOAT}[options.image.itemsize]),
                                          options.image.shape[1], options.image.shape[0], 0, None, status := ctypes.c_int32()), status), options)
