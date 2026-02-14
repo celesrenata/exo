@@ -236,6 +236,7 @@
                   "LD_LIBRARY_PATH=${pkgs.ocl-icd}/lib:${pkgs.intel-compute-runtime}/lib"
                   "OPENCL=1"
                   "GPU=1"
+                  "OPENCL_DEVICE=0"  # Force Intel Arc GPU (device 0)
                 ];
 
                 # Logging
