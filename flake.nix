@@ -237,6 +237,7 @@
                   "OPENCL=1"
                   "GPU=1"
                   "OPENCL_DEVICE=0"  # Force Intel Arc GPU (device 0)
+                  "VISIBLE_DEVICES=0"  # Tinygrad device visibility
                 ];
 
                 # Logging
