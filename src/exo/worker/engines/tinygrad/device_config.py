@@ -287,6 +287,35 @@ def _get_opencl_device_name() -> str:
     return "GPU (OpenCL)"
 
 
+def get_intel_arc_device_index() -> int:
+    """Get the OpenCL device index for Intel Arc GPU.
+
+    Returns:
+        Device index (0-based) for Intel Arc, or 0 if not found
+    """
+    try:
+        import pyopencl as cl
+
+        platforms = cl.get_platforms()
+        if platforms:
+            devices = platforms[0].get_devices()
+            for idx, device in enumerate(devices):
+                device_name = device.name.lower()
+                if "intel" in device_name and "arc" in device_name:
+                    logger.info(
+                        f"Found Intel Arc GPU at device index {idx}: {device.name}",
+                        backend_type="tinygrad",
+                        device_index=idx,
+                        device_name=device.name,
+                    )
+                    return idx
+    except Exception as e:
+        logger.debug(f"Failed to enumerate OpenCL devices: {e}")
+
+    # Default to device 0
+    return 0
+
+
 def _estimate_gpu_memory() -> float:
     """Estimate available GPU memory in GB.
 
