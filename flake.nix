@@ -346,6 +346,10 @@
                       patches = (old.patches or []) ++ [
                         ./patches/tinygrad-intel-arc-4gb-fix.patch
                       ];
+                      # Force rebuild when patch changes
+                      postPatch = (old.postPatch or "") + ''
+                        echo "Applied Intel Arc GPU fix patch (v2 - platform selection)"
+                      '';
                     });
                   };
                 };
