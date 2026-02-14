@@ -1,5 +1,5 @@
---- a/tinygrad/runtime/ops_gpu.py
-+++ b/tinygrad/runtime/ops_gpu.py
+--- a/tinygrad/runtime/ops_gpu.py	2026-02-12 20:05:08.009491093 -0800
++++ b/tinygrad/runtime/ops_gpu.py	2026-02-12 20:06:16.270139010 -0800
 @@ -1,6 +1,7 @@
  from __future__ import annotations
  from typing import cast
@@ -8,11 +8,10 @@
  from tinygrad.runtime.autogen import opencl as cl
  from tinygrad.helpers import init_c_var, to_char_p_p, from_mv, OSX, DEBUG, getenv, mv_address, suppress_finalizing
  from tinygrad.renderer.cstyle import OpenCLRenderer, IntelRenderer
-@@ -14,6 +15,48 @@ cl_errors = {attr: k for k in dir(cl) if k.startswith("CL_") and isinstance(att
- def check(status):
+@@ -14,6 +15,43 @@
    if status != 0: raise RuntimeError(f"OpenCL Error {status}: {cl_errors.get(status, 'Unknown error')}")
  def checked(ret, status): return (check(status.value), ret)[1]
-+
+ 
 +# Intel Arc GPU diagnostic tracking
 +_allocation_count = 0
 +_total_allocated = 0
@@ -49,10 +48,11 @@
 +    for i, (size, context) in enumerate(sorted(_allocations_over_100mb, reverse=True)[:5], 1):
 +      print(f"[INTEL ARC DEBUG]   {i}. {size / (1024**3):.3f} GB - {context}", flush=True)
 +  print(f"[INTEL ARC DEBUG] ==============================", flush=True)
- 
++
  class CLCompiler(Compiler):
    def __init__(self, dev:CLDevice, compile_key:str):
-@@ -73,7 +116,56 @@ class CLAllocator(LRUAllocator['CLDevice']):
+     self.dev = dev
+@@ -68,7 +106,57 @@
        return (checked(cl.clCreateImage2D(self.dev.context, cl.CL_MEM_READ_WRITE,
                                          cl.cl_image_format(cl.CL_RGBA, {2: cl.CL_HALF_FLOAT, 4: cl.CL_FLOAT}[options.image.itemsize]),
                                          options.image.shape[1], options.image.shape[0], 0, None, status := ctypes.c_int32()), status), options)
