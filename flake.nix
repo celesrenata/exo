@@ -238,6 +238,7 @@
                   "GPU=1"
                   "OPENCL_DEVICE=0"  # Force Intel Arc GPU (device 0)
                   "VISIBLE_DEVICES=0"  # Tinygrad device visibility
+                  "OCL_ICD_VENDORS=${pkgs.intel-compute-runtime}/etc/OpenCL/vendors"  # Only Intel OpenCL
                 ];
 
                 # Logging
