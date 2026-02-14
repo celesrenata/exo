@@ -348,7 +348,7 @@
                       ];
                       # Force rebuild when patch changes
                       postPatch = (old.postPatch or "") + ''
-                        echo "Applied Intel Arc GPU fix patch (v2 - platform selection)"
+                        echo "Applied Intel Arc GPU fix patch (v3 - Intel platform selection)"
                       '';
                     });
                   };
