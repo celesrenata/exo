@@ -12,7 +12,7 @@
    if status != 0: raise RuntimeError(f"OpenCL Error {status}: {cl_errors.get(status, 'Unknown error')}")
  def checked(ret, status): return (check(status.value), ret)[1]
  
-+# Intel Arc GPU diagnostic tracking
++# Intel Arc GPU diagnostic tracking (v3 - with platform selection)
 +_allocation_count = 0
 +_total_allocated = 0
 +_largest_allocation = 0
