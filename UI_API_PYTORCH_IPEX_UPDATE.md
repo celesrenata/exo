@@ -183,11 +183,18 @@ If PyTorch+IPEX is not available, the system will automatically fall back to:
 
 To test the changes:
 
-1. Set `EXO_PYTORCH_IPEX_ENABLED=true`
-2. Start exo with the dashboard
-3. Verify "PyTorch+IPEX Ring" appears in instance type selector
-4. Launch a model with PyTorch+IPEX
-5. Verify the backend is used and displayed correctly
+1. Rebuild the dashboard:
+   ```bash
+   cd dashboard && npm run build && cd ..
+   ```
+
+2. Set `EXO_PYTORCH_IPEX_ENABLED=true`
+3. Start exo with the dashboard
+4. Verify "PyTorch+IPEX Ring" appears in instance type selector
+5. Launch a model with PyTorch+IPEX
+6. Verify the backend is used and displayed correctly
+
+**Note**: The dashboard must be rebuilt after any UI changes. The build directory is gitignored, so rebuilding is required on each deployment.
 
 ## Next Steps
 
