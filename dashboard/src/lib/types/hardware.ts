@@ -8,7 +8,7 @@
 /**
  * Backend type identifier
  */
-export type BackendType = "mlx" | "tinygrad" | "npu";
+export type BackendType = "mlx" | "tinygrad" | "pytorch_ipex" | "npu";
 
 /**
  * Device type identifier
@@ -24,7 +24,7 @@ export type RuntimeType = "LEVEL_ZERO" | "OPENCL" | "METAL" | "CUDA";
  * Information about an active inference backend
  */
 export interface BackendInfo {
-  /** Type of backend (mlx, tinygrad, npu) */
+  /** Type of backend (mlx, tinygrad, pytorch_ipex, npu) */
   type: BackendType;
 
   /** Device being used (CPU, GPU, NPU, METAL) */

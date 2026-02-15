@@ -73,6 +73,18 @@ def get_inference_backend(
                 "tinygrad", f"tinygrad backend not available: {e}"
             ) from e
 
+    elif backend_name == "pytorch_ipex":
+        try:
+            from exo.worker.engines.pytorch_ipex.pytorch_ipex_backend import (
+                PyTorchIPEXBackend,
+            )
+
+            return PyTorchIPEXBackend(shard_downloader)
+        except ImportError as e:
+            raise BackendNotAvailableError(
+                "pytorch_ipex", f"PyTorch+IPEX backend not available: {e}"
+            ) from e
+
     elif backend_name == "dummy":
         try:
             from exo.worker.engines.dummy import DummyBackend
@@ -91,5 +103,6 @@ def get_inference_backend(
 BACKEND_REGISTRY = {
     "mlx": "MLXBackend",
     "tinygrad": "TinygradBackend",
+    "pytorch_ipex": "PyTorchIPEXBackend",
     "dummy": "DummyBackend",
 }
