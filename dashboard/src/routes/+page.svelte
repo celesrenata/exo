@@ -151,7 +151,7 @@
     return model.tasks.includes("ImageToImage");
   }
   let selectedSharding = $state<"Pipeline" | "Tensor">("Pipeline");
-  type InstanceMeta = "MlxRing" | "MlxIbv" | "MlxJaccl" | "TinygradRing" | "PyTorchIPEXRing";
+  type InstanceMeta = "MlxRing" | "MlxIbv" | "MlxJaccl" | "PyTorchIPEXRing";
 
   // Launch defaults persistence
   const LAUNCH_DEFAULTS_KEY = "exo-launch-defaults";
@@ -404,11 +404,9 @@
   const matchesSelectedRuntime = (runtime: InstanceMeta): boolean =>
     selectedInstanceType === "MlxRing"
       ? runtime === "MlxRing"
-      : selectedInstanceType === "TinygradRing"
-        ? runtime === "TinygradRing"
-        : selectedInstanceType === "PyTorchIPEXRing"
-          ? runtime === "PyTorchIPEXRing"
-          : runtime === "MlxIbv" || runtime === "MlxJaccl";
+      : selectedInstanceType === "PyTorchIPEXRing"
+        ? runtime === "PyTorchIPEXRing"
+        : runtime === "MlxIbv" || runtime === "MlxJaccl";
 
   // Helper to check if a model can be launched (has valid placement with >= minNodes)
   function canModelFit(modelId: string): boolean {
@@ -1197,8 +1195,6 @@
       instanceTag === "MlxJacclInstance"
     )
       instanceType = "MLX RDMA";
-    else if (instanceTag === "TinygradRingInstance")
-      instanceType = "Tinygrad Ring";
     else if (instanceTag === "PyTorchIPEXRingInstance")
       instanceType = "PyTorch+IPEX Ring";
 
@@ -2581,28 +2577,6 @@
                       {/if}
                     </span>
                     MLX RDMA
-                  </button>
-                  <button
-                    onclick={() => {
-                      selectedInstanceType = "TinygradRing";
-                      saveLaunchDefaults();
-                    }}
-                    class="flex items-center gap-2 py-2 px-4 text-sm font-mono border rounded transition-all duration-200 cursor-pointer {selectedInstanceType ===
-                    'TinygradRing'
-                      ? 'bg-transparent text-exo-yellow border-exo-yellow'
-                      : 'bg-transparent text-white/70 border-exo-medium-gray/50 hover:border-exo-yellow/50'}"
-                  >
-                    <span
-                      class="w-4 h-4 rounded-full border-2 flex items-center justify-center {selectedInstanceType ===
-                      'TinygradRing'
-                        ? 'border-exo-yellow'
-                        : 'border-exo-medium-gray'}"
-                    >
-                      {#if selectedInstanceType === "TinygradRing"}
-                        <span class="w-2 h-2 rounded-full bg-exo-yellow"></span>
-                      {/if}
-                    </span>
-                    Tinygrad Ring
                   </button>
                   <button
                     onclick={() => {
