@@ -48,28 +48,6 @@
             final.setuptools
           ];
         });
-      } // {
-
-        # tinygrad with Intel backend support
-        tinygrad = prev.tinygrad.overrideAttrs (old: {
-          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-            final.setuptools
-          ];
-          propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ lib.optionals pkgs.stdenv.isLinux [
-            # Add pyopencl for OpenCL support on Linux
-            final.pyopencl
-          ];
-        });
-
-        # pyopencl needs OpenCL headers and libraries
-        pyopencl = prev.pyopencl.overrideAttrs (old: {
-          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ lib.optionals pkgs.stdenv.isLinux [
-            pkgs.opencl-headers
-          ];
-          buildInputs = (old.buildInputs or [ ]) ++ lib.optionals pkgs.stdenv.isLinux [
-            pkgs.ocl-icd
-          ];
-        });
       };
 
       pythonSet = (pkgs.callPackage inputs.pyproject-nix.build.packages {
@@ -154,6 +132,12 @@
 
                 nativeBuildInputs = [ pkgsExo.python313.pkgs.setuptools pkgsExo.python313.pkgs.wheel pkgsExo.python313.pkgs.pip pkgs.makeWrapper ];
 
+                # Add Intel GPU runtime libraries for PyTorch + IPEX
+                buildInputs = lib.optionals pkgs.stdenv.isLinux [
+                  pkgsExo.intel-compute-runtime
+                  pkgsExo.level-zero
+                ];
+
                 propagatedBuildInputs = with pkgsExo.python313.pkgs; [
                   aiofiles
                   aiohttp
@@ -172,11 +156,14 @@
                   pillow
                   safetensors
                   transformers
-                  tinygrad
                   numpy
                   python-multipart
                   openai-harmony
-                  pyopencl
+                  # PyTorch with Intel XPU support from MordragT's nixos repo
+                  torch
+                  # Intel Extension for PyTorch (IPEX) from MordragT's nixos repo
+                ] ++ lib.optionals (pkgsExo.python313.pkgs.intel-extension-for-pytorch or null != null) [
+                  pkgsExo.python313.pkgs.intel-extension-for-pytorch
                 ];
 
                 # Install Rust bindings after main package
@@ -211,6 +198,15 @@
                   "--set EXO_TINYGRAD_ENABLED true"
                   "--set EXO_RESOURCES_DIR ${inputs.self}/resources"
                   "--set EXO_DASHBOARD_DIR ${self'.packages.dashboard}"
+                ] ++ lib.optionals pkgs.stdenv.isLinux [
+                  # Add Intel GPU runtime libraries to LD_LIBRARY_PATH for PyTorch + IPEX
+                  "--prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath [
+                    pkgsExo.intel-compute-runtime
+                    pkgsExo.level-zero
+                  ]}"
+                  # Enable PyTorch XPU (Intel GPU) support
+                  "--set PYTORCH_ENABLE_XPU 1"
+                  "--set IPEX_TILE_AS_DEVICE 1"
                 ];
               }
           else
