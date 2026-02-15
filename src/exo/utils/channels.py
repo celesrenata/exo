@@ -11,6 +11,7 @@ from anyio import (
     ClosedResourceError,
     EndOfStream,
     WouldBlock,
+    create_memory_object_stream,
     to_thread,
 )
 from anyio.streams.memory import (
@@ -18,9 +19,6 @@ from anyio.streams.memory import (
 )
 from anyio.streams.memory import (
     MemoryObjectSendStream as AnyioSender,
-)
-from anyio.streams.memory import (
-    MemoryObjectStreamState as AnyioState,
 )
 
 
@@ -276,8 +274,8 @@ class channel[T]:  # noqa: N801
     def __new__(cls, max_buffer_size: float = inf) -> tuple[Sender[T], Receiver[T]]:
         if max_buffer_size != inf and not isinstance(max_buffer_size, int):
             raise ValueError("max_buffer_size must be either an integer or math.inf")
-        state = AnyioState[T](max_buffer_size)
-        return Sender(_state=state), Receiver(_state=state)
+        send_stream, receive_stream = create_memory_object_stream[T](max_buffer_size)
+        return Sender(_state=send_stream._state), Receiver(_state=receive_stream._state)
 
 
 class mp_channel[T]:  # noqa: N801
