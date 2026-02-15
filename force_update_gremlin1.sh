@@ -14,7 +14,7 @@ echo "Step 1: Force update flake to specific commit..."
 ssh $GREMLIN_HOST "cd /etc/nixos && nix flake lock --update-input exo --override-input exo github:celesrenata/exo/$LATEST_COMMIT"
 
 echo ""
-echo "Step 2: Rebuild NixOS system..."
+echo "Step 2: Rebuild NixOS system (includes dashboard build)..."
 ssh $GREMLIN_HOST "cd /etc/nixos && nixos-rebuild switch --flake .#gremlin-1" 2>&1 | grep -E "building|copying.*exo|Done|store.*exo" | tail -20
 
 echo ""
@@ -35,10 +35,12 @@ ssh $GREMLIN_HOST "systemctl status exo --no-pager -l | head -30"
 
 echo ""
 echo "Step 7: Check logs..."
-ssh $GREMLIN_HOST "journalctl -u exo -n 50 --no-pager | grep -E 'hello from|Tinygrad|backend|error|Dashboard' || echo 'No relevant log entries yet'"
+ssh $GREMLIN_HOST "journalctl -u exo -n 50 --no-pager | grep -E 'hello from|Tinygrad|PyTorch|IPEX|backend|error|Dashboard' || echo 'No relevant log entries yet'"
 
 echo ""
 echo "=== Update Complete ==="
+echo ""
+echo "Dashboard will be available at: http://10.1.1.12:52415"
 echo ""
 echo "Test with:"
 echo "  curl -s 'http://10.1.1.12:52415/state' | python3 -c \"import sys, json; data=json.load(sys.stdin); runner = list(data['runners'].values())[0] if data.get('runners') else None; print('Runner status:', list(runner.keys())[0] if runner else 'No runner')\""
