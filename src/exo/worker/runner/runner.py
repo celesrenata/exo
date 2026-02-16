@@ -40,7 +40,11 @@ from exo.shared.types.tasks import (
     TextGeneration,
 )
 from exo.shared.types.text_generation import TextGenerationTaskParams
-from exo.shared.types.worker.instances import BoundInstance, TinygradRingInstance
+from exo.shared.types.worker.instances import (
+    BoundInstance,
+    PyTorchIPEXRingInstance,
+    TinygradRingInstance,
+)
 from exo.shared.types.worker.runner_response import (
     GenerationResponse,
     ImageGenerationResponse,
@@ -128,14 +132,27 @@ def main(
     # Handle both direct instance and Pydantic tagged union
     instance_type_name = type(instance).__name__
     is_tinygrad = (
-        isinstance(instance, TinygradRingInstance) 
+        isinstance(instance, TinygradRingInstance)
         or instance_type_name == "TinygradRingInstance"
-        or (hasattr(instance, "__class__") and instance.__class__.__name__ == "TinygradRingInstance")
+        or (
+            hasattr(instance, "__class__")
+            and instance.__class__.__name__ == "TinygradRingInstance"
+        )
     )
-    
+    is_pytorch_ipex = (
+        isinstance(instance, PyTorchIPEXRingInstance)
+        or instance_type_name == "PyTorchIPEXRingInstance"
+        or (
+            hasattr(instance, "__class__")
+            and instance.__class__.__name__ == "PyTorchIPEXRingInstance"
+        )
+    )
+
     if is_tinygrad:
         backend_type = "tinygrad"
-        logger.info(f"Using Tinygrad backend for TinygradRingInstance (type: {instance_type_name})")
+        logger.info(
+            f"Using Tinygrad backend for TinygradRingInstance (type: {instance_type_name})"
+        )
 
         # Lazy-load Tinygrad backend modules
         from exo.worker.engines.tinygrad.tinygrad_backend import TinygradBackend
@@ -144,6 +161,13 @@ def main(
         from exo.worker.engines.tinygrad.device_config import detect_capabilities
 
         logger.info("Tinygrad backend modules loaded")
+    elif is_pytorch_ipex:
+        backend_type = "pytorch_ipex"
+        logger.info(
+            f"Using PyTorch+IPEX backend for PyTorchIPEXRingInstance (type: {instance_type_name})"
+        )
+        # TODO: Lazy-load PyTorch+IPEX backend modules when implemented
+        logger.warning("PyTorch+IPEX backend not yet implemented - runner will fail")
     else:
         # MLX backend - import MLX modules only when needed
         backend_type = "mlx"
@@ -269,8 +293,10 @@ def main(
                             ):
                                 # Check if device was already configured in bootstrap
                                 # (via environment variables or detection)
-                                tinygrad_backend = os.environ.get("TINYGRAD_BACKEND", "CPU")
-                                
+                                tinygrad_backend = os.environ.get(
+                                    "TINYGRAD_BACKEND", "CPU"
+                                )
+
                                 if tinygrad_backend == "GPU":
                                     # GPU mode - determine runtime from environment
                                     if os.environ.get("OPENCL") == "1":
@@ -285,7 +311,7 @@ def main(
                                     else:
                                         runtime = "OPENCL"  # Default GPU runtime
                                         device_name = "GPU"
-                                    
+
                                     logger.info(
                                         f"Loading tinygrad model on GPU "
                                         f"({device_name}, runtime={runtime})"
@@ -300,6 +326,7 @@ def main(
                                 else:
                                     # CPU fallback
                                     import multiprocessing
+
                                     cpu_count = multiprocessing.cpu_count()
                                     logger.info(
                                         f"Loading tinygrad model on CPU "
@@ -308,7 +335,9 @@ def main(
                                     device = "CPU"
 
                                 # Get model checkpoint path from shard downloader
-                                from exo.download.impl_shard_downloader import ResumableShardDownloader
+                                from exo.download.impl_shard_downloader import (
+                                    ResumableShardDownloader,
+                                )
 
                                 downloader = ResumableShardDownloader()
 
@@ -463,7 +492,7 @@ def main(
                         else:
                             # Tinygrad backend - skip warmup for now
                             logger.info("Skipping warmup for tinygrad backend")
-                        
+
                         logger.info(
                             f"runner initialized in {time.time() - setup_start_time} seconds"
                         )
@@ -475,11 +504,15 @@ def main(
                             assert isinstance(model, DistributedImageModel)
                             image = warmup_image_generator(model=model)
                             if image is not None:
-                                logger.info(f"warmed up by generating {image.size} image")
+                                logger.info(
+                                    f"warmed up by generating {image.size} image"
+                                )
                             else:
                                 logger.info("warmup completed (non-primary node)")
                         else:
-                            raise ValueError("Image generation only supported with MLX backend")
+                            raise ValueError(
+                                "Image generation only supported with MLX backend"
+                            )
 
                     current_status = RunnerReady()
                     logger.info("runner ready")
@@ -716,7 +749,9 @@ def main(
                     task_params=task_params, command_id=command_id
                 ) if isinstance(current_status, RunnerReady):
                     if backend_type != "mlx":
-                        raise ValueError("Image generation only supported with MLX backend")
+                        raise ValueError(
+                            "Image generation only supported with MLX backend"
+                        )
                     assert isinstance(model, DistributedImageModel)
                     logger.info(f"received image generation request: {str(task)[:500]}")
                     current_status = RunnerRunning()

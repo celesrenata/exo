@@ -7,6 +7,7 @@ from exo.shared.types.tasks import Task
 from exo.shared.types.worker.instances import (
     BoundInstance,
     MlxJacclInstance,
+    PyTorchIPEXRingInstance,
     TinygradRingInstance,
 )
 from exo.shared.types.worker.runners import RunnerFailed
@@ -113,6 +114,13 @@ def entrypoint(
                 )
 
         logger.info(f"Tinygrad backend: {os.environ.get('TINYGRAD_BACKEND')}")
+    elif isinstance(bound_instance.instance, PyTorchIPEXRingInstance):
+        # PyTorch+IPEX backend configuration
+        os.environ["EXO_PYTORCH_IPEX_ENABLED"] = "true"
+        logger.info(
+            "Device selection: PyTorch+IPEX backend",
+            backend_type="pytorch_ipex",
+        )
     else:
         # MLX backend configuration
         fast_synch_override = os.environ.get("EXO_FAST_SYNCH")
