@@ -166,12 +166,13 @@ def main(
         logger.info(
             f"Using PyTorch+IPEX backend for PyTorchIPEXRingInstance (type: {instance_type_name})"
         )
-        # PyTorch+IPEX backend not yet implemented - raise clear error
-        raise NotImplementedError(
-            "PyTorch+IPEX backend is not yet implemented. "
-            "The backend infrastructure is in place but the actual inference engine needs to be built. "
-            "Please use MLX Ring or Tinygrad Ring for now."
-        )
+
+        # Lazy-load PyTorch+IPEX backend modules
+        from exo.worker.engines.pytorch_ipex.pytorch_ipex_backend import PyTorchIPEXBackend
+        from exo.worker.engines.pytorch_ipex.device_manager import DeviceManager
+        from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader
+
+        logger.info("PyTorch+IPEX backend modules loaded")
     else:
         # MLX backend - import MLX modules only when needed
         backend_type = "mlx"
