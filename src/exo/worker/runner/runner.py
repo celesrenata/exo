@@ -166,8 +166,12 @@ def main(
         logger.info(
             f"Using PyTorch+IPEX backend for PyTorchIPEXRingInstance (type: {instance_type_name})"
         )
-        # TODO: Lazy-load PyTorch+IPEX backend modules when implemented
-        logger.warning("PyTorch+IPEX backend not yet implemented - runner will fail")
+        # PyTorch+IPEX backend not yet implemented - raise clear error
+        raise NotImplementedError(
+            "PyTorch+IPEX backend is not yet implemented. "
+            "The backend infrastructure is in place but the actual inference engine needs to be built. "
+            "Please use MLX Ring or Tinygrad Ring for now."
+        )
     else:
         # MLX backend - import MLX modules only when needed
         backend_type = "mlx"
