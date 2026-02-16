@@ -18,6 +18,7 @@ from typing import Any, Optional
 import numpy as np
 import torch
 
+from exo.shared.types.api import GenerationStats, Memory, Usage
 from exo.shared.types.worker.runner_response import GenerationResponse
 
 logger = logging.getLogger(__name__)
@@ -163,7 +164,8 @@ def pytorch_ipex_generate(
 
                 # Calculate stats
                 elapsed_time = time.time() - start_time
-                tokens_per_second = generated_tokens / elapsed_time if elapsed_time > 0 else 0
+                generation_tps = generated_tokens / elapsed_time if elapsed_time > 0 else 0
+                prompt_tps = prompt_tokens / elapsed_time if elapsed_time > 0 and step == 0 else 0
 
                 # Check for EOS token
                 finish_reason = None
@@ -174,20 +176,28 @@ def pytorch_ipex_generate(
                     finish_reason = "length"
                     logger.debug(f"Max tokens reached at step {step}")
 
+                # Create proper Usage and GenerationStats objects
+                usage = Usage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=generated_tokens,
+                    total_tokens=prompt_tokens + generated_tokens,
+                )
+
+                stats = GenerationStats(
+                    prompt_tps=prompt_tps if step == 0 else generation_tps,
+                    generation_tps=generation_tps,
+                    prompt_tokens=prompt_tokens,
+                    generation_tokens=generated_tokens,
+                    peak_memory_usage=Memory(bytes=0),  # TODO: Track actual memory usage
+                )
+
                 # Yield response
                 yield GenerationResponse(
                     text=token_text,
                     token=token_id,
                     finish_reason=finish_reason,
-                    usage={
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": generated_tokens,
-                        "total_tokens": prompt_tokens + generated_tokens,
-                    },
-                    stats={
-                        "tokens_per_second": tokens_per_second,
-                        "time_to_first_token": elapsed_time if step == 0 else None,
-                    },
+                    usage=usage,
+                    stats=stats,
                     logprob=None,
                     top_logprobs=None,
                 )
@@ -198,7 +208,7 @@ def pytorch_ipex_generate(
 
         logger.info(
             f"Generation complete: {generated_tokens} tokens in {elapsed_time:.2f}s "
-            f"({tokens_per_second:.2f} tokens/s)"
+            f"({generation_tps:.2f} tokens/s)"
         )
 
     except Exception as e:
