@@ -35,6 +35,7 @@ from exo.shared.types.worker.instances import (
     InstanceMeta,
     MlxJacclInstance,
     MlxRingInstance,
+    PyTorchIPEXRingInstance,
     TinygradRingInstance,
 )
 from exo.shared.types.worker.shards import Sharding
@@ -181,6 +182,21 @@ def place_instance(
             from exo.shared.types.worker.instances import TinygradRingInstance
 
             target_instances[instance_id] = TinygradRingInstance(
+                instance_id=instance_id,
+                shard_assignments=shard_assignments,
+                hosts_by_node=hosts_by_node,
+                ephemeral_port=ephemeral_port,
+            )
+        case InstanceMeta.PyTorchIPEXRing:
+            ephemeral_port = random_ephemeral_port()
+            hosts_by_node = get_mlx_ring_hosts_by_node(
+                selected_cycle=selected_cycle,
+                cycle_digraph=cycle_digraph,
+                ephemeral_port=ephemeral_port,
+                node_network=node_network,
+            )
+
+            target_instances[instance_id] = PyTorchIPEXRingInstance(
                 instance_id=instance_id,
                 shard_assignments=shard_assignments,
                 hosts_by_node=hosts_by_node,

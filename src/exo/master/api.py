@@ -398,6 +398,7 @@ class API:
                 InstanceMeta.MlxRing,
                 InstanceMeta.MlxJaccl,
                 InstanceMeta.TinygradRing,
+                InstanceMeta.PyTorchIPEXRing,
             ):
                 instance_combinations.extend(
                     [
