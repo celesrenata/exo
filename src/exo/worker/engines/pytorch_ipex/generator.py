@@ -18,7 +18,13 @@ from typing import Any, Optional
 import numpy as np
 import torch
 
-from exo.shared.types.api import GenerationStats, Memory, Usage
+from exo.shared.types.api import (
+    CompletionTokensDetails,
+    GenerationStats,
+    Memory,
+    PromptTokensDetails,
+    Usage,
+)
 from exo.shared.types.worker.runner_response import GenerationResponse
 
 logger = logging.getLogger(__name__)
@@ -181,6 +187,14 @@ def pytorch_ipex_generate(
                     prompt_tokens=prompt_tokens,
                     completion_tokens=generated_tokens,
                     total_tokens=prompt_tokens + generated_tokens,
+                    prompt_tokens_details=PromptTokensDetails(
+                        cached_tokens=0,
+                        audio_tokens=0,
+                    ),
+                    completion_tokens_details=CompletionTokensDetails(
+                        reasoning_tokens=0,
+                        audio_tokens=0,
+                    ),
                 )
 
                 stats = GenerationStats(
