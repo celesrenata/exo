@@ -412,7 +412,36 @@ def main(
                                 )
                             )
                             raise
-                    else:
+                    elif backend_type == "pytorch_ipex":
+                        # PyTorch+IPEX backend model loading
+                        try:
+                            if (
+                                ModelTask.TextGeneration
+                                in shard_metadata.model_card.tasks
+                            ):
+                                logger.info("Loading PyTorch+IPEX model...")
+                                
+                                # TODO: Implement PyTorch+IPEX model loading
+                                # For now, raise NotImplementedError
+                                raise NotImplementedError(
+                                    "PyTorch+IPEX model loading not yet implemented"
+                                )
+                            else:
+                                raise ValueError(
+                                    f"PyTorch+IPEX backend only supports TextGeneration, got: {shard_metadata.model_card.tasks}"
+                                )
+                        except Exception as e:
+                            logger.error(f"Failed to load PyTorch+IPEX model: {e}")
+                            event_sender.send(
+                                RunnerStatusUpdated(
+                                    runner_id=runner_id,
+                                    runner_status=RunnerFailed(
+                                        error_message=f"Model loading failed: {e}"
+                                    ),
+                                )
+                            )
+                            raise
+                    elif backend_type == "mlx":
                         # MLX backend model loading
                         if ModelTask.TextGeneration in shard_metadata.model_card.tasks:
                             model, tokenizer = load_mlx_items(
@@ -459,6 +488,19 @@ def main(
                             logger.warning(
                                 f"Failed to emit BackendInitialized event: {e}"
                             )
+                    else:
+                        # Unknown backend type
+                        error_msg = f"Unknown backend type: {backend_type}"
+                        logger.error(error_msg)
+                        event_sender.send(
+                            RunnerStatusUpdated(
+                                runner_id=runner_id,
+                                runner_status=RunnerFailed(
+                                    error_message=error_msg
+                                ),
+                            )
+                        )
+                        raise ValueError(error_msg)
 
                     current_status = RunnerLoaded()
                     logger.info("runner loaded")
