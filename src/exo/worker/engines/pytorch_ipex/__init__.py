@@ -1,17 +1,42 @@
 """
-PyTorch + IPEX backend for Intel Arc GPU support.
+PyTorch + IPEX Inference Backend
 
-This module provides Intel Arc GPU support for exo using PyTorch and
+This package provides Intel Arc GPU support for exo using PyTorch and
 Intel Extension for PyTorch (IPEX).
+
+Components:
+- PyTorchIPEXBackend: Main inference engine
+- DeviceManager: Device detection and selection
+- ModelLoader: Model loading and optimization
+- KVCacheManager: KV cache management
+- TokenGenerator: Token sampling with temperature, top-k, top-p
 """
 
-from .device_manager import DeviceInfo, DeviceManager, DeviceType
-from .model_loader import ModelLoader, TransformerShard
+from exo.worker.engines.pytorch_ipex.device_manager import DeviceManager, DeviceType
+from exo.worker.engines.pytorch_ipex.errors import (
+    CacheError,
+    DeviceError,
+    InferenceError,
+    ModelError,
+)
+from exo.worker.engines.pytorch_ipex.kv_cache_manager import KVCacheManager
+from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader
+from exo.worker.engines.pytorch_ipex.pytorch_ipex_backend import PyTorchIPEXBackend
+from exo.worker.engines.pytorch_ipex.token_generator import (
+    SamplingResult,
+    TokenGenerator,
+)
 
 __all__ = [
+    "PyTorchIPEXBackend",
     "DeviceManager",
-    "DeviceInfo",
     "DeviceType",
     "ModelLoader",
-    "TransformerShard",
+    "KVCacheManager",
+    "TokenGenerator",
+    "SamplingResult",
+    "DeviceError",
+    "ModelError",
+    "InferenceError",
+    "CacheError",
 ]
