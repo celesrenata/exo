@@ -3,13 +3,13 @@ import sys
 import subprocess
 
 # Read the original file
-with open('/tmp/ops_gpu_orig.py', 'r') as f:
+with open("/tmp/ops_gpu_orig.py", "r") as f:
     lines = f.readlines()
 
 # Insert the diagnostic code after the imports and before CLCompiler class
 insert_after_line = None
 for i, line in enumerate(lines):
-    if line.strip() == 'def checked(ret, status): return (check(status.value), ret)[1]':
+    if line.strip() == "def checked(ret, status): return (check(status.value), ret)[1]":
         insert_after_line = i
         break
 
@@ -62,10 +62,13 @@ lines.insert(insert_after_line + 1, diagnostic_code)
 # Now find and replace the return statement in CLAllocator._alloc
 # Find the line with "return (checked(cl.clCreateBuffer"
 for i, line in enumerate(lines):
-    if 'return (checked(cl.clCreateBuffer(self.dev.context, cl.CL_MEM_READ_WRITE, size, None, status := ctypes.c_int32()), status), options)' in line:
+    if (
+        "return (checked(cl.clCreateBuffer(self.dev.context, cl.CL_MEM_READ_WRITE, size, None, status := ctypes.c_int32()), status), options)"
+        in line
+    ):
         # Replace this line with our diagnostic code + the return
-        indent = '    '
-        replacement = f'''{indent}
+        indent = "    "
+        replacement = f"""{indent}
 {indent}# Log device info on first allocation
 {indent}_log_device_info(self.dev)
 {indent}
@@ -116,23 +119,25 @@ for i, line in enumerate(lines):
 {indent}# Attempt allocation
 {indent}flags = cl.CL_MEM_READ_WRITE
 {indent}return (checked(cl.clCreateBuffer(self.dev.context, flags, size, None, status := ctypes.c_int32()), status), options)
-'''
+"""
         lines[i] = replacement
         break
 
 # Also need to add the import at the top
 for i, line in enumerate(lines):
-    if line.startswith('import ctypes, functools, hashlib'):
-        lines[i] = line.rstrip() + '\nimport sys, traceback, time\n'
+    if line.startswith("import ctypes, functools, hashlib"):
+        lines[i] = line.rstrip() + "\nimport sys, traceback, time\n"
         break
 
 # Write the modified file
-with open('/tmp/ops_gpu_new.py', 'w') as f:
+with open("/tmp/ops_gpu_new.py", "w") as f:
     f.writelines(lines)
 
 print("Modified file created successfully")
 
 # Create the patch
-subprocess.run(['diff', '-u', '/tmp/ops_gpu_orig.py', '/tmp/ops_gpu_new.py'], 
-               stdout=open('patches/tinygrad-intel-arc-4gb-fix.patch', 'w'))
+subprocess.run(
+    ["diff", "-u", "/tmp/ops_gpu_orig.py", "/tmp/ops_gpu_new.py"],
+    stdout=open("patches/tinygrad-intel-arc-4gb-fix.patch", "w"),
+)
 print("Patch file created")

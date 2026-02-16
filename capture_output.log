@@ -1,0 +1,123 @@
+==========================================
+Intel Arc GPU Diagnostic Capture
+==========================================
+Target: 10.1.1.12
+Model: meta-llama/Llama-3.2-3B-Instruct
+Log file: intel_arc_diagnostics_20260214_011937.log
+
+Verifying GPU configuration...
+Environment=LOCALE_ARCHIVE=/nix/store/98661jgb955g9r2ximb0dss7d325vkx0-glibc-locales-2.42-47/lib/locale/locale-archive PATH=/nix/store/i2vmgx46q9hd3z6rigaiman3wl3i2gc4-coreutils-9.9/bin:/nix/store/16wfacfgap3chf7mcjnd8dwi85dj4qqi-findutils-4.10.0/bin:/nix/store/02vv0r262agf9j5n2y1gmbjvdf12zkl0-gnugrep-3.12/bin:/nix/store/ryz8kcrm2bxpccllfqlb7qldsfnqp5c2-gnused-4.9/bin:/nix/store/5j9cg6adv3d2l403fcfklz4lmf9fd0l8-systemd-258.3/bin:/nix/store/i2vmgx46q9hd3z6rigaiman3wl3i2gc4-coreutils-9.9/sbin:/nix/store/16wfacfgap3chf7mcjnd8dwi85dj4qqi-findutils-4.10.0/sbin:/nix/store/02vv0r262agf9j5n2y1gmbjvdf12zkl0-gnugrep-3.12/sbin:/nix/store/ryz8kcrm2bxpccllfqlb7qldsfnqp5c2-gnused-4.9/sbin:/nix/store/5j9cg6adv3d2l403fcfklz4lmf9fd0l8-systemd-258.3/sbin TZDIR=/nix/store/r29gp232igs3m47s7lfcaalfashd82bf-tzdata-2025c/share/zoneinfo EXO_TINYGRAD_ENABLED=true LD_LIBRARY_PATH=/nix/store/67bdfc7yncy515gjb9jcmbbass0yjb2p-ocl-icd-2.3.4/lib:/nix/store/44rq4f0cclc5752v6i4nc23by8m01ipr-intel-compute-runtime-26.01.36711.4/lib OPENCL=1 GPU=1 OPENCL_DEVICE=0
+
+Starting log monitor...
+✓ Log monitor started (PID: 2268717)
+
+Waiting 5 seconds for log monitor to stabilize...
+Sending inference request to trigger model loading...
+Model: meta-llama/Llama-3.2-3B-Instruct
+
+Response received:
+Internal Server Error
+
+Waiting 60 seconds for model loading and inference...
+
+Stopping log monitor...
+✓ Log monitor stopped
+
+==========================================
+DIAGNOSTIC LOG ANALYSIS
+==========================================
+
+✓ Found Intel Arc diagnostic messages!
+  Total diagnostic lines: 6
+
+--- Device Information ---
+Feb 14 01:19:32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG] ===== DEVICE INFORMATION =====
+Feb 14 01:19:32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG] Device: NVIDIA GeForce RTX 4070 Ti SUPER
+Feb 14 01:19:32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG] Driver: 580.126.09
+Feb 14 01:19:32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG] ==============================
+Feb 14 01:19:32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG] Allocation #2: 1576009728 bytes (1503.00 MB / 1.468 GB)
+Feb 14 01:19:32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG]   Context: /nix/store/qk6in5b1ixjpx0djis1s1zrr10j0cwry-python3.13-tinygrad-0.11.0/lib/python3.13/site-packages/tinygrad/device.py:226 in alloc
+
+⚠️  WARNING: Not using Intel Arc GPU!
+Feb 14 01:19:32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG] Device: NVIDIA GeForce RTX 4070 Ti SUPER
+
+--- All Allocations (>100MB) ---
+Feb 14 01:19:32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG] Allocation #2: 1576009728 bytes (1503.00 MB / 1.468 GB)
+
+--- Allocation Contexts ---
+Feb 14 01:19:32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG]   Context: /nix/store/qk6in5b1ixjpx0djis1s1zrr10j0cwry-python3.13-tinygrad-0.11.0/lib/python3.13/site-packages/tinygrad/device.py:226 in alloc
+
+--- Checking for >4GB Allocations ---
+✓ No allocations >4GB detected
+
+--- Allocation Summary ---
+No summary yet
+
+--- OpenCL Errors ---
+⚠️  FOUND ERRORS:
+Feb 14 01:19:34 gremlin-1 exo[1170755]: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:19:34 gremlin-1 exo[1170755]: Inference failed at token 0: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:19:46 gremlin-1 exo[1170755]: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:19:46 gremlin-1 exo[1170755]: Inference failed at token 0: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:19:46 gremlin-1 exo[1169406]:     │    │   │     └ ExceptionGroup('unhandled errors in a TaskGroup', [ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_...
+Feb 14 01:19:46 gremlin-1 exo[1169406]:           │            │       │            └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:19:46 gremlin-1 exo[1169406]:           │            └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:19:46 gremlin-1 exo[1169406]:           └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:19:46 gremlin-1 exo[1169406]:                      └ 'Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE'
+Feb 14 01:19:46 gremlin-1 exo[1169406]: ValueError: Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:19:46 gremlin-1 exo[1169406]:     │    │   │     └ ExceptionGroup('unhandled errors in a TaskGroup', [ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_...
+Feb 14 01:19:46 gremlin-1 exo[1169406]:           │            │       │            └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:19:46 gremlin-1 exo[1169406]:           │            └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:19:46 gremlin-1 exo[1169406]:           └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:19:46 gremlin-1 exo[1169406]:                      └ 'Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE'
+Feb 14 01:19:46 gremlin-1 exo[1169406]: ValueError: Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+
+--- Error Context ---
+Feb 14 01:19:33 gremlin-1 exo[1169406]: [ 01:19:33.355 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='de23eaa9-48b5-468f-8807-d20e3b0a6a60' node_id='12D3KooWECApP1Nn61NkFh52cw
+Feb 14 01:19:33 gremlin-1 exo[1169406]: [ 01:19:33.521 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:19:34 gremlin-1 exo[1169406]: [ 01:19:34.354 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 128: NodeGatheredInfo(event_id='e081d4f9-f87e-4981-80ad-b4bb132e7241' node_id='12D3KooWECApP1Nn61NkFh52cw
+Feb 14 01:19:34 gremlin-1 exo[1169406]: [ 01:19:34.355 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='e081d4f9-f87e-4981-80ad-b4bb132e7241' node_id='12D3KooWECApP1Nn61NkFh52cw
+Feb 14 01:19:34 gremlin-1 exo[1169406]: [ 01:19:34.521 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:19:34 gremlin-1 exo[1170755]: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:19:34 gremlin-1 exo[1170755]: Inference failed at token 0: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+--
+Feb 14 01:19:46 gremlin-1 exo[1169406]: [ 01:19:46.391 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 148: NodeGatheredInfo(event_id='b486f829-8d84-47ee-ac19-3267b7071562' node_id='12D3KooWECApP1Nn61NkFh52cw
+Feb 14 01:19:46 gremlin-1 exo[1169406]: [ 01:19:46.393 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 149: NodeGatheredInfo(event_id='dd9b9927-6cd5-4507-9318-fa32e9333869' node_id='12D3KooWECApP1Nn61NkFh52cw
+Feb 14 01:19:46 gremlin-1 exo[1169406]: [ 01:19:46.395 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='b486f829-8d84-47ee-ac19-3267b7071562' node_id='12D3KooWECApP1Nn61NkFh52cw
+Feb 14 01:19:46 gremlin-1 exo[1169406]: [ 01:19:46.397 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='dd9b9927-6cd5-4507-9318-fa32e9333869' node_id='12D3KooWECApP1Nn61NkFh52cw
+Feb 14 01:19:46 gremlin-1 exo[1169406]: [ 01:19:46.404 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:19:46 gremlin-1 exo[1170755]: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:19:46 gremlin-1 exo[1170755]: Inference failed at token 0: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+--
+Feb 14 01:19:46 gremlin-1 exo[1169406]:          │            │            └ <function collapse_excgroups at 0x7ffa427654e0>
+Feb 14 01:19:46 gremlin-1 exo[1169406]:          │            └ MemoryObjectSendStream(_state=MemoryObjectStreamState(max_buffer_size=0, buffer=deque([]), open_send_channels=0, open_receive...
+Feb 14 01:19:46 gremlin-1 exo[1169406]:          └ MemoryObjectReceiveStream(_state=MemoryObjectStreamState(max_buffer_size=0, buffer=deque([]), open_send_channels=0, open_rece...
+Feb 14 01:19:46 gremlin-1 exo[1169406]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/contextlib.py", line 162, in __exit__
+Feb 14 01:19:46 gremlin-1 exo[1169406]:     self.gen.throw(value)
+Feb 14 01:19:46 gremlin-1 exo[1169406]:     │    │   │     └ ExceptionGroup('unhandled errors in a TaskGroup', [ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_...
+--
+Feb 14 01:19:46 gremlin-1 exo[1169406]:                  │         └ <starlette.middleware.base._CachedRequest object at 0x7ffa400eddb0>
+Feb 14 01:19:46 gremlin-1 exo[1169406]:                  └ <function BaseHTTPMiddleware.__call__.<locals>.call_next at 0x7ffa400ec220>
+Feb 14 01:19:46 gremlin-1 exo[1169406]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/base.py", line 168, in call_next
+Feb 14 01:19:46 gremlin-1 exo[1169406]:     raise app_exc from app_exc.__cause__ or app_exc.__context__
+Feb 14 01:19:46 gremlin-1 exo[1169406]:           │            │       │            │       └ <attribute '__context__' of 'BaseException' objects>
+Feb 14 01:19:46 gremlin-1 exo[1169406]:           │            │       │            └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:19:46 gremlin-1 exo[1169406]:           │            │       └ <attribute '__cause__' of 'BaseException' objects>
+
+
+==========================================
+Diagnostic Capture Complete!
+==========================================
+Full log: intel_arc_diagnostics_20260214_011937.log
+Intel Arc logs: intel_arc_diagnostics_20260214_011937.log.intel_arc_only
+
+Summary:
+  Device: 32 gremlin-1 exo[1170755]: [INTEL ARC DEBUG] Device: NVIDIA GeForce RTX 4070 Ti SUPER
+  Allocations >100MB: 1
+  Allocations >4GB: 0
+0
+  OpenCL Errors: 16
+
+
+Stopping log monitor...
+✓ Log monitor stopped

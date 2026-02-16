@@ -117,10 +117,53 @@ def entrypoint(
     elif isinstance(bound_instance.instance, PyTorchIPEXRingInstance):
         # PyTorch+IPEX backend configuration
         os.environ["EXO_PYTORCH_IPEX_ENABLED"] = "true"
-        logger.info(
-            "Device selection: PyTorch+IPEX backend",
-            backend_type="pytorch_ipex",
-        )
+        
+        # Set PyTorch+IPEX environment variables for optimal performance
+        os.environ["PYTORCH_ENABLE_XPU"] = "1"
+        os.environ["IPEX_TILE_AS_DEVICE"] = "1"
+        
+        # Detect Intel Arc GPU and configure device
+        try:
+            # Lazy import to avoid loading PyTorch unless needed
+            import torch
+            import intel_extension_for_pytorch as ipex
+            
+            if torch.xpu.is_available():
+                device_count = torch.xpu.device_count()
+                if device_count > 0:
+                    # Get device properties for logging
+                    props = torch.xpu.get_device_properties(0)
+                    device_name = props.name if hasattr(props, 'name') else "Intel XPU"
+                    total_memory_gb = props.total_memory / (1024**3) if hasattr(props, 'total_memory') else 0
+                    
+                    logger.info(
+                        "Device selection: Intel Arc GPU with PyTorch+IPEX",
+                        backend_type="pytorch_ipex",
+                        device_type="XPU",
+                        device_count=device_count,
+                        device_name=device_name,
+                        memory_gb=f"{total_memory_gb:.2f}",
+                    )
+                else:
+                    logger.warning(
+                        "PyTorch XPU available but no devices found, will fall back to CPU",
+                        backend_type="pytorch_ipex",
+                    )
+            else:
+                logger.warning(
+                    "Intel XPU not available, PyTorch+IPEX will fall back to CPU",
+                    backend_type="pytorch_ipex",
+                )
+        except ImportError as e:
+            logger.warning(
+                f"Failed to import PyTorch or IPEX: {e}. Backend will attempt initialization anyway.",
+                backend_type="pytorch_ipex",
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to detect Intel Arc GPU: {e}. Backend will attempt initialization anyway.",
+                backend_type="pytorch_ipex",
+            )
     else:
         # MLX backend configuration
         fast_synch_override = os.environ.get("EXO_FAST_SYNCH")

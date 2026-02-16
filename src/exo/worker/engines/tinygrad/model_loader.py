@@ -293,8 +293,10 @@ def _load_safetensors_sync(weights_path: Path) -> dict[str, "np.ndarray[Any, Any
         # Check if this is an index file (sharded model)
         if weights_path.name.endswith(".index.json"):
             # Use the new sharded loading function from llama_transformer
-            from exo.worker.engines.tinygrad.llama_transformer import load_sharded_weights
-            
+            from exo.worker.engines.tinygrad.llama_transformer import (
+                load_sharded_weights,
+            )
+
             checkpoint_dir = weights_path.parent
             return load_sharded_weights(checkpoint_dir, weights_path)
         else:
@@ -306,15 +308,17 @@ def _load_safetensors_sync(weights_path: Path) -> dict[str, "np.ndarray[Any, Any
         raise RuntimeError(f"Failed to load safetensors: {e}") from e
 
 
-def _convert_bfloat16_to_float32(tensor: "np.ndarray[Any, Any]") -> "np.ndarray[Any, Any]":
+def _convert_bfloat16_to_float32(
+    tensor: "np.ndarray[Any, Any]",
+) -> "np.ndarray[Any, Any]":
     """Convert bfloat16 tensor to float32.
-    
+
     bfloat16 is not natively supported by numpy, but safetensors can load it.
     We convert it to float32 for compatibility with tinygrad.
-    
+
     Args:
         tensor: Input tensor in bfloat16 format
-        
+
     Returns:
         Tensor converted to float32
     """
@@ -332,7 +336,9 @@ def _convert_bfloat16_to_float32(tensor: "np.ndarray[Any, Any]") -> "np.ndarray[
             # Reinterpret as float32
             return uint32_data.view(np.float32)
         else:
-            logger.warning(f"Unexpected dtype for bfloat16 conversion: {tensor.dtype}, using direct cast")
+            logger.warning(
+                f"Unexpected dtype for bfloat16 conversion: {tensor.dtype}, using direct cast"
+            )
             return tensor.astype(np.float32)
 
 
@@ -346,46 +352,49 @@ def _load_single_safetensors(weights_path: Path) -> dict[str, "np.ndarray[Any, A
         Dictionary mapping weight names to numpy arrays
     """
     import struct
-    
+
     try:
         # Read the file manually to handle bfloat16
-        with open(weights_path, 'rb') as f:
+        with open(weights_path, "rb") as f:
             # Read header length (first 8 bytes)
-            header_size = struct.unpack('<Q', f.read(8))[0]
+            header_size = struct.unpack("<Q", f.read(8))[0]
             # Read header JSON
             import json
-            header = json.loads(f.read(header_size).decode('utf-8'))
-            
+
+            header = json.loads(f.read(header_size).decode("utf-8"))
+
             weights = {}
             # Get data start position
             data_start = 8 + header_size
-            
+
             for key, info in header.items():
-                if key == '__metadata__':
+                if key == "__metadata__":
                     continue
-                    
-                dtype_str = info['dtype']
-                shape = info['shape']
-                data_offsets = info['data_offsets']
-                
+
+                dtype_str = info["dtype"]
+                shape = info["shape"]
+                data_offsets = info["data_offsets"]
+
                 # Seek to tensor data
                 f.seek(data_start + data_offsets[0])
                 # Read tensor bytes
                 tensor_bytes = f.read(data_offsets[1] - data_offsets[0])
-                
+
                 # Convert based on dtype
-                if dtype_str == 'BF16':
+                if dtype_str == "BF16":
                     # bfloat16: read as uint16, convert to float32
-                    tensor_uint16 = np.frombuffer(tensor_bytes, dtype=np.uint16).reshape(shape)
+                    tensor_uint16 = np.frombuffer(
+                        tensor_bytes, dtype=np.uint16
+                    ).reshape(shape)
                     tensor = _convert_bfloat16_to_float32(tensor_uint16)
                     logger.debug(f"Converted {key} from bfloat16 to float32")
                 else:
                     # Use numpy's dtype mapping
                     np_dtype = _safetensors_dtype_to_numpy(dtype_str)
                     tensor = np.frombuffer(tensor_bytes, dtype=np_dtype).reshape(shape)
-                
+
                 weights[key] = tensor
-        
+
         logger.debug(f"Loaded {len(weights)} weight tensors from {weights_path}")
         return weights
     except Exception as e:
@@ -396,20 +405,19 @@ def _load_single_safetensors(weights_path: Path) -> dict[str, "np.ndarray[Any, A
 def _safetensors_dtype_to_numpy(dtype_str: str) -> np.dtype:
     """Convert safetensors dtype string to numpy dtype."""
     dtype_map = {
-        'F32': np.float32,
-        'F16': np.float16,
-        'I32': np.int32,
-        'I64': np.int64,
-        'U8': np.uint8,
-        'I8': np.int8,
-        'I16': np.int16,
-        'U16': np.uint16,
-        'U32': np.uint32,
-        'U64': np.uint64,
-        'BOOL': np.bool_,
+        "F32": np.float32,
+        "F16": np.float16,
+        "I32": np.int32,
+        "I64": np.int64,
+        "U8": np.uint8,
+        "I8": np.int8,
+        "I16": np.int16,
+        "U16": np.uint16,
+        "U32": np.uint32,
+        "U64": np.uint64,
+        "BOOL": np.bool_,
     }
     return dtype_map.get(dtype_str, np.float32)
-
 
 
 def _create_model_structure(
@@ -451,7 +459,7 @@ def _create_model_structure(
 
     # Create transformer model with random initialization
     model = LlamaTransformer(config)
-    
+
     logger.warning(
         "Created model with random initialization - weights not loaded! "
         "Model will not produce meaningful output until weights are loaded."
@@ -613,7 +621,6 @@ def _extract_layer_number(weight_name: str) -> int | None:
             return int(match.group(1))
 
     return None
-
 
 
 async def encode_prompt(tokenizer: Any, prompt: str) -> "np.ndarray[Any, Any]":

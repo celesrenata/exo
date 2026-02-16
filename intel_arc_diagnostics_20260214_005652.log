@@ -1,0 +1,119 @@
+Feb 14 00:56:53 gremlin-1 exo[1070975]: [ 00:56:53.323 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1453: NodeGatheredInfo(event_id='93e32a2c-d614-4125-b854-99dcb133c58f' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:53 gremlin-1 exo[1070975]: [ 00:56:53.325 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1454: NodeGatheredInfo(event_id='d860bd05-c10b-46e2-81fe-19a1983de15a' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:53 gremlin-1 exo[1070975]: [ 00:56:53.327 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='93e32a2c-d614-4125-b854-99dcb133c58f' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:53 gremlin-1 exo[1070975]: [ 00:56:53.329 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='d860bd05-c10b-46e2-81fe-19a1983de15a' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:53 gremlin-1 exo[1070975]: [ 00:56:53.389 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:56:54 gremlin-1 exo[1070975]: [ 00:56:54.323 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1455: NodeGatheredInfo(event_id='295434b5-7a3f-4623-945b-f7d3559f51e1' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:54 gremlin-1 exo[1070975]: [ 00:56:54.324 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='295434b5-7a3f-4623-945b-f7d3559f51e1' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:54 gremlin-1 exo[1070975]: [ 00:56:54.441 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:56:55 gremlin-1 exo[1070975]: [ 00:56:55.325 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1456: NodeGatheredInfo(event_id='0aaa9e8d-9a45-4c77-80d5-82f144b55e5d' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:55 gremlin-1 exo[1070975]: [ 00:56:55.326 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='0aaa9e8d-9a45-4c77-80d5-82f144b55e5d' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:55 gremlin-1 exo[1070975]: [ 00:56:55.444 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:56:56 gremlin-1 exo[1070975]: [ 00:56:56.326 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1457: NodeGatheredInfo(event_id='0a1325b1-987c-4324-a2b1-2497bfc40d14' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:56 gremlin-1 exo[1070975]: [ 00:56:56.327 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='0a1325b1-987c-4324-a2b1-2497bfc40d14' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:56 gremlin-1 exo[1070975]: [ 00:56:56.468 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:56:57 gremlin-1 exo[1070975]: [ 00:56:57.328 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1458: NodeGatheredInfo(event_id='51e0eab8-a377-4828-8f18-35d461a00315' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:57 gremlin-1 exo[1070975]: [ 00:56:57.329 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='51e0eab8-a377-4828-8f18-35d461a00315' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:57 gremlin-1 exo[1070975]: [ 00:56:57.505 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:56:58 gremlin-1 exo[1070975]: [ 00:56:58.190 | DEBUG    | exo.master.api:_log_requests:199 ] API request: POST /v1/chat/completions
+Feb 14 00:56:58 gremlin-1 exo[1070975]: [ 00:56:58.191 | WARNING  | exo.master.api:_trigger_notify_user_to_download_model:615 ] TODO: we should send a notification to the user to download the model
+Feb 14 00:56:58 gremlin-1 exo[1070975]: [ 00:56:58.328 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1459: NodeGatheredInfo(event_id='5114890b-bcf7-4c9f-9050-3f3a0632fdb0' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:58 gremlin-1 exo[1070975]: [ 00:56:58.329 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='5114890b-bcf7-4c9f-9050-3f3a0632fdb0' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:58 gremlin-1 exo[1070975]: [ 00:56:58.506 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:56:59 gremlin-1 exo[1070975]: [ 00:56:59.330 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1460: NodeGatheredInfo(event_id='7d5ad2d5-6181-4e71-b61c-06d13a3154d3' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:59 gremlin-1 exo[1070975]: [ 00:56:59.331 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='7d5ad2d5-6181-4e71-b61c-06d13a3154d3' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:56:59 gremlin-1 exo[1070975]: [ 00:56:59.522 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:00 gremlin-1 exo[1070975]: [ 00:57:00.331 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1461: NodeGatheredInfo(event_id='023a57bb-36f0-4a26-810e-c4b3b7b0e02d' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:00 gremlin-1 exo[1070975]: [ 00:57:00.332 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='023a57bb-36f0-4a26-810e-c4b3b7b0e02d' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:00 gremlin-1 exo[1070975]: [ 00:57:00.522 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:01 gremlin-1 exo[1070975]: [ 00:57:01.332 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1462: NodeGatheredInfo(event_id='4ad85566-785b-4f37-81a7-eb9fdb7548ae' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:01 gremlin-1 exo[1070975]: [ 00:57:01.333 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='4ad85566-785b-4f37-81a7-eb9fdb7548ae' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:01 gremlin-1 exo[1070975]: [ 00:57:01.522 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:02 gremlin-1 exo[1070975]: [ 00:57:02.334 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1463: NodeGatheredInfo(event_id='36a9f2a5-fb6f-45ed-80b0-f36cded4442e' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:02 gremlin-1 exo[1070975]: [ 00:57:02.335 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='36a9f2a5-fb6f-45ed-80b0-f36cded4442e' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:02 gremlin-1 exo[1070975]: [ 00:57:02.521 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:03 gremlin-1 exo[1070975]: [ 00:57:03.345 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1464: NodeGatheredInfo(event_id='ab5d9f95-4105-42cb-9d23-f34f5e85ef98' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:03 gremlin-1 exo[1070975]: [ 00:57:03.347 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1465: NodeGatheredInfo(event_id='1c662651-a7e7-4daf-8fd6-ac78e2d5227d' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:03 gremlin-1 exo[1070975]: [ 00:57:03.349 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='ab5d9f95-4105-42cb-9d23-f34f5e85ef98' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:03 gremlin-1 exo[1070975]: [ 00:57:03.351 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='1c662651-a7e7-4daf-8fd6-ac78e2d5227d' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:03 gremlin-1 exo[1070975]: [ 00:57:03.521 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:04 gremlin-1 exo[1070975]: [ 00:57:04.346 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1466: NodeGatheredInfo(event_id='fc7e1be9-0734-45c3-9c24-8080015b62f6' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:04 gremlin-1 exo[1070975]: [ 00:57:04.347 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='fc7e1be9-0734-45c3-9c24-8080015b62f6' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:04 gremlin-1 exo[1070975]: [ 00:57:04.521 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:05 gremlin-1 exo[1070975]: [ 00:57:05.348 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1467: NodeGatheredInfo(event_id='1e39a99f-b2f1-464c-b000-0539ce837c03' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:05 gremlin-1 exo[1070975]: [ 00:57:05.349 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='1e39a99f-b2f1-464c-b000-0539ce837c03' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:05 gremlin-1 exo[1070975]: [ 00:57:05.373 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /instance/previews
+Feb 14 00:57:05 gremlin-1 exo[1070975]: [ 00:57:05.522 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:06 gremlin-1 exo[1070975]: [ 00:57:06.350 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1468: NodeGatheredInfo(event_id='d9d299bc-ca8f-4a06-ba93-0ffd5cc45e46' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:06 gremlin-1 exo[1070975]: [ 00:57:06.351 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='d9d299bc-ca8f-4a06-ba93-0ffd5cc45e46' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:06 gremlin-1 exo[1070975]: [ 00:57:06.522 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:07 gremlin-1 exo[1070975]: [ 00:57:07.351 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1469: NodeGatheredInfo(event_id='5d6e4209-e146-408f-aab5-97ef4ce646bc' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:07 gremlin-1 exo[1070975]: [ 00:57:07.352 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='5d6e4209-e146-408f-aab5-97ef4ce646bc' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:07 gremlin-1 exo[1070975]: [ 00:57:07.630 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:08 gremlin-1 exo[1070975]: [ 00:57:08.352 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1470: NodeGatheredInfo(event_id='813489b5-a226-4187-95d9-954d823ef223' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:08 gremlin-1 exo[1070975]: [ 00:57:08.353 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='813489b5-a226-4187-95d9-954d823ef223' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:08 gremlin-1 exo[1070975]: [ 00:57:08.629 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:09 gremlin-1 exo[1070975]: [ 00:57:09.355 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1471: NodeGatheredInfo(event_id='eef4b3f7-80d9-4522-a3f5-4fffdb2a54ed' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:09 gremlin-1 exo[1070975]: [ 00:57:09.356 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='eef4b3f7-80d9-4522-a3f5-4fffdb2a54ed' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:09 gremlin-1 exo[1070975]: [ 00:57:09.643 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:10 gremlin-1 exo[1070975]: [ 00:57:10.356 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1472: NodeGatheredInfo(event_id='6b6706c3-8681-406d-bfac-2956a0f60c42' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:10 gremlin-1 exo[1070975]: [ 00:57:10.357 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='6b6706c3-8681-406d-bfac-2956a0f60c42' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:10 gremlin-1 exo[1070975]: [ 00:57:10.647 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:11 gremlin-1 exo[1070975]: [ 00:57:11.357 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1473: NodeGatheredInfo(event_id='f9487ceb-7f9d-434a-8631-5cce23a24634' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:11 gremlin-1 exo[1070975]: [ 00:57:11.358 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='f9487ceb-7f9d-434a-8631-5cce23a24634' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:11 gremlin-1 exo[1070975]: [ 00:57:11.646 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:12 gremlin-1 exo[1070975]: [ 00:57:12.358 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1474: NodeGatheredInfo(event_id='3c925945-d85f-4bcb-8151-f31ad5692c37' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:12 gremlin-1 exo[1070975]: [ 00:57:12.360 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='3c925945-d85f-4bcb-8151-f31ad5692c37' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:12 gremlin-1 exo[1070975]: [ 00:57:12.645 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:13 gremlin-1 exo[1070975]: [ 00:57:13.367 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1475: NodeGatheredInfo(event_id='f4e7c3ed-b947-4c65-83d6-e435cadafc87' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:13 gremlin-1 exo[1070975]: [ 00:57:13.369 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1476: NodeGatheredInfo(event_id='8a7e7059-77ea-4138-b96b-245a0632ee63' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:13 gremlin-1 exo[1070975]: [ 00:57:13.371 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='f4e7c3ed-b947-4c65-83d6-e435cadafc87' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:13 gremlin-1 exo[1070975]: [ 00:57:13.373 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='8a7e7059-77ea-4138-b96b-245a0632ee63' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:13 gremlin-1 exo[1070975]: [ 00:57:13.663 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:14 gremlin-1 exo[1070975]: [ 00:57:14.368 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1477: NodeGatheredInfo(event_id='cf0dfb9e-d784-4b2d-9e48-ab5d6c9d0ebc' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:14 gremlin-1 exo[1070975]: [ 00:57:14.370 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='cf0dfb9e-d784-4b2d-9e48-ab5d6c9d0ebc' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:14 gremlin-1 exo[1070975]: [ 00:57:14.681 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:15 gremlin-1 exo[1070975]: [ 00:57:15.370 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1478: NodeGatheredInfo(event_id='152a74a1-a342-425c-8008-df4c1fae8285' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:15 gremlin-1 exo[1070975]: [ 00:57:15.371 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='152a74a1-a342-425c-8008-df4c1fae8285' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:15 gremlin-1 exo[1070975]: [ 00:57:15.662 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:16 gremlin-1 exo[1070975]: [ 00:57:16.372 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1479: NodeGatheredInfo(event_id='638c5ca1-3ba6-4f77-a249-99a6ebe2a22b' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:16 gremlin-1 exo[1070975]: [ 00:57:16.373 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='638c5ca1-3ba6-4f77-a249-99a6ebe2a22b' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:16 gremlin-1 exo[1070975]: [ 00:57:16.663 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:17 gremlin-1 exo[1070975]: [ 00:57:17.373 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1480: NodeGatheredInfo(event_id='8d47c605-ad6c-40e6-91bb-345ece8cb736' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:17 gremlin-1 exo[1070975]: [ 00:57:17.374 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='8d47c605-ad6c-40e6-91bb-345ece8cb736' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:17 gremlin-1 exo[1070975]: [ 00:57:17.679 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:18 gremlin-1 exo[1070975]: [ 00:57:18.374 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1481: NodeGatheredInfo(event_id='239a6328-2f4f-4577-b308-55239f2307a5' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:18 gremlin-1 exo[1070975]: [ 00:57:18.375 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='239a6328-2f4f-4577-b308-55239f2307a5' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:18 gremlin-1 exo[1070975]: [ 00:57:18.678 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:19 gremlin-1 exo[1070975]: [ 00:57:19.376 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1482: NodeGatheredInfo(event_id='40aa9b13-c5d9-497b-af57-fc19367e1375' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:19 gremlin-1 exo[1070975]: [ 00:57:19.377 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='40aa9b13-c5d9-497b-af57-fc19367e1375' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:19 gremlin-1 exo[1070975]: [ 00:57:19.679 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:20 gremlin-1 exo[1070975]: [ 00:57:20.374 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /instance/previews
+Feb 14 00:57:20 gremlin-1 exo[1070975]: [ 00:57:20.379 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1483: NodeGatheredInfo(event_id='3e7d8c0d-4054-40cb-a585-1d0369de1917' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:20 gremlin-1 exo[1070975]: [ 00:57:20.380 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='3e7d8c0d-4054-40cb-a585-1d0369de1917' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:20 gremlin-1 exo[1070975]: [ 00:57:20.680 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:21 gremlin-1 exo[1070975]: [ 00:57:21.381 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1484: NodeGatheredInfo(event_id='638b9773-901d-4670-af58-d9ff6f287890' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:21 gremlin-1 exo[1070975]: [ 00:57:21.382 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='638b9773-901d-4670-af58-d9ff6f287890' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:21 gremlin-1 exo[1070975]: [ 00:57:21.697 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:21 gremlin-1 exo[1070975]: [ 00:57:21.865 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1485: NodeGatheredInfo(event_id='7c0c57e0-71c3-4126-abeb-6df020c2f177' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:21 gremlin-1 exo[1070975]: [ 00:57:21.866 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='7c0c57e0-71c3-4126-abeb-6df020c2f177' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:22 gremlin-1 exo[1070975]: [ 00:57:22.383 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1486: NodeGatheredInfo(event_id='014ba5b2-363c-4a1b-b496-7c3bf17a6c47' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:22 gremlin-1 exo[1070975]: [ 00:57:22.385 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='014ba5b2-363c-4a1b-b496-7c3bf17a6c47' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:22 gremlin-1 exo[1070975]: [ 00:57:22.711 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:23 gremlin-1 exo[1070975]: [ 00:57:23.390 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1487: NodeGatheredInfo(event_id='af069969-505e-4646-aecd-ac810a2c17bd' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:23 gremlin-1 exo[1070975]: [ 00:57:23.391 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1488: NodeGatheredInfo(event_id='6d78cf82-ba11-4717-b20d-7e18c1bc8514' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:23 gremlin-1 exo[1070975]: [ 00:57:23.393 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='af069969-505e-4646-aecd-ac810a2c17bd' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:23 gremlin-1 exo[1070975]: [ 00:57:23.395 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='6d78cf82-ba11-4717-b20d-7e18c1bc8514' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:23 gremlin-1 exo[1070975]: [ 00:57:23.712 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:24 gremlin-1 exo[1070975]: [ 00:57:24.391 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1489: NodeGatheredInfo(event_id='a56ea94f-9f38-419a-b667-f2baaa757e4b' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:24 gremlin-1 exo[1070975]: [ 00:57:24.392 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='a56ea94f-9f38-419a-b667-f2baaa757e4b' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:24 gremlin-1 exo[1070975]: [ 00:57:24.716 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:25 gremlin-1 exo[1070975]: [ 00:57:25.392 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1490: NodeGatheredInfo(event_id='1313172c-a6c8-4e7c-bde2-c1667a83535d' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:25 gremlin-1 exo[1070975]: [ 00:57:25.394 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='1313172c-a6c8-4e7c-bde2-c1667a83535d' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:25 gremlin-1 exo[1070975]: [ 00:57:25.729 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:26 gremlin-1 exo[1070975]: [ 00:57:26.394 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1491: NodeGatheredInfo(event_id='e5368598-cb59-461a-87ba-13f6b059b5eb' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:26 gremlin-1 exo[1070975]: [ 00:57:26.395 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='e5368598-cb59-461a-87ba-13f6b059b5eb' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:26 gremlin-1 exo[1070975]: [ 00:57:26.728 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 00:57:27 gremlin-1 exo[1070975]: [ 00:57:27.395 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 1492: NodeGatheredInfo(event_id='899b86be-425e-4f68-9f78-efc3090a3231' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:27 gremlin-1 exo[1070975]: [ 00:57:27.396 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='899b86be-425e-4f68-9f78-efc3090a3231' node_id='12D3KooWCjXqiG6zEsjuomqSfS
+Feb 14 00:57:27 gremlin-1 exo[1070975]: [ 00:57:27.730 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state

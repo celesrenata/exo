@@ -190,30 +190,31 @@
     - Test generation with known prompts
     - _Requirements: 7.1, 7.2, 7.3_
   
-  - [-] 12.3 Validate output correctness
+  - [x] 12.3 Validate output correctness
     - Compare output to HuggingFace transformers
     - Test with multiple prompts
     - Verify deterministic output with fixed seed
     - _Requirements: 7.1, 7.2, 7.4_
   
-  - [-] 12.4 Test different model sizes
+  - [x] 12.4 Test different model sizes
     - Verify 1B model loads and generates
     - Verify 3B model loads and generates
     - Test configuration parsing for each size
     - _Requirements: 5.3_
 
-- [ ] 13. Performance optimization
-  - [ ] 13.1 Profile generation speed
+- [x] 13. Performance optimization
+  - **Context**: See `#[[file:IMPLEMENTATION_CONTEXT.md]]` for testing workflow, deployment process, and integration points
+  - [x] 13.1 Profile generation speed
     - Measure tokens per second
     - Identify bottlenecks
     - _Requirements: 8.1, 8.3_
   
-  - [ ] 13.2 Optimize memory usage
+  - [x] 13.2 Optimize memory usage
     - Monitor GPU memory during generation
     - Verify KV cache reduces computation
     - _Requirements: 8.2, 8.5_
   
-  - [ ] 13.3 Verify GPU utilization
+  - [x] 13.3 Verify GPU utilization
     - Ensure operations run on GPU
     - Check for CPU fallbacks
     - Profile kernel execution
@@ -226,6 +227,7 @@
     - _Requirements: 8.1, 8.5_
 
 - [ ] 14. Documentation and deployment
+  - **Context**: See `#[[file:IMPLEMENTATION_CONTEXT.md]]` for architecture overview, common patterns, and deployment workflow
   - [ ] 14.1 Document transformer architecture
     - Add docstrings to all classes and methods
     - Create architecture diagram

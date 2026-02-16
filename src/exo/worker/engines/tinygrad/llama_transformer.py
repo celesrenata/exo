@@ -234,11 +234,13 @@ def parse_config_from_dict(config_dict: dict[str, Any]) -> LlamaConfig:
 
         # Optional parameters with defaults
         intermediate_size = config_dict.get(
-            "intermediate_size", hidden_size * 4  # Common default
+            "intermediate_size",
+            hidden_size * 4,  # Common default
         )
 
         num_key_value_heads = config_dict.get(
-            "num_key_value_heads", num_attention_heads  # Default to MHA
+            "num_key_value_heads",
+            num_attention_heads,  # Default to MHA
         )
 
         max_position_embeddings = config_dict.get("max_position_embeddings", 8192)
@@ -383,13 +385,9 @@ def validate_config(config: LlamaConfig) -> None:
     if head_dim <= 0:
         errors.append(f"head_dim must be positive, got {head_dim}")
     if head_dim % 2 != 0:
-        errors.append(
-            f"head_dim must be even for rotary embeddings, got {head_dim}"
-        )
+        errors.append(f"head_dim must be even for rotary embeddings, got {head_dim}")
     if head_dim > 256:
-        logger.warning(
-            f"head_dim ({head_dim}) is unusually large, expected <= 256"
-        )
+        logger.warning(f"head_dim ({head_dim}) is unusually large, expected <= 256")
 
     # Validate max_position_embeddings
     if config.max_position_embeddings <= 0:
@@ -407,8 +405,7 @@ def validate_config(config: LlamaConfig) -> None:
         errors.append(f"rms_norm_eps must be positive, got {config.rms_norm_eps}")
     if config.rms_norm_eps > 1e-3:
         logger.warning(
-            f"rms_norm_eps ({config.rms_norm_eps}) is unusually large, "
-            "expected <= 1e-3"
+            f"rms_norm_eps ({config.rms_norm_eps}) is unusually large, expected <= 1e-3"
         )
 
     # Validate rope_theta
@@ -585,7 +582,6 @@ class RMSNorm:
         return self.weight * hidden_states
 
 
-
 class Embedding:
     """Token embedding layer.
 
@@ -633,7 +629,6 @@ class Embedding:
         """
         # Tinygrad's indexing: weight[input_ids] performs the lookup
         return self.weight[input_ids]
-
 
 
 class Linear:
@@ -1125,7 +1120,9 @@ class Attention:
 
         # Reshape output: (batch_size, seq_len, num_heads, head_dim)
         # -> (batch_size, seq_len, num_heads * head_dim)
-        attn_output = attn_output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
+        attn_output = attn_output.reshape(
+            batch_size, seq_len, self.num_heads * self.head_dim
+        )
 
         # Project output
         output = self.o_proj(attn_output)
@@ -1394,7 +1391,6 @@ def silu(x: "Tensor") -> "Tensor":
     """
     # SiLU(x) = x * sigmoid(x)
     return x * x.sigmoid()
-
 
 
 class TransformerLayer:
@@ -1682,9 +1678,7 @@ class KVCache:
         """
         self.num_layers = num_layers
         self.request_id = request_id
-        self.layer_caches: list[LayerCache] = [
-            LayerCache() for _ in range(num_layers)
-        ]
+        self.layer_caches: list[LayerCache] = [LayerCache() for _ in range(num_layers)]
 
         logger.debug(
             "Initialized KVCache",
@@ -2032,7 +2026,7 @@ class LlamaTransformer:
             >>> logits, cache = model(input_ids)
             >>> logits.shape
             (1, 4, 128256)
-            >>> 
+            >>>
             >>> # Second forward pass (generation with cache)
             >>> next_token = Tensor([[5]])  # (1, 1)
             >>> logits, cache = model(next_token, cache=cache)
@@ -2131,7 +2125,7 @@ class LlamaTransformer:
             >>> pos_ids = model._generate_position_ids(1, 4, 0)
             >>> pos_ids
             [[0, 1, 2, 3]]
-            >>> 
+            >>>
             >>> # Second pass: 4 tokens in cache
             >>> pos_ids = model._generate_position_ids(1, 1, 4)
             >>> pos_ids
@@ -2375,7 +2369,6 @@ def get_parameter_from_name(
     return None
 
 
-
 def assign_weights_to_model(
     model: LlamaTransformer,
     weights: dict[str, "np.ndarray[Any, Any]"],
@@ -2428,7 +2421,9 @@ def assign_weights_to_model(
         # Handle weight tying: lm_head.weight can be tied to embed_tokens.weight
         if hf_name == "lm_head.weight" and hf_name not in weights:
             if "model.embed_tokens.weight" in weights:
-                logger.info("Using model.embed_tokens.weight for lm_head.weight (weight tying)")
+                logger.info(
+                    "Using model.embed_tokens.weight for lm_head.weight (weight tying)"
+                )
                 np_weight = weights["model.embed_tokens.weight"]
             else:
                 logger.warning(f"Weight not found in checkpoint: {hf_name}")
@@ -2548,7 +2543,6 @@ def verify_weight_shapes(
     return mismatches
 
 
-
 def load_sharded_weights(
     checkpoint_dir: Path,
     index_path: Path,
@@ -2620,7 +2614,7 @@ def load_sharded_weights(
 
     # Load weights from all shards
     all_weights: dict[str, "np.ndarray[Any, Any]"] = {}
-    
+
     for shard_idx, shard_file in enumerate(shard_files):
         shard_path = checkpoint_dir / shard_file
 
@@ -2636,7 +2630,9 @@ def load_sharded_weights(
         try:
             # Load this shard using the existing single-file loader
             # Import here to avoid circular dependency
-            from exo.worker.engines.tinygrad.model_loader import _load_single_safetensors
+            from exo.worker.engines.tinygrad.model_loader import (
+                _load_single_safetensors,
+            )
 
             shard_weights = _load_single_safetensors(shard_path)
 
@@ -2718,7 +2714,6 @@ def combine_sharded_weights(
     return combined
 
 
-
 def validate_weights(
     model: LlamaTransformer,
     weights: dict[str, "np.ndarray[Any, Any]"],
@@ -2761,8 +2756,13 @@ def validate_weights(
     for expected_name in weight_map.keys():
         if expected_name not in weights:
             # Handle weight tying: lm_head.weight can be tied to embed_tokens.weight
-            if expected_name == "lm_head.weight" and "model.embed_tokens.weight" in weights:
-                logger.info("lm_head.weight is tied to model.embed_tokens.weight (weight tying)")
+            if (
+                expected_name == "lm_head.weight"
+                and "model.embed_tokens.weight" in weights
+            ):
+                logger.info(
+                    "lm_head.weight is tied to model.embed_tokens.weight (weight tying)"
+                )
                 continue
             missing_weights.append(expected_name)
 

@@ -8,7 +8,7 @@ echo "Copying fixed apply.py to gremlin-1..."
 scp src/exo/shared/apply.py root@gremlin-1:/tmp/apply.py
 
 # SSH into gremlin-1 and apply the fix
-ssh root@gremlin-1 << 'EOF'
+ssh root@gremlin-1 <<'EOF'
 set -e
 
 echo "Stopping exo service..."

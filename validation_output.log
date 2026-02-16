@@ -1,0 +1,102 @@
+
+[0;34m=== PHASE 1: Deployment Verification ===[0m
+
+[1;33mℹ Deploying latest code to gremlin-1...[0m
+[0;32m✓ Deployment completed[0m
+[1;33mℹ Checking service status...[0m
+[0;32m✓ Service is active[0m
+[1;33mℹ Checking service logs...[0m
+[0;32m✓ No critical errors in logs[0m
+[1;33mℹ Testing API endpoint...[0m
+[0;32m✓ API is responding[0m
+[0;32m✓ API returns valid JSON[0m
+
+[0;34m=== PHASE 2: Component Validation ===[0m
+
+[1;33mℹ Copying test_llama_simple.py to gremlin-1...[0m
+[1;33mℹ Running component tests...[0m
+[0;31m✗ Component tests failed - check validation_results_20260212_022326/component_tests.log[0m
+bash: line 1: python3: command not found
+
+[0;34m=== PHASE 3: Weight Loading Validation ===[0m
+
+[1;33mℹ Copying test_weight_loading.py to gremlin-1...[0m
+[1;33mℹ Running weight loading tests...[0m
+[0;31m✗ Weight loading tests failed - check validation_results_20260212_022326/weight_loading.log[0m
+bash: line 1: python3: command not found
+
+[0;34m=== PHASE 4: Generation Validation ===[0m
+
+[1;33mℹ Copying test_llama_validation.py to gremlin-1...[0m
+[1;33mℹ Running generation tests...[0m
+[0;31m✗ Generation tests failed - check validation_results_20260212_022326/generation_tests.log[0m
+bash: line 1: python3: command not found
+
+[0;34m=== PHASE 5: Performance Validation ===[0m
+
+[1;33mℹ Copying performance test scripts to gremlin-1...[0m
+[1;33mℹ Running performance tests (this may take a few minutes)...[0m
+[0;31m✗ Performance tests failed - check validation_results_20260212_022326/performance_tests.log[0m
+=======================================================================
+TINYGRAD LLAMA TRANSFORMER PERFORMANCE TEST SUITE
+=======================================================================
+
+This script will run three performance tests:
+  1. Generation speed profiling (tokens/sec, bottlenecks)
+  2. Memory usage profiling (KV cache, memory growth)
+  3. GPU utilization verification (device detection, fallbacks)
+
+Requirements: 8.1, 8.2, 8.3, 8.5, 6.5
+=======================================================================
+
+Error: python3 not found
+
+[0;34m=== PHASE 6: API Integration Validation ===[0m
+
+[1;33mℹ Testing chat completion endpoint...[0m
+[0;32m✓ Chat completion API works[0m
+[1;33mℹ Testing streaming endpoint...[0m
+[0;32m✓ Streaming API responds[0m
+
+[0;34m=== PHASE 7: Stress Testing ===[0m
+
+[1;33mℹ Testing longer sequence generation...[0m
+[0;32m✓ Long sequence generation works[0m
+[1;33mℹ Generated 0 tokens[0m
+
+[0;34m=== PHASE SUMMARY: Validation Results ===[0m
+
+
+[0;34mResults saved to: validation_results_20260212_022326[0m
+
+[0;32mSuccessful checks: validation_results_20260212_022326/component_tests.log:0
+validation_results_20260212_022326/deployment.log:0
+validation_results_20260212_022326/generation_tests.log:0
+validation_results_20260212_022326/performance_tests.log:0
+validation_results_20260212_022326/service_logs.log:0
+validation_results_20260212_022326/weight_loading.log:0
+0[0m
+[0;31mFailed checks: validation_results_20260212_022326/component_tests.log:0
+validation_results_20260212_022326/deployment.log:0
+validation_results_20260212_022326/generation_tests.log:0
+validation_results_20260212_022326/performance_tests.log:0
+validation_results_20260212_022326/service_logs.log:0
+validation_results_20260212_022326/weight_loading.log:0
+0[0m
+
+[0;34mKey Requirements:[0m
+[0;31m✗ Generation speed <10 tokens/sec: [0m
+
+[0;34mDetailed logs available in: validation_results_20260212_022326[0m
+[0;34mService logs: ssh root@10.1.1.12 'journalctl -u exo -f'[0m
+[0;34mGPU status: ssh root@10.1.1.12 'intel_gpu_top'[0m
+
+validate_all_tasks.sh: line 257: [: validation_results_20260212_022326/component_tests.log:0
+validation_results_20260212_022326/deployment.log:0
+validation_results_20260212_022326/generation_tests.log:0
+validation_results_20260212_022326/performance_tests.log:0
+validation_results_20260212_022326/service_logs.log:0
+validation_results_20260212_022326/weight_loading.log:0
+0: integer expected
+[1;33m⚠ SOME VALIDATIONS FAILED - Review logs in validation_results_20260212_022326[0m
+

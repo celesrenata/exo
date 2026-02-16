@@ -210,105 +210,105 @@ This document outlines the implementation tasks for integrating Intel Arc GPU su
   - Return token with metadata
   - _Requirements: 6.3_
 
-- [ ] 7. Implement Distributed Coordinator
-  - Create ring topology management
-  - Implement activation forwarding
-  - Add node failure handling
-  - Support load balancing
+- [x] 7. Integrate with exo runner and architecture
+  - Implement model loading in runner.py for pytorch_ipex backend
+  - Implement generation loop in runner.py for pytorch_ipex backend
+  - Support PyTorchIPEXRingInstance for distributed inference
+  - Test with exo's Master/Worker coordination
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
-- [ ] 7.1 Create DistributedCoordinator class
-  - Initialize with node configuration
-  - Build ring topology from node list
-  - Implement get_next_node() method
-  - Track node health status
-  - _Requirements: 5.1_
+- [x] 7.1 Implement model loading in runner.py
+  - Add model loading logic for pytorch_ipex backend type
+  - Use ModelLoader to load and optimize model
+  - Initialize DeviceManager for device selection
+  - Emit BackendInitialized event with device info
+  - _Requirements: 5.1, 2.1, 2.2_
 
-- [ ] 7.2 Implement activation forwarding
-  - Serialize tensors for network transfer
-  - Send activations to next node via gRPC
-  - Receive activations from previous node
-  - Deserialize and validate received tensors
-  - _Requirements: 5.3_
+- [x] 7.2 Implement generation loop in runner.py
+  - Add text generation logic for pytorch_ipex backend
+  - Use PyTorchIPEXBackend for inference
+  - Handle streaming token generation
+  - Support temperature, top_p, top_k parameters
+  - _Requirements: 5.2, 3.1, 3.2, 3.3_
 
-- [ ] 7.3 Add node failure handling
-  - Detect node failures via heartbeat
-  - Redistribute work to remaining nodes
-  - Update ring topology dynamically
-  - Log topology changes at WARN level
-  - _Requirements: 5.4, 10.3_
+- [x] 7.3 Support distributed coordination
+  - Ensure PyTorchIPEXRingInstance is properly handled
+  - Integrate with exo's shard assignment system
+  - Test multi-node inference with Master/Worker pattern
+  - Verify event sourcing integration
+  - _Requirements: 5.3, 5.4_
 
-- [ ] 7.4 Implement load balancing
-  - Monitor per-node load
-  - Adjust shard assignments based on load
-  - Rebalance when nodes join/leave
-  - Optimize for minimal data transfer
-  - _Requirements: 5.5_
+- [x] 7.4 Handle warmup and cleanup
+  - Implement warmup logic for pytorch_ipex backend
+  - Add proper resource cleanup on shutdown
+  - Test model loading timeout handling
+  - Verify memory is released properly
+  - _Requirements: 5.5, 10.1_
 
-- [ ] 8. Integrate with exo architecture
-  - Add PyTorch backend to engine factory
-  - Update model registry
+- [x] 8. Add backend to factory and test integration
+  - Add PyTorch+IPEX backend to engine factory
+  - Update instance type handling
   - Configure NixOS module
   - Test with existing exo components
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 8.1 Update inference engine factory
-  - Add "pytorch-ipex" to engine_classes dict
-  - Implement lazy import for PyTorchInferenceEngine
-  - Add IPEX debug level configuration
-  - Test engine selection logic
+- [x] 8.1 Update inference engine factory
+  - Add PyTorchIPEXRingInstance to factory.py
+  - Ensure proper backend selection logic
+  - Test instance type detection
+  - Verify lazy loading works correctly
   - _Requirements: 6.1_
 
-- [ ] 8.2 Update model registry
-  - Add PyTorch-compatible model repos
-  - Map model IDs to HuggingFace repos
-  - Specify layer counts for each model
-  - Test model resolution
-  - _Requirements: 2.1_
+- [x] 8.2 Update bootstrap and configuration
+  - Add PyTorchIPEXRingInstance handling in bootstrap.py
+  - Configure environment variables for IPEX
+  - Set up device detection at startup
+  - Test configuration loading
+  - _Requirements: 2.1, 7.1_
 
-- [ ] 8.3 Create NixOS module
+- [x] 8.3 Create NixOS module
   - Define module options for PyTorch backend
   - Add systemd service configuration
   - Set required environment variables
   - Provide example configuration
   - _Requirements: 7.4, 7.5_
 
-- [ ] 8.4 Test API compatibility
+- [x] 8.4 Test API compatibility
   - Verify OpenAI chat completions format
   - Test streaming responses
   - Test non-streaming responses
   - Validate error response format
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 9. Implement monitoring and logging
+- [x] 9. Implement monitoring and logging
   - Add structured logging
   - Expose performance metrics
   - Integrate with systemd journal
   - Create health check endpoints
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 9.1 Configure structured logging
+- [x] 9.1 Configure structured logging
   - Use loguru for structured logs
   - Log in JSON format
   - Set appropriate log levels
   - Include context in all log messages
   - _Requirements: 9.1, 9.4_
 
-- [ ] 9.2 Add performance metrics
+- [x] 9.2 Add performance metrics
   - Track inference latency per request
   - Monitor GPU utilization
   - Track memory usage
   - Count requests per second
   - _Requirements: 9.2, 9.3_
 
-- [ ] 9.3 Integrate with systemd journal
+- [x] 9.3 Integrate with systemd journal
   - Configure journal logging
   - Add service metadata to logs
   - Test log retrieval with journalctl
   - Verify log rotation
   - _Requirements: 9.5_
 
-- [ ] 9.4 Create health check endpoints
+- [x] 9.4 Create health check endpoints
   - Add /health endpoint to API
   - Check device availability
   - Check model loading status
@@ -331,10 +331,10 @@ This document outlines the implementation tasks for integrating Intel Arc GPU su
   - _Requirements: 8.1_
 
 - [ ] 10.2 Create integration tests
-  - Test end-to-end inference pipeline
-  - Test multi-node distributed inference
+  - Test end-to-end inference pipeline via runner.py
+  - Test multi-node distributed inference with exo Master/Worker
   - Test error handling and recovery
-  - Test API compatibility
+  - Test API compatibility with OpenAI format
   - _Requirements: 8.2_
 
 - [ ] 10.3 Perform benchmarking
@@ -396,8 +396,8 @@ graph TD
     T3 --> T5
     T4[4. KV Cache] --> T5
     T6[6. Token Generator] --> T5
-    T5 --> T7[7. Distributed Coordinator]
-    T5 --> T8[8. Integration]
+    T5 --> T7[7. Runner Integration]
+    T7 --> T8[8. Factory & Testing]
     T8 --> T9[9. Monitoring]
     T8 --> T10[10. Testing]
     T10 --> T11[11. Documentation]
@@ -430,9 +430,10 @@ Total: 4-7 weeks
 ## Success Criteria
 
 - [ ] Intel Arc GPU successfully detected and selected
-- [ ] Llama-3.2-3B model loads and runs on Intel Arc
+- [ ] Llama-3.2-3B model loads and runs on Intel Arc via runner.py
 - [ ] Inference achieves >15 tokens/sec on Intel Arc
-- [ ] Multi-node distributed inference works correctly
+- [ ] Multi-node distributed inference works with exo's Master/Worker coordination
+- [ ] Backend integrates properly with PyTorchIPEXRingInstance
 - [ ] API maintains OpenAI compatibility
 - [ ] All tests pass with >80% coverage
 - [ ] System runs stably on NixOS
@@ -440,8 +441,10 @@ Total: 4-7 weeks
 
 ## Notes
 
-- Focus on getting single-node inference working first before tackling distributed
+- Focus on runner.py integration first - this is where the backend connects to exo
+- exo handles distributed coordination via Master/Worker pattern - no custom coordinator needed
 - Use small models (1B-3B) for initial testing
 - Benchmark against CPU baseline to validate GPU acceleration
 - Test fallback mechanisms thoroughly
+- Follow the pattern established by Tinygrad backend in runner.py
 - Document all Intel Arc-specific quirks and workarounds

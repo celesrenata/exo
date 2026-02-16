@@ -94,6 +94,17 @@
               };
             };
 
+            pytorch_ipex = {
+              enable = lib.mkEnableOption "PyTorch+IPEX backend for exo" // {
+                default = false;
+              };
+              preferredBackend = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Use PyTorch+IPEX as the preferred backend over tinygrad";
+              };
+            };
+
             arc = {
               enable = lib.mkEnableOption "Intel Arc iGPU support" // {
                 default = true;
@@ -187,6 +198,11 @@
 
               # Intel GPU compute runtime settings
               NEOReadDebugKeys = lib.mkIf config.services.exo.intel.arc.enable "1";
+
+              # PyTorch+IPEX environment variables
+              EXO_PYTORCH_IPEX_ENABLED = lib.mkIf config.services.exo.intel.pytorch_ipex.enable "true";
+              PYTORCH_ENABLE_XPU = lib.mkIf config.services.exo.intel.pytorch_ipex.enable "1";
+              IPEX_TILE_AS_DEVICE = lib.mkIf config.services.exo.intel.pytorch_ipex.enable "1";
             };
 
             # OpenCL ICD configuration for Intel runtime

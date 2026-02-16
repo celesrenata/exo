@@ -13,13 +13,29 @@ graph TB
     API[FastAPI Server] --> Master[Master Node]
     Master --> Worker1[Worker Node 1]
     Master --> Worker2[Worker Node 2]
-    Worker1 --> Engine1[PyTorch Inference Engine]
-    Worker2 --> Engine2[PyTorch Inference Engine]
-    Engine1 --> Device1[Intel Arc GPU / XPU]
-    Engine2 --> Device2[Intel Arc GPU / XPU]
-    Engine1 <--> Cache1[KV Cache]
-    Engine2 <--> Cache2[KV Cache]
+    Worker1 --> Runner1[Runner Process]
+    Worker2 --> Runner2[Runner Process]
+    Runner1 --> Backend1[PyTorch+IPEX Backend]
+    Runner2 --> Backend2[PyTorch+IPEX Backend]
+    Backend1 --> Device1[Intel Arc GPU / XPU]
+    Backend2 --> Device2[Intel Arc GPU / XPU]
+    Backend1 <--> Cache1[KV Cache]
+    Backend2 <--> Cache2[KV Cache]
+    
+    Master <--> EventBus[Event Sourcing / libp2p]
+    Worker1 <--> EventBus
+    Worker2 <--> EventBus
 ```
+
+### exo Integration Architecture
+
+The PyTorch+IPEX backend integrates with exo's existing distributed architecture:
+
+- **Master/Worker Pattern**: Master coordinates shard assignments, Workers execute inference
+- **Event Sourcing**: All state changes flow through immutable events
+- **Runner Process**: Each worker spawns runner processes that load models and execute inference
+- **Backend Detection**: Runner detects PyTorchIPEXRingInstance and loads appropriate backend
+- **No Custom Coordinator**: exo's existing coordination handles distribution, no custom ring topology needed
 
 ### Component Architecture
 
@@ -273,34 +289,42 @@ def sample(logits: Tensor, temperature: float, top_p: float, top_k: int) -> int:
     return token.item()
 ```
 
-### 6. Distributed Coordinator
+### 6. Integration with exo Architecture
 
-**Purpose**: Coordinate distributed inference across multiple nodes.
+**Purpose**: Integrate PyTorch+IPEX backend with exo's distributed coordination.
 
 **Responsibilities**:
-- Manage ring topology
-- Route activations between nodes
-- Handle node failures
-- Balance load across nodes
+- Implement runner.py integration for model loading and generation
+- Support PyTorchIPEXRingInstance for multi-node coordination
+- Use exo's Master/Worker pattern for distributed inference
+- Participate in exo's event sourcing and state management
 
-**Interface**:
+**Integration Points**:
 ```python
-class DistributedCoordinator:
-    async def forward_activation(
-        self,
-        activation: Tensor,
-        target_node: str
-    ) -> Tensor
-    
-    def get_next_node(self) -> str
-    def handle_node_failure(self, node_id: str) -> None
+# In runner.py - detect PyTorchIPEXRingInstance
+if is_pytorch_ipex:
+    backend_type = "pytorch_ipex"
+    from exo.worker.engines.pytorch_ipex.pytorch_ipex_backend import PyTorchIPEXBackend
+    from exo.worker.engines.pytorch_ipex.device_manager import DeviceManager
+    from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader
 ```
 
-**Ring Topology**:
-- Each node knows its position in the ring
-- Activations flow sequentially through nodes
-- Each node processes its assigned layers
-- Final node returns output to originating node
+**Runner.py Integration**:
+The backend integrates into runner.py following the pattern established by Tinygrad:
+
+1. **Backend Detection**: Runner detects `PyTorchIPEXRingInstance` type
+2. **Module Loading**: Lazy-load PyTorch+IPEX modules only when needed
+3. **Model Loading**: Use ModelLoader to download and optimize models
+4. **Generation Loop**: Implement text generation with streaming support
+5. **Event Emission**: Emit BackendInitialized, ChunkGenerated events
+6. **Cleanup**: Properly release resources on shutdown
+
+**Distributed Coordination**:
+- exo's Master coordinates shard assignments across nodes
+- Workers execute inference tasks on assigned shards
+- Event sourcing maintains consistent cluster state
+- libp2p handles inter-node communication
+- No custom ring topology or activation forwarding needed
 
 ## Data Flow
 
@@ -331,23 +355,29 @@ sequenceDiagram
     API-->>Client: JSON response
 ```
 
-### Multi-Node Distributed Flow
+### Multi-Node Distributed Flow (via exo Architecture)
 
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Node1
-    participant Node2
-    participant Node3
+    participant Master
+    participant Worker1
+    participant Worker2
+    participant Worker3
     
-    Client->>Node1: Inference request
-    Node1->>Node1: Process layers 0-9
-    Node1->>Node2: Forward activation
-    Node2->>Node2: Process layers 10-19
-    Node2->>Node3: Forward activation
-    Node3->>Node3: Process layers 20-27
-    Node3->>Node1: Return output
-    Node1->>Client: Final response
+    Client->>Master: Inference request
+    Master->>Master: Assign shards to workers
+    Master->>Worker1: Task (layers 0-9)
+    Master->>Worker2: Task (layers 10-19)
+    Master->>Worker3: Task (layers 20-27)
+    Worker1->>Worker1: Process shard
+    Worker2->>Worker2: Process shard
+    Worker3->>Worker3: Process shard
+    Worker1->>Master: Partial result
+    Worker2->>Master: Partial result
+    Worker3->>Master: Partial result
+    Master->>Master: Combine results
+    Master->>Client: Final response
 ```
 
 ## Error Handling

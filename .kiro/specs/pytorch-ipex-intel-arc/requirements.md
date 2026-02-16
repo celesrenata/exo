@@ -64,17 +64,17 @@ This document specifies the requirements for integrating Intel Arc GPU support i
 4. WHEN a request completes, THE System SHALL release associated cache memory
 5. THE System SHALL log cache statistics at DEBUG level
 
-### Requirement 5: Distributed Multi-Node Inference
+### Requirement 5: Integration with exo Distributed Architecture
 
-**User Story:** As a cluster administrator, I want to distribute model inference across multiple nodes so that I can run models larger than single-node capacity.
+**User Story:** As a cluster administrator, I want the PyTorch+IPEX backend to integrate with exo's distributed coordination so that I can run models across multiple nodes using the existing infrastructure.
 
 #### Acceptance Criteria
 
-1. THE System SHALL support ring topology for distributed inference
-2. THE System SHALL partition models by layer ranges across nodes
-3. WHEN forwarding activations between nodes, THE System SHALL use efficient serialization
-4. THE System SHALL detect and recover from node failures
-5. THE System SHALL balance load across available nodes
+1. THE System SHALL integrate with exo's Master/Worker coordination pattern
+2. THE System SHALL use exo's event sourcing for state management
+3. THE System SHALL support PyTorchIPEXRingInstance for multi-node inference
+4. THE System SHALL leverage exo's existing node failure detection and recovery
+5. THE System SHALL participate in exo's shard assignment and load balancing
 
 ### Requirement 6: API Compatibility
 

@@ -1,0 +1,851 @@
+Feb 14 01:13:14 gremlin-1 exo[1143694]: [ 01:13:14.413 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:14 gremlin-1 exo[1143694]: [ 01:13:14.521 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 370: NodeGatheredInfo(event_id='577f5244-8911-46b7-aa4d-a3fb78987163' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:14 gremlin-1 exo[1143694]: [ 01:13:14.523 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='577f5244-8911-46b7-aa4d-a3fb78987163' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:15 gremlin-1 exo[1143694]: [ 01:13:15.416 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:15 gremlin-1 exo[1143694]: [ 01:13:15.532 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 371: NodeGatheredInfo(event_id='e19cc863-b181-4cda-84d2-f089bf0265cc' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:15 gremlin-1 exo[1143694]: [ 01:13:15.534 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 372: NodeGatheredInfo(event_id='659445e9-6dd1-4c5a-98e0-25e82b2b6e40' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:15 gremlin-1 exo[1143694]: [ 01:13:15.537 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='e19cc863-b181-4cda-84d2-f089bf0265cc' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:15 gremlin-1 exo[1143694]: [ 01:13:15.538 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='659445e9-6dd1-4c5a-98e0-25e82b2b6e40' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:16 gremlin-1 exo[1143694]: [ 01:13:16.413 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:16 gremlin-1 exo[1143694]: [ 01:13:16.533 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 373: NodeGatheredInfo(event_id='40585c5f-68d2-4e37-b299-50c5d8e72445' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:16 gremlin-1 exo[1143694]: [ 01:13:16.534 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='40585c5f-68d2-4e37-b299-50c5d8e72445' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:17 gremlin-1 exo[1143694]: [ 01:13:17.447 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:17 gremlin-1 exo[1143694]: [ 01:13:17.535 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 374: NodeGatheredInfo(event_id='57cd522e-e346-419e-af61-2310110ef761' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:17 gremlin-1 exo[1143694]: [ 01:13:17.536 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='57cd522e-e346-419e-af61-2310110ef761' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:18 gremlin-1 exo[1143694]: [ 01:13:18.447 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:18 gremlin-1 exo[1143694]: [ 01:13:18.537 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 375: NodeGatheredInfo(event_id='b3f60864-d249-49f6-89c9-2ee7bb7f2a82' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:18 gremlin-1 exo[1143694]: [ 01:13:18.538 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='b3f60864-d249-49f6-89c9-2ee7bb7f2a82' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:19 gremlin-1 exo[1143694]: [ 01:13:19.464 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:19 gremlin-1 exo[1143694]: [ 01:13:19.538 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 376: NodeGatheredInfo(event_id='121cbb4a-5074-4a76-a2d8-df090af29a3b' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:19 gremlin-1 exo[1143694]: [ 01:13:19.539 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='121cbb4a-5074-4a76-a2d8-df090af29a3b' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:20 gremlin-1 exo[1143694]: [ 01:13:20.463 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:20 gremlin-1 exo[1143694]: [ 01:13:20.539 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 377: NodeGatheredInfo(event_id='6e9aaeb2-6075-4344-a509-93b39ba2aa35' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:20 gremlin-1 exo[1143694]: [ 01:13:20.540 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='6e9aaeb2-6075-4344-a509-93b39ba2aa35' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:21 gremlin-1 exo[1143694]: [ 01:13:21.479 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:21 gremlin-1 exo[1143694]: [ 01:13:21.540 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 378: NodeGatheredInfo(event_id='3f7d0170-6c80-4b2b-932a-dfd40a1bed8a' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:21 gremlin-1 exo[1143694]: [ 01:13:21.541 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='3f7d0170-6c80-4b2b-932a-dfd40a1bed8a' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:22 gremlin-1 exo[1143694]: [ 01:13:22.480 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:22 gremlin-1 exo[1143694]: [ 01:13:22.541 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 379: NodeGatheredInfo(event_id='c29b923b-cf18-47d8-8690-14f1efd55f86' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:22 gremlin-1 exo[1143694]: [ 01:13:22.542 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='c29b923b-cf18-47d8-8690-14f1efd55f86' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:23 gremlin-1 exo[1143694]: [ 01:13:23.542 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 380: NodeGatheredInfo(event_id='e6688133-d777-40bb-894e-3336b58ba060' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:23 gremlin-1 exo[1143694]: [ 01:13:23.543 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='e6688133-d777-40bb-894e-3336b58ba060' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:23 gremlin-1 exo[1143694]: [ 01:13:23.568 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:24 gremlin-1 exo[1143694]: [ 01:13:24.543 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 381: NodeGatheredInfo(event_id='304533e8-768e-48ac-b960-0ec3d719784b' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:24 gremlin-1 exo[1143694]: [ 01:13:24.545 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='304533e8-768e-48ac-b960-0ec3d719784b' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:24 gremlin-1 exo[1143694]: [ 01:13:24.568 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:25 gremlin-1 exo[1143694]: [ 01:13:25.177 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 382: NodeGatheredInfo(event_id='f5a90093-b21b-48c0-b04b-9c1b422f98fd' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:25 gremlin-1 exo[1143694]: [ 01:13:25.178 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='f5a90093-b21b-48c0-b04b-9c1b422f98fd' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:25 gremlin-1 exo[1143694]: [ 01:13:25.556 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 383: NodeGatheredInfo(event_id='232f1859-2573-4f8b-b51a-89c505bd7c4c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:25 gremlin-1 exo[1143694]: [ 01:13:25.558 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 384: NodeGatheredInfo(event_id='65ac8f8a-87f1-48e5-82eb-f07994fe5c9c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:25 gremlin-1 exo[1143694]: [ 01:13:25.559 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='232f1859-2573-4f8b-b51a-89c505bd7c4c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:25 gremlin-1 exo[1143694]: [ 01:13:25.561 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='65ac8f8a-87f1-48e5-82eb-f07994fe5c9c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:25 gremlin-1 exo[1143694]: [ 01:13:25.579 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.123 | DEBUG    | exo.master.api:_log_requests:199 ] API request: POST /v1/chat/completions
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.125 | INFO     | exo.master.main:_command_processor:120 ] Executing command: TextGeneration(command_id='4b979a77-c50b-4dd6-8994-394221e46f17' task_params=TextGenerationTaskParams(model='meta-llama/Llama-3.2-3B-Instruct', input=[InputMessage(role='user', content='Hello, how are you?')], instructions=None, max_output_tokens=20, temperature=None, top_p=None, stream=False, tools=None, bench=False, top_k=None, stop=None, seed=None, chat_template_messages=[{'role': 'user', 'content': 'Hello, how are you?'}], logprobs=False, top_logprobs=None))
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.126 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskCreated(event_id='f8080b3e-04ad-42a4-a1e4-dcc59a35dc7b' task_id='f9020ecf-25da-4f39-81ee-5036086
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.223 | INFO     | exo.worker.main:plan_step:186 ] Worker plan: TextGeneration
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.224 | INFO     | exo.worker.runner.runner_supervisor:start_task:134 ] Starting task TextGeneration(task_id='f9020ecf-25da-4f39-81ee-50360869f035' task_status=<TaskStatus.Pending: 'Pending'> instance_id='2926f15f-ffa3-405c-b4c3-42ce3cf1dec1' command_id='4b979a77-c50b-4dd6-8994-394221e46f17' task_params=TextGenerationTaskParams(model='meta-llama/Llama-3.2-3B-Instruct', input=[InputMessage(role='user', content='Hello, how are you?')], instructions=None, max_output_tokens=20, temperature=None, top_p=None, stream=False, tools=None, bench=False, top_k=None, stop=None, seed=None, chat_template_messages=[{'role': 'user', 'content': 'Hello, how are you?'}], logprobs=False, top_logprobs=None) error_type=None error_message=None)
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.224 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 385: TaskCreated(event_id='217d7d32-1e3f-442f-9ad8-0ad365443da1' task_id='f9020ecf-25da-4f39-81ee-5036086
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.225 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskCreated(event_id='217d7d32-1e3f-442f-9ad8-0ad365443da1' task_id='f9020ecf-25da-4f39-81ee-5036086
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.227 | INFO     | exo.worker.runner.runner:main:489 ] received chat request: TextGeneration(task_id='f9020ecf-25da-4f39-81ee-50360869f035' task_status=<TaskStatus.Pending: 'Pending'> instance_id='2926f15f-ffa3-405c-b4c3-42ce3cf1dec1' command_id='4b979a77-c50b-4dd6-8994-394221e46f17' task_params=TextGenerationTaskParams(model='meta-llama/Llama-3.2-3B-Instruct', input=[InputMessage(role='user', content='Hello, how are you?')], instructions=None, max_output_tokens=20, temperature=None, top_p=None, stream=False, tools=None, bench=False, top_k=None, stop=None, seed=None, chat_template_messages=[{'role': 'user', 'content': 'Hello, how are you?'}], logprobs=False, top_logprobs=None) error_type=None error_message=None)
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.227 | INFO     | exo.worker.runner.runner:main:491 ] runner running
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.228 | INFO     | exo.worker.runner.runner:main:512 ] Generating with tinygrad, prompt length: 36
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.228 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 386: TaskStatusUpdated(event_id='0ea3c6f2-c3d1-4168-98ae-778321bc0563' task_id='f9020ecf-25da-4f39-81ee-5
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.229 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskStatusUpdated(event_id='0ea3c6f2-c3d1-4168-98ae-778321bc0563' task_id='f9020ecf-25da-4f39-81ee-5
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.229 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 387: RunnerStatusUpdated(event_id='a6ed4bc8-e242-4453-86be-ff815f2ba5c9' runner_id='15e95170-cb8e-4d4e-a1
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.230 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: RunnerStatusUpdated(event_id='a6ed4bc8-e242-4453-86be-ff815f2ba5c9' runner_id='15e95170-cb8e-4d4e-a1
+Feb 14 01:13:26 gremlin-1 exo[1150473]: /nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/lib/python3.13/site-packages/exo/worker/engines/tinygrad/generator.py:691: RuntimeWarning: coroutine 'encode_prompt' was never awaited
+Feb 14 01:13:26 gremlin-1 exo[1150473]:   return asyncio.run(encode_prompt(tokenizer, prompt))
+Feb 14 01:13:26 gremlin-1 exo[1150473]: RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+Feb 14 01:13:26 gremlin-1 exo[1150473]: 2026-02-14 01:13:26.237 | DEBUG    | exo.worker.engines.tinygrad.llama_transformer:__init__:1689 - Initialized KVCache
+Feb 14 01:13:26 gremlin-1 exo[1150473]: 2026-02-14 01:13:26.237 | DEBUG    | exo.worker.engines.tinygrad.llama_transformer:_generate_position_ids:2155 - Generated position IDs
+Feb 14 01:13:26 gremlin-1 exo[1150473]: 2026-02-14 01:13:26.245 | DEBUG    | exo.worker.engines.tinygrad.llama_transformer:__call__:2065 - Forward pass
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.557 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 388: NodeGatheredInfo(event_id='d2855102-5722-490b-938c-32b5bc83f2a3' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.557 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='d2855102-5722-490b-938c-32b5bc83f2a3' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:26 gremlin-1 exo[1143694]: [ 01:13:26.579 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:26 gremlin-1 exo[1150473]: 2026-02-14 01:13:26.709 | DEBUG    | exo.worker.engines.tinygrad.llama_transformer:__call__:2099 - Forward pass complete
+Feb 14 01:13:27 gremlin-1 exo[1143694]: [ 01:13:27.558 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 389: NodeGatheredInfo(event_id='6757c6ef-93fa-4ef4-9a58-1403b89ad0bc' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:27 gremlin-1 exo[1143694]: [ 01:13:27.560 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='6757c6ef-93fa-4ef4-9a58-1403b89ad0bc' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:27 gremlin-1 exo[1143694]: [ 01:13:27.681 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:28 gremlin-1 exo[1143694]: [ 01:13:28.559 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 390: NodeGatheredInfo(event_id='f76b7908-82b7-4f59-ad71-4fba3f64bcb2' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:28 gremlin-1 exo[1143694]: [ 01:13:28.560 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='f76b7908-82b7-4f59-ad71-4fba3f64bcb2' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:28 gremlin-1 exo[1150473]: [INTEL ARC DEBUG] ===== DEVICE INFORMATION =====
+Feb 14 01:13:28 gremlin-1 exo[1150473]: [INTEL ARC DEBUG] Device: NVIDIA GeForce RTX 4070 Ti SUPER
+Feb 14 01:13:28 gremlin-1 exo[1150473]: [INTEL ARC DEBUG] Driver: 580.126.09
+Feb 14 01:13:28 gremlin-1 exo[1150473]: [INTEL ARC DEBUG] ==============================
+Feb 14 01:13:28 gremlin-1 exo[1150473]: [INTEL ARC DEBUG] Allocation #2: 1576009728 bytes (1503.00 MB / 1.468 GB)
+Feb 14 01:13:28 gremlin-1 exo[1150473]: [INTEL ARC DEBUG]   Context: /nix/store/qk6in5b1ixjpx0djis1s1zrr10j0cwry-python3.13-tinygrad-0.11.0/lib/python3.13/site-packages/tinygrad/device.py:226 in alloc
+Feb 14 01:13:28 gremlin-1 exo[1143694]: [ 01:13:28.680 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:28 gremlin-1 exo[1143694]: [ 01:13:28.720 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /instance/previews
+Feb 14 01:13:29 gremlin-1 exo[1143694]: [ 01:13:29.562 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 391: NodeGatheredInfo(event_id='6b664bc3-2be2-4534-814b-d801385efb6f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:29 gremlin-1 exo[1143694]: [ 01:13:29.563 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='6b664bc3-2be2-4534-814b-d801385efb6f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:29 gremlin-1 exo[1143694]: [ 01:13:29.682 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.167 | DEBUG    | exo.download.coordinator:_emit_existing_download_progress:279 ] DownloadCoordinator: Fetching and emitting existing download progress...
+Feb 14 01:13:30 gremlin-1 exo[1150473]: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:13:30 gremlin-1 exo[1150473]: Inference failed at token 0: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.205 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 392: ChunkGenerated(event_id='dcccad08-2a5a-46bb-a41b-a2b04ac702b4' command_id='4b979a77-c50b-4dd6-8994-3
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.206 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: ChunkGenerated(event_id='dcccad08-2a5a-46bb-a41b-a2b04ac702b4' command_id='4b979a77-c50b-4dd6-8994-3
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.219 | INFO     | exo.worker.runner.runner:main:714 ] runner ready
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.209 | ERROR    | logging:handle:1681 ] Error in ASGI Framework
+Feb 14 01:13:30 gremlin-1 exo[1143694]: Traceback (most recent call last):
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/bin/.exo-wrapped", line 9, in <module>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     sys.exit(main())
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │   │    └ <function main at 0x7fd4a1245300>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │   └ <built-in function exit>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <module 'sys' (built-in)>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/lib/python3.13/site-packages/exo/main.py", line 271, in main
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     anyio.run(node.run)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │     │   │    └ <function Node.run at 0x7fd49d005120>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │     │   └ Node(router=<exo.routing.router.Router object at 0x7fd49cede270>, download_coordinator=DownloadCoordinator(node_id='12D3KooWC...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │     └ <function run at 0x7fd4a1099080>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <module 'anyio' from '/nix/store/zpidim9cmgrmi653dwya3s58x8sgl5p9-python3.13-anyio-4.11.0/lib/python3.13/site-packages/anyio/...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/zpidim9cmgrmi653dwya3s58x8sgl5p9-python3.13-anyio-4.11.0/lib/python3.13/site-packages/anyio/_core/_eventloop.py", line 74, in run
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return async_backend.run(func, args, {}, backend_options)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │             │   │     │         └ {}
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │             │   │     └ ()
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │             │   └ <bound method Node.run of Node(router=<exo.routing.router.Router object at 0x7fd49cede270>, download_coordinator=DownloadCoor...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │             └ <classmethod(<function AsyncIOBackend.run at 0x7fd49c554fe0>)>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            └ <class 'anyio._backends._asyncio.AsyncIOBackend'>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/zpidim9cmgrmi653dwya3s58x8sgl5p9-python3.13-anyio-4.11.0/lib/python3.13/site-packages/anyio/_backends/_asyncio.py", line 2325, in run
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return runner.run(wrapper())
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │      │   └ <function Node.run at 0x7fd49c556d40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │      └ <function Runner.run at 0x7fd4a032d260>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            └ <asyncio.runners.Runner object at 0x7fd49c56f390>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/runners.py", line 118, in run
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return self._loop.run_until_complete(task)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │    │     │                  └ <Task pending name='exo.main.Node.run' coro=<Node.run() running at /nix/store/zpidim9cmgrmi653dwya3s58x8sgl5p9-python3.13-any...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │    │     └ <function BaseEventLoop.run_until_complete at 0x7fd4a032ac00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            └ <asyncio.runners.Runner object at 0x7fd49c56f390>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/base_events.py", line 712, in run_until_complete
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     self.run_forever()
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    └ <function BaseEventLoop.run_forever at 0x7fd4a032ab60>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/base_events.py", line 683, in run_forever
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     self._run_once()
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    └ <function BaseEventLoop._run_once at 0x7fd4a032c9a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/base_events.py", line 2050, in _run_once
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     handle._run()
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │      └ <function Handle._run at 0x7fd4a0bea020>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <Handle Task.task_wakeup()>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/events.py", line 89, in _run
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     self._context.run(self._callback, *self._args)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │            │    │           └ <Handle Task.task_wakeup()>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │            │    └ <member '_callback' of 'Handle' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │            └ <Handle Task.task_wakeup()>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    └ <member '_context' of 'Handle' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <Handle Task.task_wakeup()>
+Feb 14 01:13:30 gremlin-1 exo[1143694]: > File "/nix/store/qjwmk9jbx7jb8py7dwcaxabf153m7b76-python3.13-hypercorn-0.17.3/lib/python3.13/site-packages/hypercorn/asyncio/task_group.py", line 27, in _handle
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await app(scope, receive, send, sync_spawn, call_soon)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        │     │           └ <function TaskGroup.spawn_app.<locals>._call_soon at 0x7fd49cf0cb80>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        │     └ functools.partial(<bound method BaseEventLoop.run_in_executor of <_UnixSelectorEventLoop running=True closed=False debug=Fals...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        └ <bound method HTTPStream.app_send of <hypercorn.protocol.http_stream.HTTPStream object at 0x7fd4942fa680>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <hypercorn.app_wrappers.ASGIWrapper object at 0x7fd49c56bcb0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qjwmk9jbx7jb8py7dwcaxabf153m7b76-python3.13-hypercorn-0.17.3/lib/python3.13/site-packages/hypercorn/app_wrappers.py", line 34, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <bound method HTTPStream.app_send of <hypercorn.protocol.http_stream.HTTPStream object at 0x7fd4942fa680>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <fastapi.applications.FastAPI object at 0x7fd49cedf620>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <hypercorn.app_wrappers.ASGIWrapper object at 0x7fd49c56bcb0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/applications.py", line 1134, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await super().__call__(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                            │      │        └ <bound method HTTPStream.app_send of <hypercorn.protocol.http_stream.HTTPStream object at 0x7fd4942fa680>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                            │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                            └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/applications.py", line 107, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.middleware_stack(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                │      │        └ <bound method HTTPStream.app_send of <hypercorn.protocol.http_stream.HTTPStream object at 0x7fd4942fa680>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <starlette.middleware.errors.ServerErrorMiddleware object at 0x7fd49c56ba10>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <fastapi.applications.FastAPI object at 0x7fd49cedf620>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/errors.py", line 186, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise exc
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/errors.py", line 164, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, _send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <function ServerErrorMiddleware.__call__.<locals>._send at 0x7fd49c610e00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <starlette.middleware.cors.CORSMiddleware object at 0x7fd49c56b8c0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <starlette.middleware.errors.ServerErrorMiddleware object at 0x7fd49c56ba10>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/cors.py", line 85, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <function ServerErrorMiddleware.__call__.<locals>._send at 0x7fd49c610e00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <starlette.middleware.base.BaseHTTPMiddleware object at 0x7fd49c569fd0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <starlette.middleware.cors.CORSMiddleware object at 0x7fd49c56b8c0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/base.py", line 191, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     with recv_stream, send_stream, collapse_excgroups():
+Feb 14 01:13:30 gremlin-1 exo[1143694]:          │            │            └ <function collapse_excgroups at 0x7fd49d5614e0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:          │            └ MemoryObjectSendStream(_state=MemoryObjectStreamState(max_buffer_size=0, buffer=deque([]), open_send_channels=0, open_receive...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:          └ MemoryObjectReceiveStream(_state=MemoryObjectStreamState(max_buffer_size=0, buffer=deque([]), open_send_channels=0, open_rece...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/contextlib.py", line 162, in __exit__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     self.gen.throw(value)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │   │     └ ExceptionGroup('unhandled errors in a TaskGroup', [ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │   └ <method 'throw' of 'generator' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    └ <generator object collapse_excgroups at 0x7fd4942f8930>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <contextlib._GeneratorContextManager object at 0x7fd49c60cc20>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_utils.py", line 85, in collapse_excgroups
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise exc
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/base.py", line 193, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     response = await self.dispatch_func(request, call_next)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      │    │             │        └ <function BaseHTTPMiddleware.__call__.<locals>.call_next at 0x7fd49c09a160>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      │    │             └ <starlette.middleware.base._CachedRequest object at 0x7fd49c099e50>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      │    └ <function API.__init__.<locals>._log_requests at 0x7fd49c5577e0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      └ <starlette.middleware.base.BaseHTTPMiddleware object at 0x7fd49c569fd0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/lib/python3.13/site-packages/exo/master/api.py", line 200, in _log_requests
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return await call_next(request)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  │         └ <starlette.middleware.base._CachedRequest object at 0x7fd49c099e50>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  └ <function BaseHTTPMiddleware.__call__.<locals>.call_next at 0x7fd49c09a160>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/base.py", line 168, in call_next
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise app_exc from app_exc.__cause__ or app_exc.__context__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │            │       │            │       └ <attribute '__context__' of 'BaseException' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │            │       │            └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │            │       └ <attribute '__cause__' of 'BaseException' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │            └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/base.py", line 144, in coro
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive_or_disconnect, send_no_error)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │                      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.send_no_error at 0x7fd49c0edd00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <starlette.middleware.exceptions.ExceptionMiddleware object at 0x7fd49c5697f0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <starlette.middleware.base.BaseHTTPMiddleware object at 0x7fd49c569fd0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │    │     │      │        └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.send_no_error at 0x7fd49c0edd00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │    │     │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │    │     └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │    └ <starlette.requests.Request object at 0x7fd49c0ee490>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    └ <fastapi.middleware.asyncexitstack.AsyncExitStackMiddleware object at 0x7fd49c5696a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            └ <starlette.middleware.exceptions.ExceptionMiddleware object at 0x7fd49c5697f0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <function wrap_app_handling_exceptions at 0x7fd49d5fc4a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise exc
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await app(scope, receive, sender)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <fastapi.middleware.asyncexitstack.AsyncExitStackMiddleware object at 0x7fd49c5696a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <fastapi.routing.APIRouter object at 0x7fd49cee2d50>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <fastapi.middleware.asyncexitstack.AsyncExitStackMiddleware object at 0x7fd49c5696a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/routing.py", line 716, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.middleware_stack(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <bound method Router.app of <fastapi.routing.APIRouter object at 0x7fd49cee2d50>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <fastapi.routing.APIRouter object at 0x7fd49cee2d50>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/routing.py", line 736, in app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await route.handle(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │     │      │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │     │      │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │     │      └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │     └ <function Route.handle at 0x7fd49d5fdbc0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ APIRoute(path='/v1/chat/completions', name='chat_completions', methods=['POST'])
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/routing.py", line 290, in handle
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <function request_response.<locals>.app at 0x7fd49c599080>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ APIRoute(path='/v1/chat/completions', name='chat_completions', methods=['POST'])
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/routing.py", line 125, in app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │        │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │        │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │        └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    └ <starlette.requests.Request object at 0x7fd49c0ee030>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            └ <function request_response.<locals>.app.<locals>.app at 0x7fd49c0ef4c0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <function wrap_app_handling_exceptions at 0x7fd49d5fc4a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise exc
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await app(scope, receive, sender)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ece00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <function request_response.<locals>.app.<locals>.app at 0x7fd49c0ef4c0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/routing.py", line 111, in app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     response = await f(request)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      │ └ <starlette.requests.Request object at 0x7fd49c0ee030>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      └ <function get_request_handler.<locals>.app at 0x7fd49c598fe0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/routing.py", line 391, in app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raw_response = await run_endpoint_function(
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                          └ <function run_endpoint_function at 0x7fd49d5ffb00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/routing.py", line 290, in run_endpoint_function
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return await dependant.call(**values)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  │         │      └ {'payload': ChatCompletionRequest(model='meta-llama/Llama-3.2-3B-Instruct', frequency_penalty=None, messages=[ChatCompletionM...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  │         └ <bound method API.chat_completions of <exo.master.api.API object at 0x7fd49cedf0e0>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  └ Dependant(path_params=[], query_params=[], header_params=[], cookie_params=[], body_params=[ModelField(field_info=Body(Pydant...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/lib/python3.13/site-packages/exo/master/api.py", line 646, in chat_completions
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return await collect_chat_response(
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  └ <function collect_chat_response at 0x7fd49d10f920>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/lib/python3.13/site-packages/exo/master/adapters/chat_completions.py", line 220, in collect_chat_response
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise ValueError(error_message)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      └ 'Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE'
+Feb 14 01:13:30 gremlin-1 exo[1143694]: ValueError: Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.225 | ERROR    | logging:handle:1681 ] Error in ASGI Framework
+Feb 14 01:13:30 gremlin-1 exo[1143694]: Traceback (most recent call last):
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/bin/.exo-wrapped", line 9, in <module>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     sys.exit(main())
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │   │    └ <function main at 0x7fd4a1245300>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │   └ <built-in function exit>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <module 'sys' (built-in)>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/lib/python3.13/site-packages/exo/main.py", line 271, in main
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     anyio.run(node.run)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │     │   │    └ <function Node.run at 0x7fd49d005120>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │     │   └ Node(router=<exo.routing.router.Router object at 0x7fd49cede270>, download_coordinator=DownloadCoordinator(node_id='12D3KooWC...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │     └ <function run at 0x7fd4a1099080>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <module 'anyio' from '/nix/store/zpidim9cmgrmi653dwya3s58x8sgl5p9-python3.13-anyio-4.11.0/lib/python3.13/site-packages/anyio/...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/zpidim9cmgrmi653dwya3s58x8sgl5p9-python3.13-anyio-4.11.0/lib/python3.13/site-packages/anyio/_core/_eventloop.py", line 74, in run
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return async_backend.run(func, args, {}, backend_options)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │             │   │     │         └ {}
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │             │   │     └ ()
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │             │   └ <bound method Node.run of Node(router=<exo.routing.router.Router object at 0x7fd49cede270>, download_coordinator=DownloadCoor...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │             └ <classmethod(<function AsyncIOBackend.run at 0x7fd49c554fe0>)>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            └ <class 'anyio._backends._asyncio.AsyncIOBackend'>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/zpidim9cmgrmi653dwya3s58x8sgl5p9-python3.13-anyio-4.11.0/lib/python3.13/site-packages/anyio/_backends/_asyncio.py", line 2325, in run
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return runner.run(wrapper())
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │      │   └ <function Node.run at 0x7fd49c556d40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │      └ <function Runner.run at 0x7fd4a032d260>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            └ <asyncio.runners.Runner object at 0x7fd49c56f390>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/runners.py", line 118, in run
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return self._loop.run_until_complete(task)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │    │     │                  └ <Task pending name='exo.main.Node.run' coro=<Node.run() running at /nix/store/zpidim9cmgrmi653dwya3s58x8sgl5p9-python3.13-any...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │    │     └ <function BaseEventLoop.run_until_complete at 0x7fd4a032ac00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            │    └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:            └ <asyncio.runners.Runner object at 0x7fd49c56f390>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/base_events.py", line 712, in run_until_complete
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     self.run_forever()
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    └ <function BaseEventLoop.run_forever at 0x7fd4a032ab60>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/base_events.py", line 683, in run_forever
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     self._run_once()
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    └ <function BaseEventLoop._run_once at 0x7fd4a032c9a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <_UnixSelectorEventLoop running=True closed=False debug=False>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/base_events.py", line 2050, in _run_once
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     handle._run()
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │      └ <function Handle._run at 0x7fd4a0bea020>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <Handle Task.task_wakeup()>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/asyncio/events.py", line 89, in _run
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     self._context.run(self._callback, *self._args)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │            │    │           └ <Handle Task.task_wakeup()>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │            │    └ <member '_callback' of 'Handle' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │            └ <Handle Task.task_wakeup()>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    └ <member '_context' of 'Handle' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <Handle Task.task_wakeup()>
+Feb 14 01:13:30 gremlin-1 exo[1143694]: > File "/nix/store/qjwmk9jbx7jb8py7dwcaxabf153m7b76-python3.13-hypercorn-0.17.3/lib/python3.13/site-packages/hypercorn/asyncio/task_group.py", line 27, in _handle
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await app(scope, receive, send, sync_spawn, call_soon)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        │     │           └ <function TaskGroup.spawn_app.<locals>._call_soon at 0x7fd49cf0cb80>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        │     └ functools.partial(<bound method BaseEventLoop.run_in_executor of <_UnixSelectorEventLoop running=True closed=False debug=Fals...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        └ <bound method HTTPStream.app_send of <hypercorn.protocol.http_stream.HTTPStream object at 0x7fd4942fa680>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <hypercorn.app_wrappers.ASGIWrapper object at 0x7fd49c56bcb0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qjwmk9jbx7jb8py7dwcaxabf153m7b76-python3.13-hypercorn-0.17.3/lib/python3.13/site-packages/hypercorn/app_wrappers.py", line 34, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <bound method HTTPStream.app_send of <hypercorn.protocol.http_stream.HTTPStream object at 0x7fd4942fa680>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <fastapi.applications.FastAPI object at 0x7fd49cedf620>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <hypercorn.app_wrappers.ASGIWrapper object at 0x7fd49c56bcb0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/applications.py", line 1134, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await super().__call__(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                            │      │        └ <bound method HTTPStream.app_send of <hypercorn.protocol.http_stream.HTTPStream object at 0x7fd4942fa680>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                            │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                            └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/applications.py", line 107, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.middleware_stack(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                │      │        └ <bound method HTTPStream.app_send of <hypercorn.protocol.http_stream.HTTPStream object at 0x7fd4942fa680>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <starlette.middleware.errors.ServerErrorMiddleware object at 0x7fd49c56ba10>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <fastapi.applications.FastAPI object at 0x7fd49cedf620>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/errors.py", line 186, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise exc
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/errors.py", line 164, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, _send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <function ServerErrorMiddleware.__call__.<locals>._send at 0x7fd49c610e00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <starlette.middleware.cors.CORSMiddleware object at 0x7fd49c56b8c0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <starlette.middleware.errors.ServerErrorMiddleware object at 0x7fd49c56ba10>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/cors.py", line 85, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <function ServerErrorMiddleware.__call__.<locals>._send at 0x7fd49c610e00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <bound method Queue.get of <Queue at 0x7fd49c0a59a0 maxsize=10 _queue=[{'type': 'http.disconnect'}] tasks=3>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <starlette.middleware.base.BaseHTTPMiddleware object at 0x7fd49c569fd0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <starlette.middleware.cors.CORSMiddleware object at 0x7fd49c56b8c0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/base.py", line 191, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     with recv_stream, send_stream, collapse_excgroups():
+Feb 14 01:13:30 gremlin-1 exo[1143694]:          │            │            └ <function collapse_excgroups at 0x7fd49d5614e0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:          │            └ MemoryObjectSendStream(_state=MemoryObjectStreamState(max_buffer_size=0, buffer=deque([]), open_send_channels=0, open_receive...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:          └ MemoryObjectReceiveStream(_state=MemoryObjectStreamState(max_buffer_size=0, buffer=deque([]), open_send_channels=0, open_rece...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/lib/python3.13/contextlib.py", line 162, in __exit__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     self.gen.throw(value)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │   │     └ ExceptionGroup('unhandled errors in a TaskGroup', [ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    │   └ <method 'throw' of 'generator' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     │    └ <generator object collapse_excgroups at 0x7fd4942f8930>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     └ <contextlib._GeneratorContextManager object at 0x7fd49c60cc20>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_utils.py", line 85, in collapse_excgroups
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise exc
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/base.py", line 193, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     response = await self.dispatch_func(request, call_next)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      │    │             │        └ <function BaseHTTPMiddleware.__call__.<locals>.call_next at 0x7fd49c09a160>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      │    │             └ <starlette.middleware.base._CachedRequest object at 0x7fd49c099e50>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      │    └ <function API.__init__.<locals>._log_requests at 0x7fd49c5577e0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      └ <starlette.middleware.base.BaseHTTPMiddleware object at 0x7fd49c569fd0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/lib/python3.13/site-packages/exo/master/api.py", line 200, in _log_requests
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return await call_next(request)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  │         └ <starlette.middleware.base._CachedRequest object at 0x7fd49c099e50>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  └ <function BaseHTTPMiddleware.__call__.<locals>.call_next at 0x7fd49c09a160>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/base.py", line 168, in call_next
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise app_exc from app_exc.__cause__ or app_exc.__context__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │            │       │            │       └ <attribute '__context__' of 'BaseException' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │            │       │            └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │            │       └ <attribute '__cause__' of 'BaseException' objects>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │            └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ ValueError('Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE')
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/base.py", line 144, in coro
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive_or_disconnect, send_no_error)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │                      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.send_no_error at 0x7fd49c0edd00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <starlette.middleware.exceptions.ExceptionMiddleware object at 0x7fd49c5697f0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <starlette.middleware.base.BaseHTTPMiddleware object at 0x7fd49c569fd0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │    │     │      │        └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.send_no_error at 0x7fd49c0edd00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │    │     │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │    │     └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │    └ <starlette.requests.Request object at 0x7fd49c0ee490>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    └ <fastapi.middleware.asyncexitstack.AsyncExitStackMiddleware object at 0x7fd49c5696a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            └ <starlette.middleware.exceptions.ExceptionMiddleware object at 0x7fd49c5697f0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <function wrap_app_handling_exceptions at 0x7fd49d5fc4a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise exc
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await app(scope, receive, sender)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <fastapi.middleware.asyncexitstack.AsyncExitStackMiddleware object at 0x7fd49c5696a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <fastapi.routing.APIRouter object at 0x7fd49cee2d50>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <fastapi.middleware.asyncexitstack.AsyncExitStackMiddleware object at 0x7fd49c5696a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/routing.py", line 716, in __call__
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.middleware_stack(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │                └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <bound method Router.app of <fastapi.routing.APIRouter object at 0x7fd49cee2d50>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <fastapi.routing.APIRouter object at 0x7fd49cee2d50>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/routing.py", line 736, in app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await route.handle(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │     │      │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │     │      │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │     │      └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │     └ <function Route.handle at 0x7fd49d5fdbc0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ APIRoute(path='/v1/chat/completions', name='chat_completions', methods=['POST'])
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/routing.py", line 290, in handle
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await self.app(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │    └ <function request_response.<locals>.app at 0x7fd49c599080>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ APIRoute(path='/v1/chat/completions', name='chat_completions', methods=['POST'])
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/routing.py", line 125, in app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │        │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ef420>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │        │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    │        └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            │    └ <starlette.requests.Request object at 0x7fd49c0ee030>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │                            └ <function request_response.<locals>.app.<locals>.app at 0x7fd49c0ef4c0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <function wrap_app_handling_exceptions at 0x7fd49d5fc4a0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise exc
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/mw5kya7clrgg1x2s64vbkww16kyk3s3z-python3.13-starlette-0.50.0/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     await app(scope, receive, sender)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      │        └ <function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0x7fd49c0ece00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   │      └ <function BaseHTTPMiddleware.__call__.<locals>.call_next.<locals>.receive_or_disconnect at 0x7fd49c0eed40>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           │   └ {'type': 'http', 'http_version': '1.1', 'asgi': {'spec_version': '2.1', 'version': '3.0'}, 'method': 'POST', 'scheme': 'http'...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:           └ <function request_response.<locals>.app.<locals>.app at 0x7fd49c0ef4c0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/routing.py", line 111, in app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     response = await f(request)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      │ └ <starlette.requests.Request object at 0x7fd49c0ee030>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      └ <function get_request_handler.<locals>.app at 0x7fd49c598fe0>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/routing.py", line 391, in app
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raw_response = await run_endpoint_function(
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                          └ <function run_endpoint_function at 0x7fd49d5ffb00>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/dv6afvyr0vk2gv0xgjbrwz54xkb21a2m-python3.13-fastapi-0.121.1/lib/python3.13/site-packages/fastapi/routing.py", line 290, in run_endpoint_function
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return await dependant.call(**values)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  │         │      └ {'payload': ChatCompletionRequest(model='meta-llama/Llama-3.2-3B-Instruct', frequency_penalty=None, messages=[ChatCompletionM...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  │         └ <bound method API.chat_completions of <exo.master.api.API object at 0x7fd49cedf0e0>>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  └ Dependant(path_params=[], query_params=[], header_params=[], cookie_params=[], body_params=[ModelField(field_info=Body(Pydant...
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/lib/python3.13/site-packages/exo/master/api.py", line 646, in chat_completions
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     return await collect_chat_response(
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                  └ <function collect_chat_response at 0x7fd49d10f920>
+Feb 14 01:13:30 gremlin-1 exo[1143694]:   File "/nix/store/gh08p6wcsj4k8har1xn5rq94j76px53v-exo-0.3.0/lib/python3.13/site-packages/exo/master/adapters/chat_completions.py", line 220, in collect_chat_response
+Feb 14 01:13:30 gremlin-1 exo[1143694]:     raise ValueError(error_message)
+Feb 14 01:13:30 gremlin-1 exo[1143694]:                      └ 'Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE'
+Feb 14 01:13:30 gremlin-1 exo[1143694]: ValueError: Error during inference: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.234 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 393: NodeDownloadProgress(event_id='e26f8edc-b983-4377-91b0-66a97b748f91' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.236 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 394: TaskStatusUpdated(event_id='623d3595-7b19-4a88-b263-3c7b7c84b140' task_id='f9020ecf-25da-4f39-81ee-5
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.237 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='e26f8edc-b983-4377-91b0-66a97b748f91' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.237 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 395: NodeDownloadProgress(event_id='a38afd5d-bfb2-4d25-b535-b49fcbcfd077' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.238 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskStatusUpdated(event_id='623d3595-7b19-4a88-b263-3c7b7c84b140' task_id='f9020ecf-25da-4f39-81ee-5
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.238 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 396: RunnerStatusUpdated(event_id='524fc941-a19d-4cf1-83dc-647e3be760f3' runner_id='15e95170-cb8e-4d4e-a1
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.239 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='a38afd5d-bfb2-4d25-b535-b49fcbcfd077' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.239 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: RunnerStatusUpdated(event_id='524fc941-a19d-4cf1-83dc-647e3be760f3' runner_id='15e95170-cb8e-4d4e-a1
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.253 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 397: NodeDownloadProgress(event_id='036a8e24-b893-47a4-8cfd-d5e3dcdf8a2a' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.254 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='036a8e24-b893-47a4-8cfd-d5e3dcdf8a2a' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.258 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 398: NodeDownloadProgress(event_id='19612ece-323a-4858-84af-73185698d028' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.259 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='19612ece-323a-4858-84af-73185698d028' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.265 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 399: NodeDownloadProgress(event_id='535ee250-33b4-4323-83eb-b426d05e6bea' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.265 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='535ee250-33b4-4323-83eb-b426d05e6bea' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.272 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 400: NodeDownloadProgress(event_id='54737028-a4ad-47ab-ae6b-1577ab9f1205' download_progress=DownloadCompl
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.273 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='54737028-a4ad-47ab-ae6b-1577ab9f1205' download_progress=DownloadCompl
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.325 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 401: NodeDownloadProgress(event_id='4328d57c-fb69-436d-9ba8-9b409fb3a657' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.326 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='4328d57c-fb69-436d-9ba8-9b409fb3a657' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.329 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 402: NodeDownloadProgress(event_id='5ba046bd-6f44-483f-aab1-e2c7b5f9e203' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.330 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='5ba046bd-6f44-483f-aab1-e2c7b5f9e203' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.363 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 403: NodeDownloadProgress(event_id='8b6bcaee-7200-44eb-bec3-365d3d96554b' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.364 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='8b6bcaee-7200-44eb-bec3-365d3d96554b' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.368 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 404: NodeDownloadProgress(event_id='2d5657d3-842a-42dc-9ac1-e467800092dd' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.369 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='2d5657d3-842a-42dc-9ac1-e467800092dd' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.374 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 405: NodeDownloadProgress(event_id='fb0acd73-d142-448c-8e2b-b28a691d64d6' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.374 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='fb0acd73-d142-448c-8e2b-b28a691d64d6' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.395 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 406: NodeDownloadProgress(event_id='1983835e-f8cf-4116-9a8c-d4071e680fd5' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.396 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='1983835e-f8cf-4116-9a8c-d4071e680fd5' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.410 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 407: NodeDownloadProgress(event_id='603df726-04ee-4536-823c-7b49daa610b6' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.413 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='603df726-04ee-4536-823c-7b49daa610b6' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.416 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 408: NodeDownloadProgress(event_id='9594a79c-7fde-4f56-9a95-91b3b3593e4d' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.416 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='9594a79c-7fde-4f56-9a95-91b3b3593e4d' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.429 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 409: NodeDownloadProgress(event_id='a4cb1ae6-1071-4884-9556-ae076c53cbbb' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.429 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='a4cb1ae6-1071-4884-9556-ae076c53cbbb' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.449 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 410: NodeDownloadProgress(event_id='3f005e4c-176c-492d-b4d6-6d853eac58f8' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.449 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='3f005e4c-176c-492d-b4d6-6d853eac58f8' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.461 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 411: NodeDownloadProgress(event_id='742d0606-f158-48cc-805d-229fd93115be' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.462 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='742d0606-f158-48cc-805d-229fd93115be' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.472 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 412: NodeDownloadProgress(event_id='60fb6168-7933-4c8e-b7fe-1bda0ac34687' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.473 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='60fb6168-7933-4c8e-b7fe-1bda0ac34687' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.491 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 413: NodeDownloadProgress(event_id='3a343786-43a4-43ca-a429-c1e7203932d7' download_progress=DownloadCompl
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.491 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='3a343786-43a4-43ca-a429-c1e7203932d7' download_progress=DownloadCompl
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.514 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 414: NodeDownloadProgress(event_id='b546c85b-a162-4ae5-af4e-98755aca4556' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.514 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='b546c85b-a162-4ae5-af4e-98755aca4556' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.529 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 415: NodeDownloadProgress(event_id='256aee92-bdbe-4fdb-8cd3-2cad044998d1' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.530 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='256aee92-bdbe-4fdb-8cd3-2cad044998d1' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.544 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 416: NodeDownloadProgress(event_id='9ab14ed5-876a-4042-863b-c28587583b67' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.544 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='9ab14ed5-876a-4042-863b-c28587583b67' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.548 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 417: NodeDownloadProgress(event_id='2fb84099-0263-48dc-93aa-8f88efc6a158' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.551 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='2fb84099-0263-48dc-93aa-8f88efc6a158' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.553 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 418: NodeDownloadProgress(event_id='926c0e58-c12c-4893-a01a-6388cba9ba79' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.554 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='926c0e58-c12c-4893-a01a-6388cba9ba79' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.564 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 419: NodeGatheredInfo(event_id='d6bc7574-7906-43fc-9ec4-2250c2c06d9b' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.565 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='d6bc7574-7906-43fc-9ec4-2250c2c06d9b' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.573 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 420: NodeDownloadProgress(event_id='f01c53d0-2641-49e0-bf9f-2f43b8df9732' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.574 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='f01c53d0-2641-49e0-bf9f-2f43b8df9732' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.591 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 421: NodeDownloadProgress(event_id='30590f21-474a-41f5-a361-82b07b35d5a3' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.592 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='30590f21-474a-41f5-a361-82b07b35d5a3' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.616 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 422: NodeDownloadProgress(event_id='1582564d-054c-40f5-9017-d10dae514b8c' download_progress=DownloadCompl
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.617 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='1582564d-054c-40f5-9017-d10dae514b8c' download_progress=DownloadCompl
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.628 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 423: NodeDownloadProgress(event_id='a3e32964-7ed7-4df0-a01c-806793aed401' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.629 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='a3e32964-7ed7-4df0-a01c-806793aed401' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.652 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 424: NodeDownloadProgress(event_id='445bb64f-c937-4c5b-804d-335c0fce5a60' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.654 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='445bb64f-c937-4c5b-804d-335c0fce5a60' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.681 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.696 | INFO     | exo.master.main:_command_processor:120 ] Executing command: TaskFinished(command_id='10e7d2fa-1316-4bd6-901c-a8035f9f5a23' finished_command_id='4b979a77-c50b-4dd6-8994-394221e46f17')
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.696 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskDeleted(event_id='cb0c738f-e473-43a2-b409-385ed7d80a82' task_id='f9020ecf-25da-4f39-81ee-5036086
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.713 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 425: NodeDownloadProgress(event_id='82448f9c-d86e-4619-af64-3e3b08b5c8ad' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.714 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='82448f9c-d86e-4619-af64-3e3b08b5c8ad' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.735 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 426: NodeDownloadProgress(event_id='a741d341-3879-4d56-8fc5-2ccc23effb80' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.736 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='a741d341-3879-4d56-8fc5-2ccc23effb80' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.764 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 427: NodeDownloadProgress(event_id='055ef946-dd11-49c6-9956-7474862195ec' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.764 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 428: NodeDownloadProgress(event_id='603013b2-8cc5-4845-85b6-57c9c88f3ffc' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.764 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='055ef946-dd11-49c6-9956-7474862195ec' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.765 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='603013b2-8cc5-4845-85b6-57c9c88f3ffc' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.781 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 429: NodeDownloadProgress(event_id='3517449f-15a4-4cb2-b09a-dcbc3b457401' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.781 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='3517449f-15a4-4cb2-b09a-dcbc3b457401' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.818 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 430: NodeDownloadProgress(event_id='27335427-d1df-4999-a98a-39a77c416795' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.818 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='27335427-d1df-4999-a98a-39a77c416795' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.835 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 431: NodeDownloadProgress(event_id='a35b682a-2139-4bdb-a793-c03e57c69a2b' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.836 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='a35b682a-2139-4bdb-a793-c03e57c69a2b' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.858 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 432: NodeDownloadProgress(event_id='23bc9577-6dcd-45a3-9ee9-ff894b19e62a' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.859 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='23bc9577-6dcd-45a3-9ee9-ff894b19e62a' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.894 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 433: NodeDownloadProgress(event_id='409ae593-a6a7-43eb-bf73-6d450ee4d658' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.895 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='409ae593-a6a7-43eb-bf73-6d450ee4d658' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.924 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 434: NodeDownloadProgress(event_id='bbcac448-a280-441d-a879-9b883694aaf2' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.926 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='bbcac448-a280-441d-a879-9b883694aaf2' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.956 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 435: NodeDownloadProgress(event_id='fe09ab4c-0ad1-4d46-9cd1-8c0be63e4a82' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.956 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='fe09ab4c-0ad1-4d46-9cd1-8c0be63e4a82' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.964 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 436: NodeDownloadProgress(event_id='1871b56a-e993-498b-8fb3-b11480c21f4e' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.965 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='1871b56a-e993-498b-8fb3-b11480c21f4e' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.988 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 437: NodeDownloadProgress(event_id='c6332a42-4d8e-4e46-824c-86eadb6fc095' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.989 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 438: NodeDownloadProgress(event_id='cd24626c-82aa-46a6-b6b6-49204373a204' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.989 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='c6332a42-4d8e-4e46-824c-86eadb6fc095' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.990 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='cd24626c-82aa-46a6-b6b6-49204373a204' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.995 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 439: NodeDownloadProgress(event_id='05ebaf82-414b-40cb-ab74-fb0862186bb8' download_progress=DownloadPendi
+Feb 14 01:13:30 gremlin-1 exo[1143694]: [ 01:13:30.996 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='05ebaf82-414b-40cb-ab74-fb0862186bb8' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.024 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 440: NodeDownloadProgress(event_id='3088f49a-6dbf-4189-a4a1-cd8e3c70661b' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.024 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 441: NodeDownloadProgress(event_id='81245200-9514-465e-bd13-735c8723caab' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.025 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='3088f49a-6dbf-4189-a4a1-cd8e3c70661b' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.026 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='81245200-9514-465e-bd13-735c8723caab' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.035 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 442: NodeDownloadProgress(event_id='7b17c79b-2fb4-41b6-b44d-65e62faece1a' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.036 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='7b17c79b-2fb4-41b6-b44d-65e62faece1a' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.049 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 443: NodeDownloadProgress(event_id='8f2415b1-bfab-40c4-8a38-d57e97bcbec5' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.050 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='8f2415b1-bfab-40c4-8a38-d57e97bcbec5' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.067 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 444: NodeDownloadProgress(event_id='c6533d24-e588-4b7b-b6bb-d9b06d813795' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.069 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='c6533d24-e588-4b7b-b6bb-d9b06d813795' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.075 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 445: NodeDownloadProgress(event_id='977f5c0d-1094-4890-a8df-80a9658a6688' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.077 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='977f5c0d-1094-4890-a8df-80a9658a6688' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.078 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 446: NodeDownloadProgress(event_id='fc0e724c-9dd9-4a91-9caf-43c8afb4ed28' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.079 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='fc0e724c-9dd9-4a91-9caf-43c8afb4ed28' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.091 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 447: NodeDownloadProgress(event_id='f20d36a9-7a11-4659-b267-4e1fe5aee284' download_progress=DownloadCompl
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.092 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 448: NodeDownloadProgress(event_id='078e83ed-38ad-4c02-a0cf-fdfe146d0199' download_progress=DownloadCompl
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.092 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='f20d36a9-7a11-4659-b267-4e1fe5aee284' download_progress=DownloadCompl
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.093 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='078e83ed-38ad-4c02-a0cf-fdfe146d0199' download_progress=DownloadCompl
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.102 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 449: NodeDownloadProgress(event_id='cd540aaa-d258-44c6-a8d3-d063e7379471' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.103 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='cd540aaa-d258-44c6-a8d3-d063e7379471' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.128 | DEBUG    | exo.download.coordinator:_emit_existing_download_progress:312 ] DownloadCoordinator: Done emitting existing download progress.
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.128 | DEBUG    | exo.download.coordinator:_forward_events:271 ] DownloadCoordinator published event 450: NodeDownloadProgress(event_id='4451f8fb-d38a-4daf-b095-33de13b3cf2c' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.129 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeDownloadProgress(event_id='4451f8fb-d38a-4daf-b095-33de13b3cf2c' download_progress=DownloadPendi
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.565 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 451: NodeGatheredInfo(event_id='3ede5c93-d369-4353-9e3d-6ed1efa0bd24' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.566 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='3ede5c93-d369-4353-9e3d-6ed1efa0bd24' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:31 gremlin-1 exo[1143694]: [ 01:13:31.783 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:32 gremlin-1 exo[1143694]: [ 01:13:32.567 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 452: NodeGatheredInfo(event_id='807104fc-a4bf-4c7f-8804-d09a77d84f34' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:32 gremlin-1 exo[1143694]: [ 01:13:32.568 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='807104fc-a4bf-4c7f-8804-d09a77d84f34' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:32 gremlin-1 exo[1143694]: [ 01:13:32.783 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:33 gremlin-1 exo[1143694]: [ 01:13:33.568 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 453: NodeGatheredInfo(event_id='8790a00d-c20c-41c3-af79-c2caf5347473' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:33 gremlin-1 exo[1143694]: [ 01:13:33.569 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='8790a00d-c20c-41c3-af79-c2caf5347473' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:33 gremlin-1 exo[1143694]: [ 01:13:33.796 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:34 gremlin-1 exo[1143694]: [ 01:13:34.570 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 454: NodeGatheredInfo(event_id='6812b481-e63e-42a5-8656-dd93882c2aa6' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:34 gremlin-1 exo[1143694]: [ 01:13:34.571 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='6812b481-e63e-42a5-8656-dd93882c2aa6' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:34 gremlin-1 exo[1143694]: [ 01:13:34.797 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:35 gremlin-1 exo[1143694]: [ 01:13:35.579 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 455: NodeGatheredInfo(event_id='29e2e40b-dd99-4fda-a02d-7f8b6e2df8f0' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:35 gremlin-1 exo[1143694]: [ 01:13:35.581 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 456: NodeGatheredInfo(event_id='d44a58bf-7987-45d7-a6a7-b4f56eafda56' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:35 gremlin-1 exo[1143694]: [ 01:13:35.583 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='29e2e40b-dd99-4fda-a02d-7f8b6e2df8f0' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:35 gremlin-1 exo[1143694]: [ 01:13:35.585 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='d44a58bf-7987-45d7-a6a7-b4f56eafda56' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:35 gremlin-1 exo[1143694]: [ 01:13:35.888 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:36 gremlin-1 exo[1143694]: [ 01:13:36.580 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 457: NodeGatheredInfo(event_id='da663dd2-dcaf-4237-84d2-7b56c346264c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:36 gremlin-1 exo[1143694]: [ 01:13:36.581 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='da663dd2-dcaf-4237-84d2-7b56c346264c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:36 gremlin-1 exo[1143694]: [ 01:13:36.888 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:37 gremlin-1 exo[1143694]: [ 01:13:37.582 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 458: NodeGatheredInfo(event_id='5c3a067d-e23d-4bd6-9468-38eb049757b5' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:37 gremlin-1 exo[1143694]: [ 01:13:37.583 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='5c3a067d-e23d-4bd6-9468-38eb049757b5' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:37 gremlin-1 exo[1143694]: [ 01:13:37.897 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:38 gremlin-1 exo[1143694]: [ 01:13:38.584 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 459: NodeGatheredInfo(event_id='837cc4ce-a4e1-4f84-9cb7-f4856b4c7c91' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:38 gremlin-1 exo[1143694]: [ 01:13:38.585 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='837cc4ce-a4e1-4f84-9cb7-f4856b4c7c91' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:38 gremlin-1 exo[1143694]: [ 01:13:38.897 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:39 gremlin-1 exo[1143694]: [ 01:13:39.585 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 460: NodeGatheredInfo(event_id='c9202315-212a-4e07-a72a-fdf939139e8e' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:39 gremlin-1 exo[1143694]: [ 01:13:39.585 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='c9202315-212a-4e07-a72a-fdf939139e8e' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:39 gremlin-1 exo[1143694]: [ 01:13:39.912 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:40 gremlin-1 exo[1143694]: [ 01:13:40.587 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 461: NodeGatheredInfo(event_id='829c7109-18d2-4312-91d0-cec0869828d1' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:40 gremlin-1 exo[1143694]: [ 01:13:40.588 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='829c7109-18d2-4312-91d0-cec0869828d1' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:40 gremlin-1 exo[1143694]: [ 01:13:40.912 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:41 gremlin-1 exo[1143694]: [ 01:13:41.588 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 462: NodeGatheredInfo(event_id='b3e69c2d-95a1-449f-bc81-bdac3688c40c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:41 gremlin-1 exo[1143694]: [ 01:13:41.589 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='b3e69c2d-95a1-449f-bc81-bdac3688c40c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:41 gremlin-1 exo[1143694]: [ 01:13:41.914 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:42 gremlin-1 exo[1143694]: [ 01:13:42.590 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 463: NodeGatheredInfo(event_id='25906615-badd-443b-879f-1104c0323de1' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:42 gremlin-1 exo[1143694]: [ 01:13:42.591 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='25906615-badd-443b-879f-1104c0323de1' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:42 gremlin-1 exo[1143694]: [ 01:13:42.913 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:43 gremlin-1 exo[1143694]: [ 01:13:43.591 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 464: NodeGatheredInfo(event_id='77b803e2-19d3-4f60-8b68-9d3e0bc879fe' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:43 gremlin-1 exo[1143694]: [ 01:13:43.592 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='77b803e2-19d3-4f60-8b68-9d3e0bc879fe' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:43 gremlin-1 exo[1143694]: [ 01:13:43.719 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /instance/previews
+Feb 14 01:13:43 gremlin-1 exo[1143694]: [ 01:13:43.928 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:44 gremlin-1 exo[1143694]: [ 01:13:44.593 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 465: NodeGatheredInfo(event_id='2fc6a1f5-0da0-40f1-998d-9c19bdce6893' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:44 gremlin-1 exo[1143694]: [ 01:13:44.594 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='2fc6a1f5-0da0-40f1-998d-9c19bdce6893' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:44 gremlin-1 exo[1143694]: [ 01:13:44.928 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:45 gremlin-1 exo[1143694]: [ 01:13:45.602 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 466: NodeGatheredInfo(event_id='d3dd4074-c518-413e-ae11-3c25741c5de5' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:45 gremlin-1 exo[1143694]: [ 01:13:45.604 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 467: NodeGatheredInfo(event_id='a6bef07c-d142-4c3b-bc84-cf7b4d1cd082' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:45 gremlin-1 exo[1143694]: [ 01:13:45.606 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='d3dd4074-c518-413e-ae11-3c25741c5de5' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:45 gremlin-1 exo[1143694]: [ 01:13:45.608 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='a6bef07c-d142-4c3b-bc84-cf7b4d1cd082' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:45 gremlin-1 exo[1143694]: [ 01:13:45.931 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:46 gremlin-1 exo[1143694]: [ 01:13:46.603 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 468: NodeGatheredInfo(event_id='e3ae5f96-8979-40a5-b589-a420391f6b9f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:46 gremlin-1 exo[1143694]: [ 01:13:46.604 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='e3ae5f96-8979-40a5-b589-a420391f6b9f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:46 gremlin-1 exo[1143694]: [ 01:13:46.931 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:47 gremlin-1 exo[1143694]: [ 01:13:47.605 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 469: NodeGatheredInfo(event_id='af31e4f7-cae3-45ca-b59d-3c0c39413c72' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:47 gremlin-1 exo[1143694]: [ 01:13:47.606 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='af31e4f7-cae3-45ca-b59d-3c0c39413c72' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:47 gremlin-1 exo[1143694]: [ 01:13:47.989 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:48 gremlin-1 exo[1143694]: [ 01:13:48.606 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 470: NodeGatheredInfo(event_id='044f3ec5-b5df-4777-ae0d-150eaa410133' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:48 gremlin-1 exo[1143694]: [ 01:13:48.607 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='044f3ec5-b5df-4777-ae0d-150eaa410133' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:48 gremlin-1 exo[1143694]: [ 01:13:48.991 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.080 | DEBUG    | exo.master.api:_log_requests:199 ] API request: POST /v1/chat/completions
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.083 | INFO     | exo.master.main:_command_processor:120 ] Executing command: TextGeneration(command_id='8f90675f-33b8-4049-96dd-abdfac1b23aa' task_params=TextGenerationTaskParams(model='meta-llama/Llama-3.2-3B-Instruct', input=[InputMessage(role='user', content='hello world')], instructions='You are a helpful AI assistant. Respond directly and concisely. Do not show your reasoning or thought process. When files are shared with you, analyze them and respond helpfully.', max_output_tokens=None, temperature=0.7, top_p=None, stream=True, tools=None, bench=False, top_k=None, stop=None, seed=None, chat_template_messages=[{'role': 'system', 'content': 'You are a helpful AI assistant. Respond directly and concisely. Do not show your reasoning or thought process. When files are shared with you, analyze them and respond helpfully.'}, {'role': 'user', 'content': 'hello world'}], logprobs=True, top_logprobs=5))
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.084 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskCreated(event_id='105afd01-81b6-485a-868d-f7b0afeab752' task_id='2f2d9916-e776-4602-a009-4510fac
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.178 | INFO     | exo.worker.main:plan_step:186 ] Worker plan: TextGeneration
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.178 | INFO     | exo.worker.runner.runner_supervisor:start_task:134 ] Starting task TextGeneration(task_id='2f2d9916-e776-4602-a009-4510fac9ea24' task_status=<TaskStatus.Pending: 'Pending'> instance_id='2926f15f-ffa3-405c-b4c3-42ce3cf1dec1' command_id='8f90675f-33b8-4049-96dd-abdfac1b23aa' task_params=TextGenerationTaskParams(model='meta-llama/Llama-3.2-3B-Instruct', input=[InputMessage(role='user', content='hello world')], instructions='You are a helpful AI assistant. Respond directly and concisely. Do not show your reasoning or thought process. When files are shared with you, analyze them and respond helpfully.', max_output_tokens=None, temperature=0.7, top_p=None, stream=True, tools=None, bench=False, top_k=None, stop=None, seed=None, chat_template_messages=[{'role': 'system', 'content': 'You are a helpful AI assistant. Respond directly and concisely. Do not show your reasoning or thought process. When files are shared with you, analyze them and respond helpfully.'}, {'role': 'user', 'content': 'hello world'}], logprobs=True, top_logprobs=5) error_type=None error_message=None)
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.178 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 471: TaskCreated(event_id='a96336dd-22ed-4683-8691-723fdf4a36f9' task_id='2f2d9916-e776-4602-a009-4510fac
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.179 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskCreated(event_id='a96336dd-22ed-4683-8691-723fdf4a36f9' task_id='2f2d9916-e776-4602-a009-4510fac
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.181 | INFO     | exo.worker.runner.runner:main:489 ] received chat request: TextGeneration(task_id='2f2d9916-e776-4602-a009-4510fac9ea24' task_status=<TaskStatus.Pending: 'Pending'> instance_id='2926f15f-ffa3-405c-b4c3-42ce3cf1dec1' command_id='8f90675f-33b8-4049-96dd-abdfac1b23aa' task_params=TextGenerationTaskParams(model='meta-llama/Llama-3.2-3B-Instruct', input=[InputMessage(role='user', content='hello world')], instructions='You are a helpful AI assistant. Respond directly and concisely. Do not show your reasoning or thought process. When files are shared with you, analyze them and respond helpfully.', max_output_tokens=None, temperature=0.7, top_p=None, stream=True, tools=None, bench=False, top_k=None, stop=None, seed=None, chat_template_messages=[{'role': 'system', 'content': 'You are a helpful AI assistant. Respond directly and concisely. Do not show your reasoning or thought process. When files are shared with you, analyze them and respond helpfully.'}, {'role': 'user', 'content': 'hello world'}], logprobs=True, top_logprobs=5) error_type=None error_message=None)
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.182 | INFO     | exo.worker.runner.runner:main:491 ] runner running
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.182 | INFO     | exo.worker.runner.runner:main:512 ] Generating with tinygrad, prompt length: 28
+Feb 14 01:13:49 gremlin-1 exo[1150473]: 2026-02-14 01:13:49.184 | DEBUG    | exo.worker.engines.tinygrad.llama_transformer:__init__:1689 - Initialized KVCache
+Feb 14 01:13:49 gremlin-1 exo[1150473]: 2026-02-14 01:13:49.184 | DEBUG    | exo.worker.engines.tinygrad.llama_transformer:_generate_position_ids:2155 - Generated position IDs
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.183 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 472: TaskStatusUpdated(event_id='57efc1a7-1de4-4038-975c-d42290dbcf02' task_id='2f2d9916-e776-4602-a009-4
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.184 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskStatusUpdated(event_id='57efc1a7-1de4-4038-975c-d42290dbcf02' task_id='2f2d9916-e776-4602-a009-4
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.185 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 473: RunnerStatusUpdated(event_id='b3614117-6b00-4301-a85d-67c87741da9e' runner_id='15e95170-cb8e-4d4e-a1
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.186 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: RunnerStatusUpdated(event_id='b3614117-6b00-4301-a85d-67c87741da9e' runner_id='15e95170-cb8e-4d4e-a1
+Feb 14 01:13:49 gremlin-1 exo[1150473]: 2026-02-14 01:13:49.187 | DEBUG    | exo.worker.engines.tinygrad.llama_transformer:__call__:2065 - Forward pass
+Feb 14 01:13:49 gremlin-1 exo[1150473]: 2026-02-14 01:13:49.556 | DEBUG    | exo.worker.engines.tinygrad.llama_transformer:__call__:2099 - Forward pass complete
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.609 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 474: NodeGatheredInfo(event_id='7f190d15-5f62-4ca8-b104-dbc0bdbc2125' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:49 gremlin-1 exo[1143694]: [ 01:13:49.610 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='7f190d15-5f62-4ca8-b104-dbc0bdbc2125' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:50 gremlin-1 exo[1143694]: [ 01:13:49.999 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:50 gremlin-1 exo[1143694]: [ 01:13:50.610 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 475: NodeGatheredInfo(event_id='f804a104-7846-4306-ae76-4df8de5a1faa' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:50 gremlin-1 exo[1143694]: [ 01:13:50.611 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='f804a104-7846-4306-ae76-4df8de5a1faa' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.150 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:51 gremlin-1 exo[1150473]: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:13:51 gremlin-1 exo[1150473]: Inference failed at token 0: Inference failed: OpenCL Error -4: CL_MEM_OBJECT_ALLOCATION_FAILURE
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.317 | INFO     | exo.worker.runner.runner:main:714 ] runner ready
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.318 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 476: ChunkGenerated(event_id='e7b924f8-5be3-4906-ba7a-401292af11de' command_id='8f90675f-33b8-4049-96dd-a
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.319 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: ChunkGenerated(event_id='e7b924f8-5be3-4906-ba7a-401292af11de' command_id='8f90675f-33b8-4049-96dd-a
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.320 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 477: TaskStatusUpdated(event_id='c71aae34-d898-4172-aa65-ec6742233fde' task_id='2f2d9916-e776-4602-a009-4
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.321 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskStatusUpdated(event_id='c71aae34-d898-4172-aa65-ec6742233fde' task_id='2f2d9916-e776-4602-a009-4
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.324 | INFO     | exo.master.main:_command_processor:120 ] Executing command: TaskFinished(command_id='de38d388-47a0-4a1a-8ec0-4ef694b2bfcb' finished_command_id='8f90675f-33b8-4049-96dd-abdfac1b23aa')
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.326 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 478: RunnerStatusUpdated(event_id='e086ea91-62ee-4955-9463-72c4c210da19' runner_id='15e95170-cb8e-4d4e-a1
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.326 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: TaskDeleted(event_id='2d864ddb-e5fd-40d4-98be-d28a8b9d9e31' task_id='2f2d9916-e776-4602-a009-4510fac
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.327 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: RunnerStatusUpdated(event_id='e086ea91-62ee-4955-9463-72c4c210da19' runner_id='15e95170-cb8e-4d4e-a1
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.612 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 479: NodeGatheredInfo(event_id='990938b8-0279-4edc-a9e1-55d5867bf731' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:51 gremlin-1 exo[1143694]: [ 01:13:51.613 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='990938b8-0279-4edc-a9e1-55d5867bf731' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:52 gremlin-1 exo[1143694]: [ 01:13:52.106 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:52 gremlin-1 exo[1143694]: [ 01:13:52.613 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 480: NodeGatheredInfo(event_id='9c8b14f8-272d-4f67-9159-d6bc0020311e' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:52 gremlin-1 exo[1143694]: [ 01:13:52.613 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='9c8b14f8-272d-4f67-9159-d6bc0020311e' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:53 gremlin-1 exo[1143694]: [ 01:13:53.107 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:53 gremlin-1 exo[1143694]: [ 01:13:53.614 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 481: NodeGatheredInfo(event_id='a76bce7e-669f-4eb1-a993-19166afbb436' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:53 gremlin-1 exo[1143694]: [ 01:13:53.615 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='a76bce7e-669f-4eb1-a993-19166afbb436' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:54 gremlin-1 exo[1143694]: [ 01:13:54.107 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:54 gremlin-1 exo[1143694]: [ 01:13:54.615 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 482: NodeGatheredInfo(event_id='07fcb7cd-318c-4ce5-83cb-838ce72ad1fc' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:54 gremlin-1 exo[1143694]: [ 01:13:54.616 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='07fcb7cd-318c-4ce5-83cb-838ce72ad1fc' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:55 gremlin-1 exo[1143694]: [ 01:13:55.107 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:55 gremlin-1 exo[1143694]: [ 01:13:55.626 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 483: NodeGatheredInfo(event_id='76d0f743-f74e-4a46-89c9-dbc83631e496' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:55 gremlin-1 exo[1143694]: [ 01:13:55.628 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 484: NodeGatheredInfo(event_id='9f40d234-518e-4afd-9929-d48f5349bef0' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:55 gremlin-1 exo[1143694]: [ 01:13:55.630 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='76d0f743-f74e-4a46-89c9-dbc83631e496' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:55 gremlin-1 exo[1143694]: [ 01:13:55.633 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='9f40d234-518e-4afd-9929-d48f5349bef0' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:56 gremlin-1 exo[1143694]: [ 01:13:56.199 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:56 gremlin-1 exo[1143694]: [ 01:13:56.626 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 485: NodeGatheredInfo(event_id='5087bc66-6b19-481f-a7e3-5d0cfaf6e538' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:56 gremlin-1 exo[1143694]: [ 01:13:56.628 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='5087bc66-6b19-481f-a7e3-5d0cfaf6e538' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:57 gremlin-1 exo[1143694]: [ 01:13:57.199 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:57 gremlin-1 exo[1143694]: [ 01:13:57.628 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 486: NodeGatheredInfo(event_id='fcac0e81-fae1-41fd-bc54-8bb81869e9a4' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:57 gremlin-1 exo[1143694]: [ 01:13:57.629 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='fcac0e81-fae1-41fd-bc54-8bb81869e9a4' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:58 gremlin-1 exo[1143694]: [ 01:13:58.568 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:58 gremlin-1 exo[1143694]: [ 01:13:58.629 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 487: NodeGatheredInfo(event_id='150e5282-23c4-442e-aca1-8bf19a844461' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:58 gremlin-1 exo[1143694]: [ 01:13:58.630 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='150e5282-23c4-442e-aca1-8bf19a844461' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:59 gremlin-1 exo[1143694]: [ 01:13:59.587 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /instance/previews
+Feb 14 01:13:59 gremlin-1 exo[1143694]: [ 01:13:59.591 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:13:59 gremlin-1 exo[1143694]: [ 01:13:59.630 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 488: NodeGatheredInfo(event_id='0f405f7a-c1c9-4040-941f-aba45508acd9' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:13:59 gremlin-1 exo[1143694]: [ 01:13:59.632 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='0f405f7a-c1c9-4040-941f-aba45508acd9' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:00 gremlin-1 exo[1143694]: [ 01:14:00.631 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 489: NodeGatheredInfo(event_id='825940c3-3cbc-4617-bca1-a340c9ab1b6f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:00 gremlin-1 exo[1143694]: [ 01:14:00.632 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='825940c3-3cbc-4617-bca1-a340c9ab1b6f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:00 gremlin-1 exo[1143694]: [ 01:14:00.637 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:01 gremlin-1 exo[1143694]: [ 01:14:01.633 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 490: NodeGatheredInfo(event_id='9371a2c3-bdfe-4f39-9163-86e5b0f9b2de' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:01 gremlin-1 exo[1143694]: [ 01:14:01.634 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='9371a2c3-bdfe-4f39-9163-86e5b0f9b2de' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:01 gremlin-1 exo[1143694]: [ 01:14:01.743 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:02 gremlin-1 exo[1143694]: [ 01:14:02.634 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 491: NodeGatheredInfo(event_id='8da0a597-6f70-4a06-84a2-0cae4d10854f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:02 gremlin-1 exo[1143694]: [ 01:14:02.635 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='8da0a597-6f70-4a06-84a2-0cae4d10854f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:02 gremlin-1 exo[1143694]: [ 01:14:02.768 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:03 gremlin-1 exo[1143694]: [ 01:14:03.635 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 492: NodeGatheredInfo(event_id='29e7aae8-fe9e-42fa-9752-bb8bb469b2d6' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:03 gremlin-1 exo[1143694]: [ 01:14:03.636 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='29e7aae8-fe9e-42fa-9752-bb8bb469b2d6' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:03 gremlin-1 exo[1143694]: [ 01:14:03.767 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:04 gremlin-1 exo[1143694]: [ 01:14:04.636 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 493: NodeGatheredInfo(event_id='11c625af-2923-4c10-91f1-57da06140c2a' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:04 gremlin-1 exo[1143694]: [ 01:14:04.637 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='11c625af-2923-4c10-91f1-57da06140c2a' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:04 gremlin-1 exo[1143694]: [ 01:14:04.784 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:05 gremlin-1 exo[1143694]: [ 01:14:05.647 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 494: NodeGatheredInfo(event_id='1a2476a0-a7a7-4689-8ed0-1d3b1d4b25f5' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:05 gremlin-1 exo[1143694]: [ 01:14:05.649 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 495: NodeGatheredInfo(event_id='3505c862-8a19-4dec-89a1-10c80086bcdb' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:05 gremlin-1 exo[1143694]: [ 01:14:05.651 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='1a2476a0-a7a7-4689-8ed0-1d3b1d4b25f5' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:05 gremlin-1 exo[1143694]: [ 01:14:05.653 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='3505c862-8a19-4dec-89a1-10c80086bcdb' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:05 gremlin-1 exo[1143694]: [ 01:14:05.783 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:06 gremlin-1 exo[1143694]: [ 01:14:06.648 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 496: NodeGatheredInfo(event_id='565fe153-782d-4b5d-8b5b-8555d0fa27df' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:06 gremlin-1 exo[1143694]: [ 01:14:06.649 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='565fe153-782d-4b5d-8b5b-8555d0fa27df' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:06 gremlin-1 exo[1143694]: [ 01:14:06.799 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:07 gremlin-1 exo[1143694]: [ 01:14:07.649 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 497: NodeGatheredInfo(event_id='610208de-f109-4281-9fbd-efd1bacd4198' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:07 gremlin-1 exo[1143694]: [ 01:14:07.650 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='610208de-f109-4281-9fbd-efd1bacd4198' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:07 gremlin-1 exo[1143694]: [ 01:14:07.799 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:08 gremlin-1 exo[1143694]: [ 01:14:08.650 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 498: NodeGatheredInfo(event_id='c4415b19-a9a6-4a5b-adde-18f264da21a7' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:08 gremlin-1 exo[1143694]: [ 01:14:08.651 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='c4415b19-a9a6-4a5b-adde-18f264da21a7' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:08 gremlin-1 exo[1143694]: [ 01:14:08.891 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:09 gremlin-1 exo[1143694]: [ 01:14:09.651 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 499: NodeGatheredInfo(event_id='bdfe9657-241e-419e-b2d7-7a5caca92f4f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:09 gremlin-1 exo[1143694]: [ 01:14:09.653 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='bdfe9657-241e-419e-b2d7-7a5caca92f4f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:09 gremlin-1 exo[1143694]: [ 01:14:09.891 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:10 gremlin-1 exo[1143694]: [ 01:14:10.652 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 500: NodeGatheredInfo(event_id='70eb1edb-b83e-4f10-a38b-50e93e9d6c86' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:10 gremlin-1 exo[1143694]: [ 01:14:10.653 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='70eb1edb-b83e-4f10-a38b-50e93e9d6c86' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:10 gremlin-1 exo[1143694]: [ 01:14:10.899 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:11 gremlin-1 exo[1143694]: [ 01:14:11.653 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 501: NodeGatheredInfo(event_id='159cfa4e-620a-41e4-81a2-505c12d80041' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:11 gremlin-1 exo[1143694]: [ 01:14:11.654 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='159cfa4e-620a-41e4-81a2-505c12d80041' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:11 gremlin-1 exo[1143694]: [ 01:14:11.898 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:12 gremlin-1 exo[1143694]: [ 01:14:12.655 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 502: NodeGatheredInfo(event_id='dda401fb-08d0-4588-b375-e3c56678eb0d' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:12 gremlin-1 exo[1143694]: [ 01:14:12.656 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='dda401fb-08d0-4588-b375-e3c56678eb0d' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:13 gremlin-1 exo[1143694]: [ 01:14:13.041 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:13 gremlin-1 exo[1143694]: [ 01:14:13.656 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 503: NodeGatheredInfo(event_id='82eedab7-e2f1-4189-9368-8e064f8c22e2' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:13 gremlin-1 exo[1143694]: [ 01:14:13.657 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='82eedab7-e2f1-4189-9368-8e064f8c22e2' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:14 gremlin-1 exo[1143694]: [ 01:14:14.017 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:14 gremlin-1 exo[1143694]: [ 01:14:14.587 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /instance/previews
+Feb 14 01:14:14 gremlin-1 exo[1143694]: [ 01:14:14.657 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 504: NodeGatheredInfo(event_id='12d6066c-26ca-4e87-a5f8-c1c084bc5780' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:14 gremlin-1 exo[1143694]: [ 01:14:14.658 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='12d6066c-26ca-4e87-a5f8-c1c084bc5780' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:15 gremlin-1 exo[1143694]: [ 01:14:15.032 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:15 gremlin-1 exo[1143694]: [ 01:14:15.670 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 505: NodeGatheredInfo(event_id='e4cbd0ae-9866-4c97-9467-476315973c03' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:15 gremlin-1 exo[1143694]: [ 01:14:15.671 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 506: NodeGatheredInfo(event_id='36282653-ee55-47da-ba95-ffd298580054' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:15 gremlin-1 exo[1143694]: [ 01:14:15.673 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='e4cbd0ae-9866-4c97-9467-476315973c03' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:15 gremlin-1 exo[1143694]: [ 01:14:15.675 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='36282653-ee55-47da-ba95-ffd298580054' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:16 gremlin-1 exo[1143694]: [ 01:14:16.032 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:16 gremlin-1 exo[1143694]: [ 01:14:16.670 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 507: NodeGatheredInfo(event_id='5c061285-37bf-4715-ade7-e18975b31ba2' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:16 gremlin-1 exo[1143694]: [ 01:14:16.671 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='5c061285-37bf-4715-ade7-e18975b31ba2' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:17 gremlin-1 exo[1143694]: [ 01:14:17.047 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:17 gremlin-1 exo[1143694]: [ 01:14:17.672 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 508: NodeGatheredInfo(event_id='380aa969-ec6c-47be-99cf-3de0fcc9b5d9' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:17 gremlin-1 exo[1143694]: [ 01:14:17.673 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='380aa969-ec6c-47be-99cf-3de0fcc9b5d9' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:18 gremlin-1 exo[1143694]: [ 01:14:18.047 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:18 gremlin-1 exo[1143694]: [ 01:14:18.673 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 509: NodeGatheredInfo(event_id='f2052f41-4858-4021-aed5-220ada90ce74' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:18 gremlin-1 exo[1143694]: [ 01:14:18.674 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='f2052f41-4858-4021-aed5-220ada90ce74' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:19 gremlin-1 exo[1143694]: [ 01:14:19.050 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:19 gremlin-1 exo[1143694]: [ 01:14:19.674 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 510: NodeGatheredInfo(event_id='31a2c9e4-bb27-4975-a16c-2811fcf08c9c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:19 gremlin-1 exo[1143694]: [ 01:14:19.675 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='31a2c9e4-bb27-4975-a16c-2811fcf08c9c' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:20 gremlin-1 exo[1143694]: [ 01:14:20.050 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:20 gremlin-1 exo[1143694]: [ 01:14:20.675 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 511: NodeGatheredInfo(event_id='eed7f82d-90ed-4aed-a3dc-7ea9cc16c78e' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:20 gremlin-1 exo[1143694]: [ 01:14:20.677 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='eed7f82d-90ed-4aed-a3dc-7ea9cc16c78e' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:21 gremlin-1 exo[1143694]: [ 01:14:21.065 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:21 gremlin-1 exo[1143694]: [ 01:14:21.677 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 512: NodeGatheredInfo(event_id='ac2abb43-b59f-4037-9b0e-84c02e459703' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:21 gremlin-1 exo[1143694]: [ 01:14:21.678 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='ac2abb43-b59f-4037-9b0e-84c02e459703' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:22 gremlin-1 exo[1143694]: [ 01:14:22.067 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:22 gremlin-1 exo[1143694]: [ 01:14:22.680 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 513: NodeGatheredInfo(event_id='7e343322-8055-43b3-8197-4e765f1531ad' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:22 gremlin-1 exo[1143694]: [ 01:14:22.681 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='7e343322-8055-43b3-8197-4e765f1531ad' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:23 gremlin-1 exo[1143694]: [ 01:14:23.102 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:23 gremlin-1 exo[1143694]: [ 01:14:23.682 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 514: NodeGatheredInfo(event_id='befd2546-1ca7-4a85-b53a-a1e093f9f365' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:23 gremlin-1 exo[1143694]: [ 01:14:23.683 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='befd2546-1ca7-4a85-b53a-a1e093f9f365' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:24 gremlin-1 exo[1143694]: [ 01:14:24.066 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:24 gremlin-1 exo[1143694]: [ 01:14:24.684 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 515: NodeGatheredInfo(event_id='ddb2407e-7575-4c10-8b8a-b6f7981034ff' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:24 gremlin-1 exo[1143694]: [ 01:14:24.685 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='ddb2407e-7575-4c10-8b8a-b6f7981034ff' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:25 gremlin-1 exo[1143694]: [ 01:14:25.083 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:25 gremlin-1 exo[1143694]: [ 01:14:25.178 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 516: NodeGatheredInfo(event_id='c3a93c38-9726-4518-8f4a-fa7c0aaae8cf' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:25 gremlin-1 exo[1143694]: [ 01:14:25.180 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='c3a93c38-9726-4518-8f4a-fa7c0aaae8cf' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:25 gremlin-1 exo[1143694]: [ 01:14:25.692 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 517: NodeGatheredInfo(event_id='2017207b-e5c5-4c9d-a6fa-4a7996f570b8' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:25 gremlin-1 exo[1143694]: [ 01:14:25.694 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 518: NodeGatheredInfo(event_id='7a902dfe-8dc6-4516-b175-2b90aa00f767' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:25 gremlin-1 exo[1143694]: [ 01:14:25.696 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='2017207b-e5c5-4c9d-a6fa-4a7996f570b8' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:25 gremlin-1 exo[1143694]: [ 01:14:25.698 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='7a902dfe-8dc6-4516-b175-2b90aa00f767' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:26 gremlin-1 exo[1143694]: [ 01:14:26.288 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:26 gremlin-1 exo[1143694]: [ 01:14:26.693 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 519: NodeGatheredInfo(event_id='b257888c-dcba-456a-b664-a71bc893227f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:26 gremlin-1 exo[1143694]: [ 01:14:26.694 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='b257888c-dcba-456a-b664-a71bc893227f' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:27 gremlin-1 exo[1143694]: [ 01:14:27.315 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:27 gremlin-1 exo[1143694]: [ 01:14:27.694 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 520: NodeGatheredInfo(event_id='df2e023c-c248-4d43-bd29-de4f221ddca2' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:27 gremlin-1 exo[1143694]: [ 01:14:27.695 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='df2e023c-c248-4d43-bd29-de4f221ddca2' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:28 gremlin-1 exo[1143694]: [ 01:14:28.315 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:28 gremlin-1 exo[1143694]: [ 01:14:28.695 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 521: NodeGatheredInfo(event_id='b623788c-2393-4591-a6b9-c560c06004c6' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:28 gremlin-1 exo[1143694]: [ 01:14:28.696 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='b623788c-2393-4591-a6b9-c560c06004c6' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:29 gremlin-1 exo[1143694]: [ 01:14:29.331 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 14 01:14:29 gremlin-1 exo[1143694]: [ 01:14:29.696 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 522: NodeGatheredInfo(event_id='688dbf06-e94f-4e01-a8bb-5c0c2ebadaf0' node_id='12D3KooWC744SKP9gHWpWVAYSR
+Feb 14 01:14:29 gremlin-1 exo[1143694]: [ 01:14:29.697 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='688dbf06-e94f-4e01-a8bb-5c0c2ebadaf0' node_id='12D3KooWC744SKP9gHWpWVAYSR

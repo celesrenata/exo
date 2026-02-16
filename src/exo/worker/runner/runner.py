@@ -171,6 +171,8 @@ def main(
         from exo.worker.engines.pytorch_ipex.pytorch_ipex_backend import PyTorchIPEXBackend
         from exo.worker.engines.pytorch_ipex.device_manager import DeviceManager
         from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader
+        from exo.worker.engines.pytorch_ipex.generator import pytorch_ipex_generate
+        from exo.worker.engines.pytorch_ipex.warmup import warmup_pytorch_ipex_inference
 
         logger.info("PyTorch+IPEX backend modules loaded")
     else:
@@ -233,6 +235,10 @@ def main(
     kv_prefix_cache: Any = None
     tinygrad_model: Any = None
     tinygrad_tokenizer: Any = None
+    pytorch_ipex_model: Any = None
+    pytorch_ipex_tokenizer: Any = None
+    device_type: Any = None
+    device_id: Any = None
 
     current_status: RunnerStatus = RunnerIdle()
     logger.info("runner created")
@@ -421,10 +427,59 @@ def main(
                             ):
                                 logger.info("Loading PyTorch+IPEX model...")
                                 
-                                # TODO: Implement PyTorch+IPEX model loading
-                                # For now, raise NotImplementedError
-                                raise NotImplementedError(
-                                    "PyTorch+IPEX model loading not yet implemented"
+                                # Initialize device manager and select device
+                                device_manager = DeviceManager()
+                                device_type, device_id = device_manager.select_device()
+                                
+                                logger.info(
+                                    f"Selected device for PyTorch+IPEX: {device_type}:{device_id}"
+                                )
+                                
+                                # Initialize model loader
+                                model_loader = ModelLoader()
+                                
+                                # Load model and tokenizer asynchronously
+                                import asyncio
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                try:
+                                    pytorch_ipex_model, pytorch_ipex_tokenizer = loop.run_until_complete(
+                                        model_loader.load_model(
+                                            shard_metadata=shard_metadata,
+                                            device_type=device_type,
+                                            device_id=device_id,
+                                        )
+                                    )
+                                finally:
+                                    loop.close()
+                                
+                                logger.info(
+                                    f"PyTorch+IPEX model loaded successfully on {device_type}:{device_id}"
+                                )
+                                
+                                # Determine device info for BackendInitialized event
+                                if device_type == "xpu":
+                                    backend_device_type = "GPU"
+                                    backend_device_name = "Intel Arc GPU"
+                                    backend_runtime = "XPU"
+                                elif device_type == "cuda":
+                                    backend_device_type = "GPU"
+                                    backend_device_name = "NVIDIA GPU"
+                                    backend_runtime = "CUDA"
+                                else:
+                                    backend_device_type = "CPU"
+                                    backend_device_name = "CPU"
+                                    backend_runtime = "CPU"
+                                
+                                # Emit BackendInitialized event
+                                event_sender.send(
+                                    BackendInitialized(
+                                        runner_id=runner_id,
+                                        backend_type=backend_type,
+                                        device_type=backend_device_type,
+                                        device_name=backend_device_name,
+                                        runtime=backend_runtime,
+                                    )
                                 )
                             else:
                                 raise ValueError(
@@ -509,6 +564,9 @@ def main(
                     if backend_type == "tinygrad":
                         assert tinygrad_model
                         assert tinygrad_tokenizer
+                    elif backend_type == "pytorch_ipex":
+                        assert pytorch_ipex_model
+                        assert pytorch_ipex_tokenizer
                     else:
                         assert model
                         assert tokenizer
@@ -534,6 +592,16 @@ def main(
                                 tokenizer=tokenizer,
                                 group=group,
                                 # kv_prefix_cache=kv_prefix_cache,  # supply for warmup-time prefix caching
+                            )
+                            logger.info(f"warmed up by generating {toks} tokens")
+                        elif backend_type == "pytorch_ipex":
+                            # PyTorch+IPEX backend warmup
+                            toks = warmup_pytorch_ipex_inference(
+                                model=pytorch_ipex_model,
+                                tokenizer=pytorch_ipex_tokenizer,
+                                device_type=device_type,
+                                device_id=device_id,
+                                warmup_tokens=10,
                             )
                             logger.info(f"warmed up by generating {toks} tokens")
                         else:
@@ -656,6 +724,98 @@ def main(
                                             )
                         except Exception as e:
                             logger.error(f"Tinygrad generation failed: {e}")
+                            if device_rank == 0:
+                                event_sender.send(
+                                    ChunkGenerated(
+                                        command_id=command_id,
+                                        chunk=ErrorChunk(
+                                            model=shard_metadata.model_card.model_id,
+                                            finish_reason="error",
+                                            error_message=str(e),
+                                        ),
+                                    )
+                                )
+                            raise
+                    elif backend_type == "pytorch_ipex":
+                        # PyTorch+IPEX backend text generation
+                        assert pytorch_ipex_model is not None
+                        assert pytorch_ipex_tokenizer is not None
+                        assert device_type is not None
+                        assert device_id is not None
+
+                        try:
+                            # Build prompt from messages
+                            # For now, use simple concatenation - can be improved with chat templates
+                            prompt_parts = []
+                            for msg in task_params.input:
+                                prompt_parts.append(f"{msg.role}: {msg.content}")
+                            prompt = "\n".join(prompt_parts) + "\nassistant:"
+
+                            logger.info(
+                                f"Generating with PyTorch+IPEX, prompt length: {len(prompt)}"
+                            )
+
+                            # Generate tokens using PyTorch+IPEX
+                            pytorch_ipex_generator = pytorch_ipex_generate(
+                                model=pytorch_ipex_model,
+                                tokenizer=pytorch_ipex_tokenizer,
+                                prompt=prompt,
+                                device_type=device_type,
+                                device_id=device_id,
+                                max_tokens=task_params.max_output_tokens or 100,
+                                temperature=task_params.temperature or 1.0,
+                                top_k=task_params.top_k,
+                                top_p=task_params.top_p,
+                                model_id=str(shard_metadata.model_card.model_id),
+                            )
+
+                            # Forward responses to event sender
+                            for response in pytorch_ipex_generator:
+                                match response:
+                                    case GenerationResponse():
+                                        if (
+                                            device_rank == 0
+                                            and response.finish_reason == "error"
+                                        ):
+                                            event_sender.send(
+                                                ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=ErrorChunk(
+                                                        error_message=response.text,
+                                                        model=shard_metadata.model_card.model_id,
+                                                    ),
+                                                )
+                                            )
+                                        elif device_rank == 0:
+                                            event_sender.send(
+                                                ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=TokenChunk(
+                                                        model=shard_metadata.model_card.model_id,
+                                                        text=response.text,
+                                                        token_id=response.token,
+                                                        usage=response.usage,
+                                                        finish_reason=response.finish_reason,
+                                                        stats=response.stats,
+                                                        logprob=response.logprob,
+                                                        top_logprobs=response.top_logprobs,
+                                                    ),
+                                                )
+                                            )
+                                    case ToolCallResponse():
+                                        if device_rank == 0:
+                                            event_sender.send(
+                                                ChunkGenerated(
+                                                    command_id=command_id,
+                                                    chunk=ToolCallChunk(
+                                                        tool_calls=response.tool_calls,
+                                                        model=shard_metadata.model_card.model_id,
+                                                        usage=response.usage,
+                                                    ),
+                                                )
+                                            )
+                        except Exception as e:
+                            logger.error(f"PyTorch+IPEX generation failed: {e}")
                             if device_rank == 0:
                                 event_sender.send(
                                     ChunkGenerated(
@@ -947,6 +1107,26 @@ def main(
                             logger.info("Tinygrad resources cleaned up")
                         except Exception as e:
                             logger.warning(f"Error during tinygrad cleanup: {e}")
+                    elif backend_type == "pytorch_ipex":
+                        # Clean up PyTorch+IPEX resources
+                        logger.info("Cleaning up PyTorch+IPEX resources")
+                        del pytorch_ipex_model, pytorch_ipex_tokenizer
+
+                        # Clear PyTorch caches
+                        try:
+                            import torch
+
+                            if device_type == "xpu" and hasattr(torch, "xpu"):
+                                torch.xpu.empty_cache()  # type: ignore
+                            elif device_type == "cuda":
+                                torch.cuda.empty_cache()
+
+                            import gc
+
+                            gc.collect()
+                            logger.info("PyTorch+IPEX resources cleaned up")
+                        except Exception as e:
+                            logger.warning(f"Error during PyTorch+IPEX cleanup: {e}")
                     else:
                         # Clean up MLX resources
                         del model, tokenizer, group

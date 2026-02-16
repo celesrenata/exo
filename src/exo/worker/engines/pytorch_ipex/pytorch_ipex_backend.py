@@ -13,9 +13,11 @@ Requirements addressed:
 """
 
 import logging
+import time
 from typing import Any, Optional, final
 
 import numpy as np
+from loguru import logger
 
 from exo.shared.types.worker.shards import ShardMetadata
 from exo.worker.engines.base import InferenceBackend
@@ -26,10 +28,19 @@ from exo.worker.engines.pytorch_ipex.errors import (
     InferenceError,
     ModelError,
 )
+from exo.worker.engines.pytorch_ipex.health_check import HealthChecker
 from exo.worker.engines.pytorch_ipex.kv_cache_manager import KVCacheManager
+from exo.worker.engines.pytorch_ipex.logging_config import (
+    LogContext,
+    log_device_info,
+    log_inference_metrics,
+    log_model_info,
+)
 from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader
-
-logger = logging.getLogger(__name__)
+from exo.worker.engines.pytorch_ipex.performance_metrics import (
+    PerformanceMetricsCollector,
+    collect_gpu_metrics,
+)
 
 
 @final
@@ -55,12 +66,14 @@ class PyTorchIPEXBackend(InferenceBackend):
         - Device manager for GPU detection and selection
         - Model loader for HuggingFace model loading
         - KV cache manager for efficient inference
+        - Performance metrics collector
+        - Health checker
         - Logging configuration
 
         Args:
             shard_downloader: Optional shard downloader for model weights (not used yet)
 
-        Requirements: 3.1
+        Requirements: 3.1, 9.1, 9.2, 10.5
         """
         logger.info("Initializing PyTorchIPEXBackend")
 
@@ -76,13 +89,35 @@ class PyTorchIPEXBackend(InferenceBackend):
         self._device_type = device_type
         self._device_id = device_id
 
-        logger.info(f"Selected device: {device_type}:{device_id}")
+        # Log device information
+        total_memory, free_memory = self._device_manager.get_device_memory(
+            device_type, device_id
+        )
+        log_device_info(
+            device_type=device_type,
+            device_id=device_id,
+            device_name=f"{device_type}:{device_id}",
+            total_memory_gb=total_memory / (1024**3),
+            free_memory_gb=free_memory / (1024**3),
+        )
 
         # Initialize KV cache manager
         self._cache_manager = KVCacheManager(
             device_type=device_type,
             device_id=device_id,
             memory_threshold_percent=80.0,
+        )
+
+        # Initialize performance metrics collector
+        self._metrics_collector = PerformanceMetricsCollector(
+            device_type=device_type,
+            device_id=device_id,
+        )
+
+        # Initialize health checker
+        self._health_checker = HealthChecker(
+            device_type=device_type,
+            device_id=device_id,
         )
 
         # Cache for loaded models: shard_key -> (model, tokenizer)
@@ -218,7 +253,7 @@ class PyTorchIPEXBackend(InferenceBackend):
             ModelError: If model loading fails
             DeviceError: If device is unavailable
 
-        Requirements: 2.1, 2.2
+        Requirements: 2.1, 2.2, 9.1, 9.2
         """
         shard_key = self._get_shard_key(shard_metadata)
 
@@ -229,6 +264,7 @@ class PyTorchIPEXBackend(InferenceBackend):
             return self._loaded_models[shard_key]
 
         logger.info(f"Loading shard: {shard_key}")
+        load_start_time = time.time()
 
         try:
             # Verify device is still available
@@ -252,15 +288,30 @@ class PyTorchIPEXBackend(InferenceBackend):
             self._loaded_models[shard_key] = (model, tokenizer)
             self._current_shard = shard_metadata
 
+            # Record model loaded in health checker
+            self._health_checker.record_model_loaded()
+
+            # Log model loading metrics
+            load_time = time.time() - load_start_time
+            log_model_info(
+                model_id=str(shard_metadata.model_card.model_id),
+                shard_info=f"layers {shard_metadata.start_layer}-{shard_metadata.end_layer}",
+                device=f"{self._device_type}:{self._device_id}",
+                optimization_applied=True,
+                load_time_seconds=load_time,
+            )
+
             logger.info(f"Successfully loaded and cached shard: {shard_key}")
 
             return model, tokenizer
 
         except DeviceError:
             # Re-raise device errors
+            self._health_checker.record_inference_error("Device error during model loading")
             raise
         except Exception as e:
             logger.error(f"Failed to load shard {shard_key}: {e}")
+            self._health_checker.record_inference_error(f"Model loading failed: {e}")
             raise ModelError(
                 message="Failed to load shard",
                 model_id=str(shard_metadata.model_card.model_id),
@@ -283,6 +334,7 @@ class PyTorchIPEXBackend(InferenceBackend):
         2. Gets or creates KV cache for the request
         3. Executes forward pass with cache
         4. Returns output and updated state
+        5. Records performance metrics
 
         Args:
             request_id: Unique identifier for this inference request
@@ -298,156 +350,201 @@ class PyTorchIPEXBackend(InferenceBackend):
             DeviceError: If device error occurs
             ModelError: If model error occurs
 
-        Requirements: 3.2, 4.1
+        Requirements: 3.2, 4.1, 9.1, 9.2
         """
-        try:
-            logger.debug(
-                f"Starting inference for request {request_id}, "
-                f"input shape: {input_data.shape}"
-            )
-
-            # Ensure correct shard is loaded
-            model, tokenizer = await self._ensure_shard(shard_metadata)
-
-            # Convert input to torch tensor
-            device = self._torch.device(f"{self._device_type}:{self._device_id}")
-            
+        inference_start_time = time.time()
+        
+        # Use log context for this inference
+        with LogContext(request_id=request_id, model_id=str(shard_metadata.model_card.model_id)):
             try:
-                input_tensor = self._torch.from_numpy(input_data).long().to(device)
-            except Exception as e:
-                raise DeviceError(
-                    message="Failed to move input tensor to device",
-                    device_type=self._device_type,
-                    device_id=self._device_id,
-                    original_error=e,
-                ) from e
-
-            # Get or create KV cache
-            cache = self._cache_manager.get_cache(request_id)
-            past_key_values = None
-
-            try:
-                if cache is None:
-                    # Create new cache
-                    logger.debug(f"Creating new cache for request {request_id}")
-                    cache = self._cache_manager.create_cache(
-                        request_id=request_id,
-                        num_layers=shard_metadata.n_layers,
-                        max_length=8192,
-                    )
-                else:
-                    # Extract past key values from cache
-                    if cache.keys[0] is not None:
-                        past_key_values = list(zip(cache.keys, cache.values))
-                        logger.debug(
-                            f"Using cached KV for request {request_id}, "
-                            f"position: {cache.position}"
-                        )
-            except Exception as e:
-                raise CacheError(
-                    message="Failed to get or create KV cache",
-                    request_id=request_id,
-                    original_error=e,
-                ) from e
-
-            # Execute forward pass
-            try:
-                with self._torch.no_grad():
-                    if hasattr(model, "forward"):
-                        # TransformerShard or custom model
-                        output, new_past_key_values = model.forward(
-                            input_data=input_tensor,
-                            past_key_values=past_key_values,
-                        )
-                    else:
-                        # Standard HuggingFace model
-                        outputs = model(
-                            input_ids=input_tensor,
-                            past_key_values=past_key_values,
-                            use_cache=True,
-                        )
-                        output = outputs.logits
-                        new_past_key_values = outputs.past_key_values
-            except Exception as e:
-                raise InferenceError(
-                    message="Forward pass failed",
-                    request_id=request_id,
-                    model_id=str(shard_metadata.model_card.model_id),
-                    original_error=e,
-                ) from e
-
-            # Check for NaN or invalid outputs
-            if self._torch.isnan(output).any():
-                raise InferenceError(
-                    message="Model output contains NaN values",
-                    request_id=request_id,
-                    model_id=str(shard_metadata.model_card.model_id),
+                logger.debug(
+                    f"Starting inference for request {request_id}, "
+                    f"input shape: {input_data.shape}"
                 )
 
-            # Update KV cache
-            try:
-                if new_past_key_values is not None:
-                    for layer_idx, (new_key, new_value) in enumerate(new_past_key_values):
-                        self._cache_manager.update_cache(
-                            request_id=request_id,
-                            layer_idx=layer_idx,
-                            new_key=new_key,
-                            new_value=new_value,
-                        )
-            except Exception as e:
-                raise CacheError(
-                    message="Failed to update KV cache",
-                    request_id=request_id,
-                    original_error=e,
-                ) from e
+                # Ensure correct shard is loaded
+                model, tokenizer = await self._ensure_shard(shard_metadata)
 
-            # Convert output to numpy
-            try:
-                output_np = output.cpu().numpy()
+                # Convert input to torch tensor
+                device = self._torch.device(f"{self._device_type}:{self._device_id}")
+                
+                try:
+                    input_tensor = self._torch.from_numpy(input_data).long().to(device)
+                except Exception as e:
+                    raise DeviceError(
+                        message="Failed to move input tensor to device",
+                        device_type=self._device_type,
+                        device_id=self._device_id,
+                        original_error=e,
+                    ) from e
+
+                # Get or create KV cache
+                cache = self._cache_manager.get_cache(request_id)
+                past_key_values = None
+                cache_hit = cache is not None
+
+                try:
+                    if cache is None:
+                        # Create new cache
+                        logger.debug(f"Creating new cache for request {request_id}")
+                        cache = self._cache_manager.create_cache(
+                            request_id=request_id,
+                            num_layers=shard_metadata.n_layers,
+                            max_length=8192,
+                        )
+                    else:
+                        # Extract past key values from cache
+                        if cache.keys[0] is not None:
+                            past_key_values = list(zip(cache.keys, cache.values))
+                            logger.debug(
+                                f"Using cached KV for request {request_id}, "
+                                f"position: {cache.position}"
+                            )
+                except Exception as e:
+                    raise CacheError(
+                        message="Failed to get or create KV cache",
+                        request_id=request_id,
+                        original_error=e,
+                    ) from e
+
+                # Execute forward pass
+                try:
+                    with self._torch.no_grad():
+                        if hasattr(model, "forward"):
+                            # TransformerShard or custom model
+                            output, new_past_key_values = model.forward(
+                                input_data=input_tensor,
+                                past_key_values=past_key_values,
+                            )
+                        else:
+                            # Standard HuggingFace model
+                            outputs = model(
+                                input_ids=input_tensor,
+                                past_key_values=past_key_values,
+                                use_cache=True,
+                            )
+                            output = outputs.logits
+                            new_past_key_values = outputs.past_key_values
+                except Exception as e:
+                    raise InferenceError(
+                        message="Forward pass failed",
+                        request_id=request_id,
+                        model_id=str(shard_metadata.model_card.model_id),
+                        original_error=e,
+                    ) from e
+
+                # Check for NaN or invalid outputs
+                if self._torch.isnan(output).any():
+                    raise InferenceError(
+                        message="Model output contains NaN values",
+                        request_id=request_id,
+                        model_id=str(shard_metadata.model_card.model_id),
+                    )
+
+                # Update KV cache
+                try:
+                    if new_past_key_values is not None:
+                        for layer_idx, (new_key, new_value) in enumerate(new_past_key_values):
+                            self._cache_manager.update_cache(
+                                request_id=request_id,
+                                layer_idx=layer_idx,
+                                new_key=new_key,
+                                new_value=new_value,
+                            )
+                except Exception as e:
+                    raise CacheError(
+                        message="Failed to update KV cache",
+                        request_id=request_id,
+                        original_error=e,
+                    ) from e
+
+                # Convert output to numpy
+                try:
+                    output_np = output.cpu().numpy()
+                except Exception as e:
+                    raise InferenceError(
+                        message="Failed to convert output to numpy",
+                        request_id=request_id,
+                        model_id=str(shard_metadata.model_card.model_id),
+                        original_error=e,
+                    ) from e
+
+                # Create new inference state
+                new_state: dict[str, object] = {
+                    "request_id": request_id,
+                    "position": cache.position + input_data.shape[1],
+                }
+
+                # Record performance metrics
+                inference_duration = time.time() - inference_start_time
+                tokens_generated = output_np.shape[1] if len(output_np.shape) > 1 else 1
+                
+                # Collect GPU metrics
+                gpu_metrics = collect_gpu_metrics(self._device_type, self._device_id)
+                memory_used_mb = gpu_metrics.get("memory_used_mb", 0.0)
+                gpu_utilization = gpu_metrics.get("gpu_utilization_percent")
+                
+                # Record metrics
+                self._metrics_collector.record_inference(
+                    request_id=request_id,
+                    tokens=tokens_generated,
+                    duration=inference_duration,
+                    memory_used=memory_used_mb,
+                    gpu_utilization=gpu_utilization,
+                    cache_hit=cache_hit,
+                )
+                
+                # Log inference metrics
+                log_inference_metrics(
+                    request_id=request_id,
+                    tokens_generated=tokens_generated,
+                    duration_seconds=inference_duration,
+                    tokens_per_second=tokens_generated / inference_duration if inference_duration > 0 else 0.0,
+                    memory_used_mb=memory_used_mb,
+                    cache_hit=cache_hit,
+                )
+                
+                # Record success in health checker
+                self._health_checker.record_inference_success()
+
+                logger.debug(
+                    f"Inference complete for request {request_id}, "
+                    f"output shape: {output_np.shape}"
+                )
+
+                return output_np, new_state
+
+            except (DeviceError, ModelError, InferenceError, CacheError) as e:
+                # Re-raise our custom errors
+                logger.error(f"Inference failed for request {request_id}: {e}")
+                
+                # Record error in health checker
+                self._health_checker.record_inference_error(str(e))
+                
+                # Clean up cache on error
+                try:
+                    self._cache_manager.evict_cache(request_id)
+                except Exception:
+                    pass  # Ignore cleanup errors
+                raise
             except Exception as e:
+                # Catch any unexpected errors
+                logger.error(f"Unexpected error during inference for request {request_id}: {e}")
+                
+                # Record error in health checker
+                self._health_checker.record_inference_error(f"Unexpected error: {e}")
+                
+                # Clean up cache on error
+                try:
+                    self._cache_manager.evict_cache(request_id)
+                except Exception:
+                    pass  # Ignore cleanup errors
                 raise InferenceError(
-                    message="Failed to convert output to numpy",
+                    message="Unexpected inference error",
                     request_id=request_id,
                     model_id=str(shard_metadata.model_card.model_id),
                     original_error=e,
                 ) from e
-
-            # Create new inference state
-            new_state: dict[str, object] = {
-                "request_id": request_id,
-                "position": cache.position + input_data.shape[1],
-            }
-
-            logger.debug(
-                f"Inference complete for request {request_id}, "
-                f"output shape: {output_np.shape}"
-            )
-
-            return output_np, new_state
-
-        except (DeviceError, ModelError, InferenceError, CacheError):
-            # Re-raise our custom errors
-            logger.error(f"Inference failed for request {request_id}")
-            # Clean up cache on error
-            try:
-                self._cache_manager.evict_cache(request_id)
-            except Exception:
-                pass  # Ignore cleanup errors
-            raise
-        except Exception as e:
-            # Catch any unexpected errors
-            logger.error(f"Unexpected error during inference for request {request_id}: {e}")
-            # Clean up cache on error
-            try:
-                self._cache_manager.evict_cache(request_id)
-            except Exception:
-                pass  # Ignore cleanup errors
-            raise InferenceError(
-                message="Unexpected inference error",
-                request_id=request_id,
-                model_id=str(shard_metadata.model_card.model_id),
-                original_error=e,
-            ) from e
 
     async def sample(self, logits: np.ndarray) -> np.ndarray:
         """
@@ -564,8 +661,10 @@ class PyTorchIPEXBackend(InferenceBackend):
             - device_info: Device information
             - cache_stats: KV cache statistics
             - loaded_models: Number of loaded models
+            - performance_metrics: Performance statistics
+            - health_status: Health check results
 
-        Requirements: 9.2
+        Requirements: 9.2, 10.5
         """
         stats: dict[str, object] = {
             "device_type": self._device_type,
@@ -583,7 +682,37 @@ class PyTorchIPEXBackend(InferenceBackend):
         cache_stats = self._cache_manager.get_stats()
         stats["cache"] = cache_stats
 
+        # Add performance metrics
+        performance_stats = self._metrics_collector.get_stats()
+        stats["performance"] = performance_stats
+
+        # Add health status
+        health_summary = self._health_checker.get_health_summary()
+        stats["health"] = health_summary
+
         return stats
+
+    def get_health_status(self) -> dict[str, Any]:
+        """
+        Get detailed health status.
+
+        Returns:
+            Dictionary with health check results
+
+        Requirements: 10.5
+        """
+        return self._health_checker.get_health_summary()
+
+    def get_performance_metrics(self) -> dict[str, Any]:
+        """
+        Get performance metrics.
+
+        Returns:
+            Dictionary with performance statistics
+
+        Requirements: 9.2
+        """
+        return self._metrics_collector.get_stats()
 
     def cleanup(self) -> None:
         """
@@ -593,8 +722,9 @@ class PyTorchIPEXBackend(InferenceBackend):
         - Clears all KV caches
         - Unloads all models
         - Frees GPU memory
+        - Records cleanup in health checker
 
-        Requirements: 3.4
+        Requirements: 3.4, 10.5
         """
         logger.info("Cleaning up PyTorchIPEXBackend")
 
@@ -604,6 +734,9 @@ class PyTorchIPEXBackend(InferenceBackend):
         # Clear loaded models
         self._loaded_models.clear()
         self._current_shard = None
+
+        # Record model unloaded
+        self._health_checker.record_model_unloaded()
 
         # Clear model loader cache
         self._model_loader.clear_cache()

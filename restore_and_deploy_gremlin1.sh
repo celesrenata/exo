@@ -179,16 +179,16 @@ echo ""
 # Step 4: Build (don't switch yet)
 echo "Step 4: Building configuration..."
 if ssh "$GREMLIN1_HOST" "nixos-rebuild build --flake /etc/nixos#gremlin-1"; then
-    echo "✓ Build successful"
-    echo ""
-    echo "Configuration built successfully!"
-    echo ""
-    echo "To apply the configuration, run:"
-    echo "  ssh root@10.1.1.12 'nixos-rebuild switch --flake /etc/nixos#gremlin-1'"
-    echo ""
-    echo "Or to test it first:"
-    echo "  ssh root@10.1.1.12 'nixos-rebuild test --flake /etc/nixos#gremlin-1'"
+  echo "✓ Build successful"
+  echo ""
+  echo "Configuration built successfully!"
+  echo ""
+  echo "To apply the configuration, run:"
+  echo "  ssh root@10.1.1.12 'nixos-rebuild switch --flake /etc/nixos#gremlin-1'"
+  echo ""
+  echo "Or to test it first:"
+  echo "  ssh root@10.1.1.12 'nixos-rebuild test --flake /etc/nixos#gremlin-1'"
 else
-    echo "✗ Build failed"
-    exit 1
+  echo "✗ Build failed"
+  exit 1
 fi

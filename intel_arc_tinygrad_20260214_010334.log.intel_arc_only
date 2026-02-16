@@ -1,0 +1,6 @@
+Feb 14 01:03:52 gremlin-1 exo[1117701]: [INTEL ARC DEBUG] ===== DEVICE INFORMATION =====
+Feb 14 01:03:52 gremlin-1 exo[1117701]: [INTEL ARC DEBUG] Device: NVIDIA GeForce RTX 4070 Ti SUPER
+Feb 14 01:03:52 gremlin-1 exo[1117701]: [INTEL ARC DEBUG] Driver: 580.126.09
+Feb 14 01:03:52 gremlin-1 exo[1117701]: [INTEL ARC DEBUG] ==============================
+Feb 14 01:03:52 gremlin-1 exo[1117701]: [INTEL ARC DEBUG] Allocation #2: 1576009728 bytes (1503.00 MB / 1.468 GB)
+Feb 14 01:03:52 gremlin-1 exo[1117701]: [INTEL ARC DEBUG]   Context: /nix/store/qk6in5b1ixjpx0djis1s1zrr10j0cwry-python3.13-tinygrad-0.11.0/lib/python3.13/site-packages/tinygrad/device.py:226 in alloc

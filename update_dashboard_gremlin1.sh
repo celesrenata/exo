@@ -19,7 +19,7 @@ fi
 
 # Find where exo is installed on gremlin-1
 echo "Finding exo installation path on gremlin-1..."
-EXO_PATH=$(ssh root@${TARGET_IP} "readlink -f \$(which exo)")
+EXO_PATH=$(ssh root@${TARGET_IP} 'readlink -f $(which exo)')
 echo "Exo binary: $EXO_PATH"
 
 # Get the package directory (should be something like /nix/store/xxx-exo-0.3.0)

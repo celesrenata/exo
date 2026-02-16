@@ -15,8 +15,8 @@ EXO_PATH=$(ssh $GREMLIN_HOST "ls -dt /nix/store/*-exo-0.3.0 2>/dev/null | head -
 echo "Found exo at: $EXO_PATH"
 
 if [ -z "$EXO_PATH" ]; then
-    echo "ERROR: Could not find exo installation"
-    exit 1
+  echo "ERROR: Could not find exo installation"
+  exit 1
 fi
 
 echo ""

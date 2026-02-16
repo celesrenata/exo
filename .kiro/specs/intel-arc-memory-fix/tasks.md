@@ -9,14 +9,14 @@
   - Add device information logging at startup
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-- [-] 2. Deploy and verify diagnostic logging
+- [x] 2. Deploy and verify diagnostic logging
   - Commit and push diagnostic patch changes
   - Deploy to gremlin-1 using `force_update_gremlin1.sh`
   - Verify service starts successfully
   - Check that diagnostic logs appear in journalctl
   - _Requirements: 1.5, 5.1, 5.5_
 
-- [ ] 3. Trigger model loading and capture diagnostics
+- [x] 3. Trigger model loading and capture diagnostics
   - Send inference request to trigger Llama-3.2-3B-Instruct loading
   - Monitor logs in real-time for allocation messages
   - Capture all `[INTEL ARC DEBUG]` log entries

@@ -85,11 +85,11 @@ fi
 log_info "Step 5: Checking for exo systemd service..."
 if $SSH_CMD "systemctl list-unit-files | grep -q exo.service"; then
   log_success "exo.service is available"
-  
+
   # Check service status
   SERVICE_STATUS=$($SSH_CMD "systemctl is-active exo.service 2>/dev/null || echo 'inactive'")
   log_info "Service status: $SERVICE_STATUS"
-  
+
   if [ "$SERVICE_STATUS" != "active" ]; then
     log_info "Starting exo service..."
     if $SSH_CMD "systemctl start exo.service"; then
@@ -112,12 +112,12 @@ for i in {1..30}; do
     log_success "exo API is responding"
     break
   fi
-  
+
   if [ $i -eq 30 ]; then
     log_warn "API not responding after 30 seconds"
     log_info "Check service logs: ssh root@${TARGET_IP} journalctl -u exo.service -f"
   fi
-  
+
   sleep 1
 done
 

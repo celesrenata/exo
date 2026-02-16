@@ -1,0 +1,312 @@
+warning: ignoring the client-specified setting 'sandbox', because it is a restricted setting and you are not a trusted user
+warning: ignoring the client-specified setting 'sandbox', because it is a restricted setting and you are not a trusted user
+these 4 derivations will be built:
+  /nix/store/d571y5d7mvmix6jxvxbkgklris8y1vmp-libffi-3.3.drv
+  /nix/store/i6xg329grbk96zr826v6pk4yxg0rcqv5-intel-dpcpp-2025.3.drv
+  /nix/store/cl2hp4axlm7s6pqh4wf4zi2sljdgasr7-intel-mkl-2025.3.0.drv
+  /nix/store/lacv0xw7875zmfrqr63mhmvrjs85ps9m-python3.13-intel_extension_for_pytorch-2.8.10.drv
+building '/nix/store/d571y5d7mvmix6jxvxbkgklris8y1vmp-libffi-3.3.drv' on 'ssh-ng://gremlin-1'...
+copying 0 paths...
+building '/nix/store/d571y5d7mvmix6jxvxbkgklris8y1vmp-libffi-3.3.drv'...
+libffi> Running phase: unpackPhase
+libffi> unpacking source archive /nix/store/xf097h6i4i3dpg4dk45zzpkbfz6kw6cf-libffi-3.3.tar.gz
+libffi> source root is libffi-3.3
+libffi> setting SOURCE_DATE_EPOCH to timestamp 1574525816 of file "libffi-3.3/doc/libffi.pdf"
+libffi> Running phase: patchPhase
+libffi> Running phase: updateAutotoolsGnuConfigScriptsPhase
+libffi> Updating Autotools / GNU config script to a newer upstream version: ./config.sub
+libffi> Updating Autotools / GNU config script to a newer upstream version: ./config.guess
+libffi> Running phase: configurePhase
+libffi> fixing libtool script ./ltmain.sh
+libffi> ./configure
+libffi> patching script interpreter paths in ./configure
+libffi> ./configure: interpreter directive changed from "#! /bin/sh" to "/nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/sh"
+libffi> configure flags: --disable-static --disable-dependency-tracking --prefix=/nix/store/my07divq2dvk4sjipg7zc16qv5k5j9lw-libffi-3.3 --bindir=/nix/store/my07divq2dvk4sjipg7zc16qv5k5j9lw-libffi-3.3/bin --sbindir=/nix/store/my07divq2dvk4sjipg7zc16qv5k5j9lw-libffi-3.3/sbin --includedir=/nix/store/59c15jvh875hqfaamclqajwyki8qss0g-libffi-3.3-dev/include --mandir=/nix/store/p0hggx72c4nwayjqhigs4wj81zpqjr0h-libffi-3.3-man/share/man --infodir=/nix/store/z6alk18j5r8ia3v54gfrxibysg7ljgw1-libffi-3.3-info/share/info --docdir=/nix/store/my07divq2dvk4sjipg7zc16qv5k5j9lw-libffi-3.3/share/doc/libffi --libdir=/nix/store/my07divq2dvk4sjipg7zc16qv5k5j9lw-libffi-3.3/lib --libexecdir=/nix/store/my07divq2dvk4sjipg7zc16qv5k5j9lw-libffi-3.3/libexec --localedir=/nix/store/my07divq2dvk4sjipg7zc16qv5k5j9lw-libffi-3.3/share/locale --with-gcc-arch=generic --enable-pax_emutramp --disable-exec-static-tramp
+libffi> configure: WARNING: unrecognized options: --disable-exec-static-tramp
+libffi> checking build system type... x86_64-pc-linux-gnu
+libffi> checking host system type... x86_64-pc-linux-gnu
+libffi> checking target system type... x86_64-pc-linux-gnu
+libffi> continue configure in default builddir "./x86_64-pc-linux-gnu"
+libffi> ....exec /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash .././configure "--srcdir=.." "--enable-builddir=x86_64-pc-linux-gnu" "linux
+libffi> gnu"
+libffi> configure: WARNING: unrecognized options: --disable-exec-static-tramp
+libffi> checking build system type... x86_64-pc-linux-gnu
+libffi> checking host system type... x86_64-pc-linux-gnu
+libffi> checking target system type... x86_64-pc-linux-gnu
+libffi> checking for gsed... sed
+libffi> checking for a BSD-compatible install... /nix/store/d75200gb22v7p0703h5jrkgg8bqydk5q-coreutils-9.8/bin/install -c
+libffi> checking whether build environment is sane... yes
+libffi> checking for a thread-safe mkdir -p... /nix/store/d75200gb22v7p0703h5jrkgg8bqydk5q-coreutils-9.8/bin/mkdir -p
+libffi> checking for gawk... gawk
+libffi> checking whether make sets $(MAKE)... yes
+libffi> checking whether make supports nested variables... yes
+libffi> checking for gcc... gcc
+libffi> checking whether the C compiler works... yes
+libffi> checking for C compiler default output file name... a.out
+libffi> checking for suffix of executables...
+libffi> checking whether we are cross compiling... no
+libffi> checking for suffix of object files... o
+libffi> checking whether we are using the GNU C compiler... yes
+libffi> checking whether gcc accepts -g... yes
+libffi> checking for gcc option to accept ISO C89... none needed
+libffi> checking whether gcc understands -c and -o together... yes
+libffi> checking whether make supports the include directive... yes (GNU style)
+libffi> checking dependency style of gcc... none
+libffi> checking whether we are using the GNU C++ compiler... yes
+libffi> checking whether g++ accepts -g... yes
+libffi> checking dependency style of g++... none
+libffi> checking dependency style of gcc... none
+libffi> checking how to print strings... printf
+libffi> checking for a sed that does not truncate output... /nix/store/k06ssckzrzn9jjvvs4n62m6567zmbx6x-gnused-4.9/bin/sed
+libffi> checking for grep that handles long lines and -e... /nix/store/qfmq7p42ak5yn389qvx7zpxkan5i4xiy-gnugrep-3.12/bin/grep
+libffi> checking for egrep... /nix/store/qfmq7p42ak5yn389qvx7zpxkan5i4xiy-gnugrep-3.12/bin/grep -E
+libffi> checking for fgrep... /nix/store/qfmq7p42ak5yn389qvx7zpxkan5i4xiy-gnugrep-3.12/bin/grep -F
+libffi> checking for ld used by gcc... ld
+libffi> checking if the linker (ld) is GNU ld... yes
+libffi> checking for BSD- or MS-compatible name lister (nm)... nm
+libffi> checking the name lister (nm) interface... BSD nm
+libffi> checking whether ln -s works... yes
+libffi> checking the maximum length of command line arguments... 1572864
+libffi> checking how to convert x86_64-pc-linux-gnu file names to x86_64-pc-linux-gnu format... func_convert_file_noop
+libffi> checking how to convert x86_64-pc-linux-gnu file names to toolchain format... func_convert_file_noop
+libffi> checking for ld option to reload object files... -r
+libffi> checking for objdump... objdump
+libffi> checking how to recognize dependent libraries... (cached) pass_all
+libffi> checking for dlltool... no
+libffi> checking how to associate runtime and link libraries... printf %s\n
+libffi> checking for archiver @FILE support... @
+libffi> checking for strip... strip
+libffi> checking for ranlib... ranlib
+libffi> checking command to parse nm output from gcc object... ok
+libffi> checking for sysroot... no
+libffi> checking for a working dd... /nix/store/d75200gb22v7p0703h5jrkgg8bqydk5q-coreutils-9.8/bin/dd
+libffi> checking how to truncate binary pipes... /nix/store/d75200gb22v7p0703h5jrkgg8bqydk5q-coreutils-9.8/bin/dd bs=4096 count=1
+libffi> checking for mt... no
+libffi> checking if : is a manifest tool... no
+libffi> checking how to run the C preprocessor... gcc -E
+libffi> checking for ANSI C header files... yes
+libffi> checking for sys/types.h... yes
+libffi> checking for sys/stat.h... yes
+libffi> checking for stdlib.h... yes
+libffi> checking for string.h... yes
+libffi> checking for memory.h... yes
+libffi> checking for strings.h... yes
+libffi> checking for inttypes.h... yes
+libffi> checking for stdint.h... yes
+libffi> checking for unistd.h... yes
+libffi> checking for dlfcn.h... yes
+libffi> checking for objdir... .libs
+libffi> checking if gcc supports -fno-rtti -fno-exceptions... no
+libffi> checking for gcc option to produce PIC... -fPIC -DPIC
+libffi> checking if gcc PIC flag -fPIC -DPIC works... yes
+libffi> checking if gcc static flag -static works... no
+libffi> checking if gcc supports -c -o file.o... yes
+libffi> checking if gcc supports -c -o file.o... (cached) yes
+libffi> checking whether the gcc linker (ld -m elf_x86_64) supports shared libraries... yes
+libffi> checking whether -lc should be explicitly linked in... no
+libffi> checking dynamic linker characteristics... GNU/Linux ld.so
+libffi> checking how to hardcode library paths into programs... immediate
+libffi> checking whether stripping libraries is possible... yes
+libffi> checking if libtool supports shared libraries... yes
+libffi> checking whether to build shared libraries... yes
+libffi> checking whether to build static libraries... no
+libffi> checking how to run the C++ preprocessor... g++ -E
+libffi> checking for ld used by g++... ld -m elf_x86_64
+libffi> checking if the linker (ld -m elf_x86_64) is GNU ld... yes
+libffi> checking whether the g++ linker (ld -m elf_x86_64) supports shared libraries... yes
+libffi> checking for g++ option to produce PIC... -fPIC -DPIC
+libffi> checking if g++ PIC flag -fPIC -DPIC works... yes
+libffi> checking if g++ static flag -static works... no
+libffi> checking if g++ supports -c -o file.o... yes
+libffi> checking if g++ supports -c -o file.o... (cached) yes
+libffi> checking whether the g++ linker (ld -m elf_x86_64) supports shared libraries... yes
+libffi> checking dynamic linker characteristics... (cached) GNU/Linux ld.so
+libffi> checking how to hardcode library paths into programs... immediate
+libffi> checking size of size_t... 8
+libffi> checking for C compiler vendor... gnu
+libffi> checking whether C compiler accepts -fstrict-aliasing... yes
+libffi> checking whether C compiler accepts -ffast-math... yes
+libffi> checking for gcc architecture flag...
+libffi> checking whether C compiler accepts -march=generic... no
+libffi> checking whether C compiler accepts -mcpu=generic... yes
+libffi> checking for gcc architecture flag... -mcpu=generic
+libffi> checking whether C compiler accepts -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic... yes
+libffi> checking CFLAGS for maximum warnings... -Wall
+libffi> checking whether to enable maintainer-specific portions of Makefiles... no
+libffi> checking sys/mman.h usability... yes
+libffi> checking sys/mman.h presence... yes
+libffi> checking for sys/mman.h... yes
+libffi> checking for mmap... yes
+libffi> checking for mkostemp... yes
+libffi> checking for sys/mman.h... (cached) yes
+libffi> checking for mmap... (cached) yes
+libffi> checking whether read-only mmap of a plain file works... yes
+libffi> checking whether mmap from /dev/zero works... yes
+libffi> checking for MAP_ANON(YMOUS)... yes
+libffi> checking whether mmap with MAP_ANON(YMOUS) works... yes
+libffi> checking for ANSI C header files... (cached) yes
+libffi> checking for memcpy... yes
+libffi> checking for size_t... yes
+libffi> checking for working alloca.h... yes
+libffi> checking for alloca... yes
+libffi> checking size of double... 8
+libffi> checking size of long double... 16
+libffi> checking whether byte ordering is bigendian... no
+libffi> checking assembler .cfi pseudo-op support... yes
+libffi> checking assembler supports pc related relocs... yes
+libffi> checking for _ prefix in compiled symbols... no
+libffi> checking toolchain supports unwind section type... yes
+libffi> checking whether .eh_frame section should be read-only... yes
+libffi> checking for __attribute__((visibility("hidden")))... yes
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> checking for ld used by gcc... (cached) ld
+libffi> checking if the linker (ld) is GNU ld... (cached) yes
+libffi> checking for shared libgcc... yes
+libffi> configure: versioning on shared library symbols is gnu
+libffi> checking that generated files are newer than configure... done
+libffi> configure: creating ./config.status
+libffi> config.status: creating include/Makefile
+libffi> config.status: creating include/ffi.h
+libffi> config.status: creating Makefile
+libffi> config.status: creating testsuite/Makefile
+libffi> config.status: creating man/Makefile
+libffi> config.status: creating doc/Makefile
+libffi> config.status: creating libffi.pc
+libffi> config.status: creating fficonfig.h
+libffi> config.status: executing buildir commands
+libffi> config.status: create top_srcdir/Makefile guessed from local Makefile
+libffi> config.status: build in x86_64-pc-linux-gnu (HOST=)
+libffi> config.status: executing depfiles commands
+libffi> config.status: executing libtool commands
+libffi> config.status: executing include commands
+libffi> config.status: executing src commands
+libffi> configure: WARNING: unrecognized options: --disable-exec-static-tramp
+libffi> Running phase: buildPhase
+libffi> build flags: SHELL=/nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash
+libffi> MAKE x86_64-pc-linux-gnu : 0 * all-all
+libffi> make[1]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu'
+libffi> make  all-recursive
+libffi> make[2]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu'
+libffi> Making all in include
+libffi> make[3]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu/include'
+libffi> make[3]: Nothing to be done for 'all'.
+libffi> make[3]: Leaving directory '/build/libffi-3.3/x86_64-pc-linux-gnu/include'
+libffi> Making all in testsuite
+libffi> make[3]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu/testsuite'
+libffi> make[3]: Nothing to be done for 'all'.
+libffi> make[3]: Leaving directory '/build/libffi-3.3/x86_64-pc-linux-gnu/testsuite'
+libffi> Making all in man
+libffi> make[3]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu/man'
+libffi> make[3]: Nothing to be done for 'all'.
+libffi> make[3]: Leaving directory '/build/libffi-3.3/x86_64-pc-linux-gnu/man'
+libffi> Making all in doc
+libffi> make[3]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu/doc'
+libffi> make[3]: Nothing to be done for 'all'.
+libffi> make[3]: Leaving directory '/build/libffi-3.3/x86_64-pc-linux-gnu/doc'
+libffi> make[3]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu'
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src   -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c -o src/prep_cif.lo ../src/prep_cif.c
+libffi> libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -I. -I../include -Iinclude -I../src -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c ../src/prep_cif.c  -fPIC -DPIC -o src/.libs/prep_cif.o
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src   -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c -o src/types.lo ../src/types.c
+libffi> libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -I. -I../include -Iinclude -I../src -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c ../src/types.c  -fPIC -DPIC -o src/.libs/types.o
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src   -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c -o src/raw_api.lo ../src/raw_api.c
+libffi> libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -I. -I../include -Iinclude -I../src -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c ../src/raw_api.c  -fPIC -DPIC -o src/.libs/raw_api.o
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src   -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c -o src/java_raw_api.lo ../src/java_raw_api.c
+libffi> libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -I. -I../include -Iinclude -I../src -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c ../src/java_raw_api.c  -fPIC -DPIC -o src/.libs/java_raw_api.o
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> ../src/java_raw_api.c: In function 'ffi_java_raw_call':
+libffi> ../src/java_raw_api.c:317:3: warning: 'ffi_java_raw_to_ptrarray' is deprecated [-Wdeprecated-declarations]
+libffi>   317 |   ffi_java_raw_to_ptrarray (cif, raw, avalue);
+libffi>       |   ^~~~~~~~~~~~~~~~~~~~~~~~
+libffi> ../src/java_raw_api.c:76:1: note: declared here
+libffi>    76 | ffi_java_raw_to_ptrarray (ffi_cif *cif, ffi_java_raw *raw, void **args)
+libffi>       | ^~~~~~~~~~~~~~~~~~~~~~~~
+libffi> ../src/java_raw_api.c: In function 'ffi_java_translate_args':
+libffi> ../src/java_raw_api.c:328:3: warning: 'ffi_java_raw_size' is deprecated [-Wdeprecated-declarations]
+libffi>   328 |   ffi_java_raw *raw = (ffi_java_raw*)alloca (ffi_java_raw_size (cif));
+libffi>       |   ^~~~~~~~~~~~
+libffi> ../src/java_raw_api.c:45:1: note: declared here
+libffi>    45 | ffi_java_raw_size (ffi_cif *cif)
+libffi>       | ^~~~~~~~~~~~~~~~~
+libffi> ../src/java_raw_api.c:331:3: warning: 'ffi_java_ptrarray_to_raw' is deprecated [-Wdeprecated-declarations]
+libffi>   331 |   ffi_java_ptrarray_to_raw (cif, avalue, raw);
+libffi>       |   ^~~~~~~~~~~~~~~~~~~~~~~~
+libffi> ../src/java_raw_api.c:157:1: note: declared here
+libffi>   157 | ffi_java_ptrarray_to_raw (ffi_cif *cif, void **args, ffi_java_raw *raw)
+libffi>       | ^~~~~~~~~~~~~~~~~~~~~~~~
+libffi> ../src/java_raw_api.c: In function 'ffi_prep_java_raw_closure':
+libffi> ../src/java_raw_api.c:369:3: warning: 'ffi_prep_java_raw_closure_loc' is deprecated [-Wdeprecated-declarations]
+libffi>   369 |   return ffi_prep_java_raw_closure_loc (cl, cif, fun, user_data, cl);
+libffi>       |   ^~~~~~
+libffi> ../src/java_raw_api.c:337:1: note: declared here
+libffi>   337 | ffi_prep_java_raw_closure_loc (ffi_java_raw_closure* cl,
+libffi>       | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src   -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c -o src/closures.lo ../src/closures.c
+libffi> libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -I. -I../include -Iinclude -I../src -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c ../src/closures.c  -fPIC -DPIC -o src/.libs/closures.o
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src   -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c -o src/x86/ffi64.lo ../src/x86/ffi64.c
+libffi> libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -I. -I../include -Iinclude -I../src -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c ../src/x86/ffi64.c  -fPIC -DPIC -o src/x86/.libs/ffi64.o
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src  -I. -I../include -Iinclude -I../src  -c -o src/x86/unix64.lo ../src/x86/unix64.S
+libffi> libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -I. -I../include -Iinclude -I../src -I. -I../include -Iinclude -I../src -c ../src/x86/unix64.S  -fPIC -DPIC -o src/x86/.libs/unix64.o
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src   -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c -o src/x86/ffiw64.lo ../src/x86/ffiw64.c
+libffi> libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -I. -I../include -Iinclude -I../src -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -c ../src/x86/ffiw64.c  -fPIC -DPIC -o src/x86/.libs/ffiw64.o
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src  -I. -I../include -Iinclude -I../src  -c -o src/x86/win64.lo ../src/x86/win64.S
+libffi> libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -I. -I../include -Iinclude -I../src -I. -I../include -Iinclude -I../src -c ../src/x86/win64.S  -fPIC -DPIC -o src/x86/.libs/win64.o
+libffi> gcc -DHAVE_CONFIG_H -I. -I..  -I. -I../include -Iinclude -I../src   -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -DX86_64 -E -x assembler-with-cpp -o libffi.map ../libffi.map.in
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=link gcc  -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions   -o libffi_convenience.la  src/prep_cif.lo src/types.lo src/raw_api.lo src/java_raw_api.lo src/closures.lo   src/x86/ffi64.lo src/x86/unix64.lo src/x86/ffiw64.lo src/x86/win64.lo
+libffi> libtool: link: ar cru .libs/libffi_convenience.a src/.libs/prep_cif.o src/.libs/types.o src/.libs/raw_api.o src/.libs/java_raw_api.o src/.libs/closures.o src/x86/.libs/ffi64.o src/x86/.libs/unix64.o src/x86/.libs/ffiw64.o src/x86/.libs/win64.o
+libffi> ar: `u' modifier ignored since `D' is the default (see `U')
+libffi> libtool: link: ranlib .libs/libffi_convenience.a
+libffi> libtool: link: ( cd ".libs" && rm -f "libffi_convenience.la" && ln -s "../libffi_convenience.la" "libffi_convenience.la" )
+libffi> /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash ./libtool  --tag=CC   --mode=link gcc  -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math -mcpu=generic -Wall -fexceptions -no-undefined -version-info `grep -v '^#' ../libtool-version` -Wl,--version-script,libffi.map    -o libffi.la -rpath /nix/store/my07divq2dvk4sjipg7zc16qv5k5j9lw-libffi-3.3/lib/../lib64 src/prep_cif.lo src/types.lo src/raw_api.lo src/java_raw_api.lo src/closures.lo  src/x86/ffi64.lo src/x86/unix64.lo src/x86/ffiw64.lo src/x86/win64.lo
+libffi> libtool: link: gcc -shared  -fPIC -DPIC  src/.libs/prep_cif.o src/.libs/types.o src/.libs/raw_api.o src/.libs/java_raw_api.o src/.libs/closures.o src/x86/.libs/ffi64.o src/x86/.libs/unix64.o src/x86/.libs/ffiw64.o src/x86/.libs/win64.o    -O3 -mcpu=generic -Wl,--version-script -Wl,libffi.map   -Wl,-soname -Wl,libffi.so.7 -o .libs/libffi.so.7.1.0
+libffi> gcc: warning: '-mcpu=' is deprecated; use '-mtune=' or '-march=' instead
+libffi> libtool: link: (cd ".libs" && rm -f "libffi.so.7" && ln -s "libffi.so.7.1.0" "libffi.so.7")
+libffi> libtool: link: (cd ".libs" && rm -f "libffi.so" && ln -s "libffi.so.7.1.0" "libffi.so")
+libffi> libtool: link: ( cd ".libs" && rm -f "libffi.la" && ln -s "../libffi.la" "libffi.la" )
+libffi> make[3]: Leaving directory '/build/libffi-3.3/x86_64-pc-linux-gnu'
+libffi> make[2]: Leaving directory '/build/libffi-3.3/x86_64-pc-linux-gnu'
+libffi> make[1]: Leaving directory '/build/libffi-3.3/x86_64-pc-linux-gnu'
+libffi> Running phase: checkPhase
+libffi> check flags: SHELL=/nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash VERBOSE=y check
+libffi> MAKE x86_64-pc-linux-gnu : 0 * check
+libffi> make[1]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu'
+libffi> Making check in include
+libffi> make[2]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu/include'
+libffi> make[2]: Nothing to be done for 'check'.
+libffi> make[2]: Leaving directory '/build/libffi-3.3/x86_64-pc-linux-gnu/include'
+libffi> Making check in testsuite
+libffi> make[2]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu/testsuite'
+libffi> make  check-DEJAGNU
+libffi> make[3]: Entering directory '/build/libffi-3.3/x86_64-pc-linux-gnu/testsuite'
+libffi> Making a new site.exp file ...
+libffi> srcdir='../../testsuite'; export srcdir; \
+libffi> EXPECT=expect; export EXPECT; \
+libffi> if /nix/store/lw117lsr8d585xs63kx5k233impyrq7q-bash-5.3p3/bin/bash -c "runtest --version" > /dev/null 2>&1; then \
+libffi>   exit_status=0; l='libffi'; for tool in $l; do \
+libffi>     if runtest --tool $tool --srcdir $srcdir  ; \
+libffi>     then :; else exit_status=1; fi; \
+libffi>   done; \
+libffi> else echo "WARNING: could not find 'runtest'" 1>&2; :;\
+libffi> fi; \
+libffi> exit $exit_status
+libffi> WARNING: Couldn't find the global config file.
+libffi> Using ../../testsuite/lib/libffi.exp as tool init file.
+libffi> Test run by nixbld on Sat Feb 14 23:09:41 2026
+libffi> Native configuration is x86_64-pc-linux-gnu
+libffi> 
+libffi>                 === libffi tests ===
+libffi> 
+libffi> Schedule of variations:
+libffi>     unix
+libffi> 
+libffi> Running target unix
+libffi> Using /nix/store/lrnaa2l444n5mqmb1p0mcb4lq6nmg17r-dejagnu-1.6.3/share/dejagnu/baseboards/unix.exp as board description file for target.
+libffi> Using /nix/store/lrnaa2l444n5mqmb1p0mcb4lq6nmg17r-dejagnu-1.6.3/share/dejagnu/config/unix.exp as generic interface file for target.
+libffi> Using ../../testsuite/config/default.exp as tool-and-target-specific interface file.
+libffi> Running ../../testsuite/libffi.bhaible/bhaible.exp ...

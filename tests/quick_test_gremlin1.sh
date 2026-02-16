@@ -99,7 +99,7 @@ echo ""
 echo "Test 8: Exo API"
 if curl -s --connect-timeout 5 "http://${TARGET_IP}:52415/health" >/dev/null 2>&1; then
   pass "API is responding"
-  
+
   # Check models endpoint
   if curl -s --connect-timeout 5 "http://${TARGET_IP}:52415/v1/models" | grep -q "data"; then
     pass "OpenAI-compatible API is working"

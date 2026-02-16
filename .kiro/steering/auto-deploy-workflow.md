@@ -1,39 +1,48 @@
----
-inclusion: manual
----
-
 # Auto-Deploy Workflow
 
-## Post-Push Deployment
+## Post-Push Deployment to Gremlin-1
 
-When pushing code changes to the repository, follow this workflow:
+When pushing code changes to the repository, automatically deploy to the gremlin-1 test machine.
 
-1. **Push changes** to the remote repository
-2. **Wait 5 seconds** to allow GitHub to process the push
-3. **Run deployment script** to update gremlin-1 test machine
+### Workflow
+
+After executing `git push origin ipex`:
+
+1. **Wait 5 seconds** to allow GitHub to process the push
+2. **Run deployment script**: `bash force_update_gremlin1.sh`
 
 ### Implementation
 
-After executing `git push`, automatically:
 ```bash
+# After git push
 sleep 5
-./force_update_gremlin1.sh
+bash force_update_gremlin1.sh
 ```
 
-This ensures that:
-- GitHub has time to process the push
-- The remote test machine (gremlin-1) gets the latest code
-- Testing can begin immediately with the new changes
+### What This Does
 
-### Usage
+The `force_update_gremlin1.sh` script:
+- Pulls latest code from GitHub on gremlin-1
+- Rebuilds the NixOS configuration with new code
+- Restarts the exo service
+- Verifies the service is running
+- Shows service status and logs
 
-This workflow applies when:
+### When to Use
+
+Apply this workflow when:
 - Pushing to the `ipex` branch
 - Working on PyTorch+IPEX backend development
-- Testing changes on the gremlin-1 remote machine
+- Making changes that need testing on Intel Arc GPU hardware
+- Deploying to the gremlin-1 remote test machine (10.1.1.12)
 
-The `force_update_gremlin1.sh` script will:
-- Pull the latest code from GitHub
-- Rebuild the NixOS configuration
-- Restart the exo service
-- Make the changes available for testing
+### Verification
+
+After deployment completes:
+- Dashboard available at: http://10.1.1.12:52415
+- Check service status: `ssh root@10.1.1.12 "systemctl status exo"`
+- View logs: `ssh root@10.1.1.12 "journalctl -u exo -f"`
+
+### Note
+
+The 5-second wait ensures GitHub has processed the push before gremlin-1 attempts to pull the changes.

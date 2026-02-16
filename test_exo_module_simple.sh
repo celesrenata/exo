@@ -12,10 +12,10 @@ echo ""
 # Check if exo is installed
 echo "1. Checking if exo is installed..."
 if ssh "$GREMLIN1_HOST" "which exo"; then
-    echo "✓ exo is installed"
+  echo "✓ exo is installed"
 else
-    echo "✗ exo is not installed"
-    exit 1
+  echo "✗ exo is not installed"
+  exit 1
 fi
 
 # Check GPU detection
@@ -27,18 +27,18 @@ ssh "$GREMLIN1_HOST" "lspci | grep -i 'vga.*intel'"
 echo ""
 echo "3. Checking if tinygrad is available..."
 if ssh "$GREMLIN1_HOST" "python3 -c 'import tinygrad; print(f\"tinygrad {tinygrad.__version__}\")'" 2>/dev/null; then
-    echo "✓ tinygrad is available"
+  echo "✓ tinygrad is available"
 else
-    echo "✗ tinygrad is not available"
+  echo "✗ tinygrad is not available"
 fi
 
 # Check OpenCL
 echo ""
 echo "4. Checking OpenCL..."
 if ssh "$GREMLIN1_HOST" "which clinfo" >/dev/null 2>&1; then
-    ssh "$GREMLIN1_HOST" "clinfo | grep -A 3 'Platform Name'"
+  ssh "$GREMLIN1_HOST" "clinfo | grep -A 3 'Platform Name'"
 else
-    echo "⚠ clinfo not installed"
+  echo "⚠ clinfo not installed"
 fi
 
 # Try to start exo manually

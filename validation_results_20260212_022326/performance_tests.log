@@ -1,0 +1,13 @@
+=======================================================================
+TINYGRAD LLAMA TRANSFORMER PERFORMANCE TEST SUITE
+=======================================================================
+
+This script will run three performance tests:
+  1. Generation speed profiling (tokens/sec, bottlenecks)
+  2. Memory usage profiling (KV cache, memory growth)
+  3. GPU utilization verification (device detection, fallbacks)
+
+Requirements: 8.1, 8.2, 8.3, 8.5, 6.5
+=======================================================================
+
+Error: python3 not found

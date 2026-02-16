@@ -383,7 +383,7 @@ def _forward_pass(
             position_ids=None,  # Model will auto-generate based on cache
             attention_mask=None,  # No masking for now
         )
-        
+
         return output_logits, updated_cache
 
     except Exception as e:
@@ -395,13 +395,14 @@ def _forward_pass(
         batch_size = input_tensor.shape[0]
         seq_len = input_tensor.shape[1] if len(input_tensor.shape) > 1 else 1
         vocab_size = 128256  # Default Llama vocab size
-        
+
         dummy_logits = Tensor.randn(batch_size, seq_len, vocab_size)
-        
+
         # Return dummy cache as well
         from exo.worker.engines.tinygrad.llama_transformer import KVCache
+
         dummy_cache = kv_cache if kv_cache is not None else KVCache(num_layers=28)
-        
+
         return dummy_logits, dummy_cache
 
 

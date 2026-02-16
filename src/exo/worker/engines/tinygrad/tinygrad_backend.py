@@ -148,10 +148,13 @@ class TinygradBackend(InferenceBackend):
             )
         elif self.runtime == "OPENCL":
             os.environ["OPENCL"] = "1"
-            
+
             # Set device index for Intel Arc GPU
             if "Intel Arc" in self.device_capabilities.device_name:
-                from exo.worker.engines.tinygrad.device_config import get_intel_arc_device_index
+                from exo.worker.engines.tinygrad.device_config import (
+                    get_intel_arc_device_index,
+                )
+
                 device_idx = get_intel_arc_device_index()
                 self.device = f"GPU:{device_idx}"
                 logger.info(

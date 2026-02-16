@@ -52,6 +52,11 @@ dev = [
 tinygrad-opencl = [
     "pyopencl>=2024.1",
 ]
+# PyTorch and IPEX are provided by Nix packages from MordragT's nixos repo
+# pytorch-ipex = [
+#     "torch>=2.0.0; sys_platform == 'linux'",
+#     "intel-extension-for-pytorch>=2.0.0; sys_platform == 'linux'",
+# ]
 # cuda = [
 #     "mlx[cuda]==0.26.3",
 # ]

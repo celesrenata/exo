@@ -25,22 +25,22 @@ ssh $GREMLIN_HOST "cd /tmp && python3 test_llama_validation.py" 2>&1 | tee /tmp/
 echo ""
 echo "Step 4: Check if tests passed..."
 if grep -q "All validation tests passed" /tmp/gremlin1_validation_results.txt; then
-    echo "✅ All validation tests PASSED on gremlin-1!"
-    
-    echo ""
-    echo "Step 5: Test with actual model loading (if available)..."
-    ssh $GREMLIN_HOST "curl -s 'http://localhost:52415/state' | python3 -c \"import sys, json; data=json.load(sys.stdin); runner = list(data['runners'].values())[0] if data.get('runners') else None; print('Runner backend:', runner.get('backend') if runner else 'No runner'); print('Runner status:', list(runner.keys())[0] if runner else 'No runner')\""
-    
-    echo ""
-    echo "Step 6: Check tinygrad backend is available..."
-    ssh $GREMLIN_HOST "journalctl -u exo -n 100 --no-pager | grep -i 'tinygrad\|backend\|llama' | tail -20"
-    
+  echo "✅ All validation tests PASSED on gremlin-1!"
+
+  echo ""
+  echo "Step 5: Test with actual model loading (if available)..."
+  ssh $GREMLIN_HOST "curl -s 'http://localhost:52415/state' | python3 -c \"import sys, json; data=json.load(sys.stdin); runner = list(data['runners'].values())[0] if data.get('runners') else None; print('Runner backend:', runner.get('backend') if runner else 'No runner'); print('Runner status:', list(runner.keys())[0] if runner else 'No runner')\""
+
+  echo ""
+  echo "Step 6: Check tinygrad backend is available..."
+  ssh $GREMLIN_HOST "journalctl -u exo -n 100 --no-pager | grep -i 'tinygrad\|backend\|llama' | tail -20"
+
 else
-    echo "❌ Some validation tests FAILED on gremlin-1"
-    echo ""
-    echo "Failed test output:"
-    grep -A 5 "Test failed\|Error\|Traceback" /tmp/gremlin1_validation_results.txt || echo "No detailed error found"
-    exit 1
+  echo "❌ Some validation tests FAILED on gremlin-1"
+  echo ""
+  echo "Failed test output:"
+  grep -A 5 "Test failed\|Error\|Traceback" /tmp/gremlin1_validation_results.txt || echo "No detailed error found"
+  exit 1
 fi
 
 echo ""

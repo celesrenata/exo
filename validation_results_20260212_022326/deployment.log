@@ -1,0 +1,53 @@
+=== Force Update gremlin-1 to Latest Commit ===
+
+Latest commit: dda0344d
+
+Step 1: Force update flake to specific commit...
+warning: '--update-input' is a deprecated alias for 'flake update' and will be removed in a future version.
+warning: Git tree '/etc/nixos' is dirty
+
+Step 2: Rebuild NixOS system...
+building the system configuration...
+Done. The new configuration is 
+
+Step 3: Check exo package...
+/run/current-system/sw/bin/exo
+
+Step 4: Restart exo service...
+
+Step 5: Wait for startup...
+
+Step 6: Check service status...
+● exo.service - exo Distributed AI Inference Service
+     Loaded: loaded (/etc/systemd/system/exo.service; enabled; preset: ignored)
+     Active: active (running) since Thu 2026-02-12 02:23:33 PST; 10s ago
+ Invocation: 15ceb69357ce438c805585b77d49cad3
+    Process: 982242 ExecStartPre=/nix/store/4hgn148f6wwn6dxa8rvl6sd7j1m601jm-setup-hf-token (code=exited, status=0/SUCCESS)
+   Main PID: 982246 (.exo-wrapped)
+         IP: 2.5G in, 47.9M out
+         IO: 0B read, 0B written
+      Tasks: 40 (limit: 112963)
+     Memory: 108.4M (peak: 121.1M)
+        CPU: 7.464s
+     CGroup: /system.slice/exo.service
+             ├─982246 /nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/bin/python3.13 /nix/store/jrsxpngcaif0rxflm6bax7pi1cd1hhyd-exo-0.3.0/bin/.exo-wrapped -vv
+             └─982302 /nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/bin/python3.13 -s -c "from multiprocessing.resource_tracker import main;main(5)"
+
+Feb 12 02:23:40 gremlin-1 exo[982246]: [ 02:23:40.816 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 12 02:23:41 gremlin-1 exo[982246]: [ 02:23:41.414 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 65: NodeGatheredInfo(event_id='26f97940-cdce-4d31-bb8e-e3310d199084' node_id='12D3KooWJp4ZkcXqRhLyD5DZyd
+Feb 12 02:23:41 gremlin-1 exo[982246]: [ 02:23:41.415 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='26f97940-cdce-4d31-bb8e-e3310d199084' node_id='12D3KooWJp4ZkcXqRhLyD5DZyd
+Feb 12 02:23:41 gremlin-1 exo[982246]: [ 02:23:41.825 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 12 02:23:42 gremlin-1 exo[982246]: [ 02:23:42.415 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 66: NodeGatheredInfo(event_id='37560184-1649-4a70-a5af-b420389b3cd3' node_id='12D3KooWJp4ZkcXqRhLyD5DZyd
+Feb 12 02:23:42 gremlin-1 exo[982246]: [ 02:23:42.416 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='37560184-1649-4a70-a5af-b420389b3cd3' node_id='12D3KooWJp4ZkcXqRhLyD5DZyd
+Feb 12 02:23:42 gremlin-1 exo[982246]: [ 02:23:42.817 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+Feb 12 02:23:43 gremlin-1 exo[982246]: [ 02:23:43.418 | DEBUG    | exo.worker.main:_forward_events:339 ] Worker published event 67: NodeGatheredInfo(event_id='215fb7cc-bb5b-411c-ab57-9d9b1cdd3873' node_id='12D3KooWJp4ZkcXqRhLyD5DZyd
+Feb 12 02:23:43 gremlin-1 exo[982246]: [ 02:23:43.418 | DEBUG    | exo.master.main:_event_processor:386 ] Master indexing event: NodeGatheredInfo(event_id='215fb7cc-bb5b-411c-ab57-9d9b1cdd3873' node_id='12D3KooWJp4ZkcXqRhLyD5DZyd
+Feb 12 02:23:43 gremlin-1 exo[982246]: [ 02:23:43.822 | DEBUG    | exo.master.api:_log_requests:199 ] API request: GET /state
+
+Step 7: Check logs...
+No relevant log entries yet
+
+=== Update Complete ===
+
+Test with:
+  curl -s 'http://10.1.1.12:52415/state' | python3 -c "import sys, json; data=json.load(sys.stdin); runner = list(data['runners'].values())[0] if data.get('runners') else None; print('Runner status:', list(runner.keys())[0] if runner else 'No runner')"
