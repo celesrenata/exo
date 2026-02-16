@@ -202,7 +202,7 @@ def pytorch_ipex_generate(
                     generation_tps=generation_tps,
                     prompt_tokens=prompt_tokens,
                     generation_tokens=generated_tokens,
-                    peak_memory_usage=Memory(bytes=0),  # TODO: Track actual memory usage
+                    peak_memory_usage=Memory(in_bytes=0),  # TODO: Track actual memory usage
                 )
 
                 # Yield response
