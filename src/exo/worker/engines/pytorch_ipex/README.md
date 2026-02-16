@@ -307,3 +307,170 @@ Wrapper class that enables pipeline parallelism by executing only a specific ran
 6. **Model Sharding**: TransformerShard wrapper enables pipeline parallelism without modifying model code
 7. **Caching**: Models and tokenizers are cached to avoid redundant loading
 8. **Validation**: Comprehensive validation ensures model compatibility before inference
+
+
+### KVCacheManager (`kv_cache_manager.py`)
+
+Manages key-value caches for transformer inference with LRU eviction and memory monitoring.
+
+**Status**: ✅ Complete (Task 4)
+
+Features:
+- Per-request KV cache allocation and management
+- LRU (Least Recently Used) eviction policy
+- Memory monitoring with configurable thresholds (default: 80%)
+- Cache statistics (hit/miss rates, memory usage, evictions)
+- Active request protection (never evicts caches for in-progress requests)
+- Automatic eviction when memory threshold exceeded
+
+**Usage:**
+```python
+from exo.worker.engines.pytorch_ipex import KVCacheManager
+
+# Initialize cache manager
+cache_manager = KVCacheManager(
+    device_type="xpu",
+    device_id=0,
+    memory_threshold_percent=80.0,
+)
+
+# Create cache for a request
+cache = cache_manager.create_cache(
+    request_id="req-123",
+    num_layers=32,
+    max_length=8192,
+)
+
+# Update cache during inference
+cache_manager.update_cache(
+    request_id="req-123",
+    layer_idx=0,
+    new_key=key_tensor,
+    new_value=value_tensor,
+)
+
+# Get cache (updates last accessed time for LRU)
+cache = cache_manager.get_cache("req-123")
+
+# Mark request complete (allows eviction)
+cache_manager.mark_request_complete("req-123")
+
+# Get statistics
+stats = cache_manager.get_stats()
+print(f"Hit rate: {stats['hit_rate_percent']:.1f}%")
+print(f"Active caches: {stats['active_caches']}")
+print(f"Memory usage: {stats['device_memory_utilization_percent']:.1f}%")
+```
+
+#### KVCache Dataclass
+
+Immutable dataclass representing a single cache entry:
+- `request_id`: Unique identifier for the request
+- `keys`: List of key tensors (one per layer)
+- `values`: List of value tensors (one per layer)
+- `position`: Current position in the sequence
+- `max_length`: Maximum sequence length
+- `last_accessed`: Timestamp of last access (for LRU)
+- `is_active`: Whether this cache is for an active request
+
+#### LRU Eviction Policy
+
+The cache manager implements a sophisticated LRU eviction policy:
+
+1. **Memory Monitoring**: Continuously tracks GPU memory usage
+2. **Threshold Check**: When usage exceeds threshold (default 80%), triggers eviction
+3. **Active Protection**: Never evicts caches for active (in-progress) requests
+4. **LRU Ordering**: Evicts oldest inactive caches first
+5. **Iterative Eviction**: Continues evicting until memory usage drops below threshold
+
+#### Cache Statistics
+
+The `get_stats()` method provides comprehensive statistics:
+- `total_requests`: Total number of requests processed
+- `cache_hits`: Number of successful cache retrievals
+- `cache_misses`: Number of failed cache retrievals
+- `hit_rate_percent`: Cache hit rate as percentage
+- `miss_rate_percent`: Cache miss rate as percentage
+- `total_evictions`: Total number of evictions performed
+- `active_caches`: Number of currently stored caches
+- `total_caches`: Total number of caches (active + inactive)
+- `active_requests`: Number of requests currently being processed
+- `total_memory_bytes`: Current cache memory usage
+- `peak_memory_bytes`: Peak cache memory usage
+- `device_total_memory_bytes`: Total device memory
+- `device_free_memory_bytes`: Free device memory
+- `device_used_memory_bytes`: Used device memory
+- `device_memory_utilization_percent`: Device memory utilization
+
+## Testing (Updated)
+
+Each component has comprehensive tests:
+
+### Unit Tests (pytest)
+
+- `tests/test_device_manager.py` - Device detection and selection tests
+- `tests/test_model_loader.py` - Model loading and optimization tests
+- `tests/test_kv_cache_manager.py` - Cache management and eviction tests
+
+Run with pytest:
+```bash
+# Run all tests
+uv run pytest src/exo/worker/engines/pytorch_ipex/tests/ -v
+
+# Run specific test file
+uv run pytest src/exo/worker/engines/pytorch_ipex/tests/test_kv_cache_manager.py -v
+```
+
+### Simple Validation Scripts
+
+Simple validation scripts that don't require pytest:
+
+- `test_device_manager_simple.py` - Basic device manager validation
+- `test_model_loader_simple.py` - Basic model loader validation
+- `test_kv_cache_simple.py` - Basic cache manager validation
+
+Run directly:
+```bash
+python src/exo/worker/engines/pytorch_ipex/test_kv_cache_simple.py
+```
+
+## Development Status (Updated)
+
+### Completed
+
+- ✅ Task 1: Development environment setup
+  - NixOS package configuration
+  - Intel Arc GPU detection
+  - IPEX functionality validation
+- ✅ Task 2: Device Manager component
+  - Device detection and enumeration
+  - Device selection with priority logic
+  - Memory monitoring and health checks
+- ✅ Task 3: Model Loader component
+  - ModelLoader class with async loading
+  - IPEX optimization
+  - Model sharding support
+  - Model validation
+- ✅ Task 4: KV Cache Manager
+  - KVCacheManager class with cache operations
+  - LRU eviction policy
+  - Memory monitoring and thresholds
+  - Cache statistics
+
+### Next Steps
+
+- [ ] Task 5: PyTorchInferenceEngine
+  - Main inference engine class
+  - Integration of Device Manager, Model Loader, and KV Cache Manager
+  - Async inference execution
+  - Error handling and recovery
+
+## Design Decisions (Updated)
+
+8. **KV Cache Management**: 
+   - Immutable cache entries (frozen dataclass) for thread safety
+   - LRU eviction based on last access time
+   - Active request protection prevents eviction of in-progress requests
+   - Configurable memory threshold (default 80%)
+   - Automatic eviction when threshold exceeded
+   - Comprehensive statistics for monitoring and debugging
