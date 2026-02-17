@@ -19,19 +19,19 @@ def test_backend_initialization() -> None:
         from exo.worker.engines.pytorch_ipex import PyTorchIPEXBackend
 
         backend = PyTorchIPEXBackend()
-        print(f"✓ Backend initialized successfully")
+        print("✓ Backend initialized successfully")
         print(f"  Device: {backend._device_type}:{backend._device_id}")
 
         # Get stats
         stats = backend.get_stats()
-        print(f"✓ Backend stats retrieved:")
+        print("✓ Backend stats retrieved:")
         print(f"  Device type: {stats['device_type']}")
         print(f"  Device ID: {stats['device_id']}")
         print(f"  Loaded models: {stats['loaded_models']}")
 
         # Cleanup
         backend.cleanup()
-        print(f"✓ Backend cleanup successful")
+        print("✓ Backend cleanup successful")
 
         return True
 
@@ -51,7 +51,7 @@ def test_device_manager() -> None:
         from exo.worker.engines.pytorch_ipex import DeviceManager
 
         manager = DeviceManager()
-        print(f"✓ DeviceManager initialized")
+        print("✓ DeviceManager initialized")
 
         # Detect devices
         devices = manager.detect_devices()

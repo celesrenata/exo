@@ -353,32 +353,13 @@
             config = {
               # Disable checks globally to skip failing libffi tests
               doCheckByDefault = false;
+              # Allow unfree for MKL (needed for PyTorch XPU)
+              allowUnfreePredicate = pkg: (pkg.pname or "") == "mkl";
             };
             overlays = [
-              # Import MordragT's overlay to get intel-python FIRST
+              # Import MordragT's overlay to get Intel runtime libraries (compute-runtime, level-zero, mkl, etc.)
               (import "${inputs.nixos-mordrag}/pkgs/overlay.nix")
-              # Overlay to customize Python packages
-              (final: prev: {
-                python313 = (prev.intel-python or prev.python313).override {
-                  packageOverrides = pself: psuper: {
-                    # Pin anyio to 4.11.0 (required by exo)
-                    anyio = psuper.anyio.overridePythonAttrs (old: rec {
-                      version = "4.11.0";
-                      src = prev.fetchPypi {
-                        pname = "anyio";
-                        inherit version;
-                        hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
-                      };
-                      doCheck = false; # Skip failing test
-                      postPatch = (old.postPatch or "") + ''
-                        sed -i '/def test_bad_init_value/,/pytest.raises.*CapacityLimiter.*0/d' tests/test_synchronization.py
-                      '';
-                    });
-                  };
-                };
-              })
-              # FINAL overlay - override packages to skip failing tests
-              # This MUST be last to override everything else
+              # Overlay to customize Python packages - disable failing tests
               (final: prev: {
                 libffi = prev.libffi.overrideAttrs (old: {
                   outputs = old.outputs or [ "out" "dev" ];
@@ -386,24 +367,93 @@
                   doInstallCheck = false;
                 });
                 
-                # pycparser segfaults during unit tests
-                # sqlalchemy has a failing test
-                # uvloop has failing tests
+                # Use standard python313, NOT intel-python
+                # Override it to fix packages with failing tests
                 python313 = prev.python313.override {
+                  self = final.python313;
                   packageOverrides = pself: psuper: {
+                    # Pin anyio to 4.11.0 (required by exo)
+                    anyio = psuper.anyio.overridePythonAttrs (old: rec {
+                      version = "4.11.0";
+                      src = final.fetchPypi {
+                        pname = "anyio";
+                        inherit version;
+                        hash = "sha256-gqjQuB4xjMXOcaXx+LXE5jYZYgtjFB74yZX6DblaV8Q=";
+                      };
+                      doCheck = false;
+                      postPatch = (old.postPatch or "") + ''
+                        sed -i '/def test_bad_init_value/,/pytest.raises.*CapacityLimiter.*0/d' tests/test_synchronization.py
+                      '';
+                    });
+                    
+                    # pycparser segfaults during unit tests
                     pycparser = psuper.pycparser.overridePythonAttrs (old: {
                       doCheck = false;
                       doInstallCheck = false;
                     });
                     
+                    # sqlalchemy has a failing test
                     sqlalchemy = psuper.sqlalchemy.overridePythonAttrs (old: {
                       doCheck = false;
                       doInstallCheck = false;
                     });
                     
-                    uvloop = psuper.uvloop.overridePythonAttrs (old: {
+                    # uvloop - completely rebuild without tests
+                    # Source: Based on nixpkgs uvloop, modified to skip flaky tests
+                    uvloop = pself.buildPythonPackage rec {
+                      pname = "uvloop";
+                      version = "0.22.0";
+                      pyproject = true;
+
+                      src = final.fetchPypi {
+                        inherit pname version;
+                        hash = "sha256-b0C9CTQM+VvYKhKP/rE5LhCFnfBKUT3pl/Y0DV5p6zY=";
+                      };
+
+                      env.LIBUV_CONFIGURE_HOST = pself.python.stdenv.hostPlatform.config;
+
+                      postPatch = ''
+                        rm -rf vendor
+                        substituteInPlace setup.py \
+                          --replace-fail "use_system_libuv = False" "use_system_libuv = True"
+                      '';
+
+                      nativeBuildInputs = [
+                        pself.cython
+                        pself.setuptools
+                      ];
+
+                      buildInputs = [
+                        final.libuv
+                      ];
+
+                      # DISABLE ALL TESTS
                       doCheck = false;
+                      dontCheck = true;
                       doInstallCheck = false;
+
+                      pythonImportsCheck = [
+                        "uvloop"
+                        "uvloop.loop"
+                      ];
+
+                      meta = {
+                        description = "Ultra fast asyncio event loop (tests disabled for build stability)";
+                        homepage = "https://github.com/MagicStack/uvloop";
+                      };
+                    };
+                    
+                    # fsspec - disable torch optional dependency to avoid pulling in standard PyTorch
+                    # We build our own PyTorch XPU separately
+                    fsspec = psuper.fsspec.overridePythonAttrs (old: {
+                      # Remove torch from optional dependencies
+                      passthru = (old.passthru or {}) // {
+                        optional-dependencies = (old.passthru.optional-dependencies or {}) // {
+                          # Remove torch from any optional dependency groups
+                          full = builtins.filter (dep: dep.pname or "" != "torch") 
+                            ((old.passthru.optional-dependencies or {}).full or []);
+                        };
+                      };
                     });
                   };
                 };
@@ -412,11 +462,13 @@
           };
         in
         {
-          # Allow unfree for metal-toolchain (needed for Darwin Metal packages)
+          # Allow unfree for metal-toolchain (needed for Darwin Metal packages) and mkl (needed for PyTorch XPU)
           _module.args.pkgs = import inputs.nixpkgs {
             inherit system;
             config = {
-              allowUnfreePredicate = pkg: (pkg.pname or "") == "metal-toolchain";
+              allowUnfreePredicate = pkg: 
+                let pname = pkg.pname or "";
+                in (pname == "metal-toolchain") || (pname == "mkl");
               doCheckByDefault = false;
             };
             overlays = [
@@ -472,17 +524,35 @@
               };
               default = self'.packages.exo;
             }
-          );
+          ) // lib.optionalAttrs pkgs.stdenv.isLinux {
+            # PyTorch with Intel XPU support (Linux only)
+            # Use pkgsExo.python313 which has our test-disabled packages
+            pytorch-xpu = pkgsExo.python313.pkgs.callPackage ./nix/pytorch-xpu.nix {
+              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
+            };
+            
+            # Intel Extension for PyTorch with XPU support (Linux only)
+            # Depends on pytorch-xpu, must be built after it
+            # Use pkgsExo.python313 which has our test-disabled packages
+            ipex-xpu = pkgsExo.python313.pkgs.callPackage ./nix/ipex-xpu.nix {
+              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
+              pytorch-xpu = self'.packages.pytorch-xpu;
+            };
+          };
 
           devShells.default =
             let
-              # Create a Python environment with PyTorch and IPEX using pkgsExo
-              pythonWithPackages = pkgsExo.python313.withPackages (ps: [
-                ps.torch
-                ps.intel-extension-for-pytorch
-              ] ++ lib.optionals (ps ? torch && ps ? intel-extension-for-pytorch) [
-                # Only add if both torch and ipex are available
-              ]);
+              # Create a Python environment with PyTorch and IPEX using top-level packages
+              # On Linux, use our custom-built PyTorch XPU and IPEX XPU packages
+              pythonWithPackages = if pkgs.stdenv.isLinux then
+                pkgsExo.python313.withPackages (ps: [
+                  # Use top-level pytorch-xpu and ipex-xpu packages (2.5.1+xpu)
+                  self'.packages.pytorch-xpu
+                  self'.packages.ipex-xpu
+                ])
+              else
+                # On macOS, use standard Python (no XPU support needed)
+                pkgsExo.python313;
             in
             pkgs.mkShell {
             inputsFrom = [ self'.checks.cargo-build ];
@@ -530,13 +600,13 @@
               export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pythonWithPackages}/lib"
               ${lib.optionalString pkgs.stdenv.isLinux ''
                 export LD_LIBRARY_PATH="${pkgs.openssl.out}/lib:$LD_LIBRARY_PATH"
-                # Add Intel GPU runtime libraries for PyTorch + IPEX (from pkgsExo)
-                export LD_LIBRARY_PATH="${pkgsExo.intel-compute-runtime}/lib:${pkgsExo.level-zero}/lib:$LD_LIBRARY_PATH"
+                # Add Intel GPU runtime libraries and oneAPI libraries for PyTorch + IPEX (from pkgsExo)
+                export LD_LIBRARY_PATH="${pkgsExo.intel-compute-runtime}/lib:${pkgsExo.level-zero}/lib:${pkgsExo.mkl}/lib:${pkgsExo.oneDNN}/lib:${pkgsExo.onetbb}/lib:$LD_LIBRARY_PATH"
                 # Enable PyTorch XPU (Intel GPU) support
                 export PYTORCH_ENABLE_XPU=1
                 export IPEX_TILE_AS_DEVICE=1
                 echo "Intel Arc GPU support enabled for PyTorch + IPEX"
-                echo "LD_LIBRARY_PATH includes Intel compute runtime and Level Zero"
+                echo "LD_LIBRARY_PATH includes Intel compute runtime, Level Zero, and oneAPI libraries (MKL, oneDNN, TBB)"
                 echo "Python: ${pythonWithPackages}/bin/python"
               ''}
             '';

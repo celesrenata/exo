@@ -36,7 +36,6 @@ from exo.shared.types.worker.instances import (
     MlxJacclInstance,
     MlxRingInstance,
     PyTorchIPEXRingInstance,
-    TinygradRingInstance,
 )
 from exo.shared.types.worker.shards import Sharding
 

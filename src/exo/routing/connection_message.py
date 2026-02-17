@@ -1,9 +1,8 @@
 from enum import Enum
 
-from exo_pyo3_bindings import ConnectionUpdate, ConnectionUpdateType
-
 from exo.shared.types.common import NodeId
 from exo.utils.pydantic_ext import CamelCaseModel
+from exo_pyo3_bindings import ConnectionUpdate, ConnectionUpdateType
 
 """Serialisable types for Connection Updates/Messages"""
 

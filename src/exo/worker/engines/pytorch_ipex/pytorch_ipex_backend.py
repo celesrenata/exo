@@ -12,7 +12,6 @@ Requirements addressed:
 - 3.5: Error handling
 """
 
-import logging
 import time
 from typing import Any, Optional, final
 
@@ -395,7 +394,7 @@ class PyTorchIPEXBackend(InferenceBackend):
                     else:
                         # Extract past key values from cache
                         if cache.keys[0] is not None:
-                            past_key_values = list(zip(cache.keys, cache.values))
+                            past_key_values = list(zip(cache.keys, cache.values, strict=False))
                             logger.debug(
                                 f"Using cached KV for request {request_id}, "
                                 f"position: {cache.position}"

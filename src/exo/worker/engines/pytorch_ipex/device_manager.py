@@ -391,11 +391,7 @@ class DeviceManager:
                 _ = test_tensor + 1.0
                 return True
 
-            elif device_type_str == "cpu":
-                return True
-
-            else:
-                return False
+            return device_type_str == "cpu"
 
         except Exception as e:
             logger.error(f"Device health check failed for {device_type_str}:{device_id}: {e}")

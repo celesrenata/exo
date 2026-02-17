@@ -206,7 +206,7 @@ class NPUInferenceService:
             model = self.openvino_core.read_model(model_path)
 
             # Compile for NPU
-            logger.debug(f"Compiling model for NPU device")
+            logger.debug("Compiling model for NPU device")
             compiled_model = self.openvino_core.compile_model(model, "NPU")
 
             # Cache compiled model
@@ -312,7 +312,7 @@ class NPUInferenceService:
         """
         output_data = {}
 
-        for name in metadata["outputs"].keys():
+        for name in metadata["outputs"]:
             tensor = infer_request.get_output_tensor(name)
             # Convert to list for JSON serialization
             output_data[name] = tensor.data.tolist()
@@ -322,9 +322,9 @@ class NPUInferenceService:
     async def _start_server(self) -> None:
         """Start HTTP server for API using FastAPI."""
         try:
+            import uvicorn
             from fastapi import FastAPI, HTTPException
             from fastapi.responses import JSONResponse
-            import uvicorn
 
             app = FastAPI(title="Intel NPU Inference Service")
 

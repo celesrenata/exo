@@ -203,11 +203,7 @@ class HealthChecker:
                 device_count: int = self.torch.cuda.device_count()
                 return self.device_id < device_count
 
-            elif self.device_type == "cpu":
-                return True
-
-            else:
-                return False
+            return self.device_type == "cpu"
 
         except Exception as e:
             logger.warning(f"Error checking device availability: {e}")

@@ -15,8 +15,7 @@ from typing import TYPE_CHECKING, Any
 from exo.worker.engines.npu.discovery import discover_npu
 
 if TYPE_CHECKING:
-    import numpy as np  # type: ignore
-    import openvino as ov  # type: ignore
+    pass  # type: ignore
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -138,7 +137,8 @@ def verify_npu_usage(core: Any, npu_device: str) -> None:
     logger.info("Verifying NPU is actually used (not CPU fallback)...")
 
     # Create a simple model
-    from openvino.runtime import Model, opset10 as ops  # type: ignore
+    from openvino.runtime import Model  # type: ignore
+    from openvino.runtime import opset10 as ops
 
     input_shape = [1, 3, 224, 224]
     parameter = ops.parameter(input_shape, np.float32, name="input")
@@ -196,7 +196,8 @@ def compare_latency(core: Any, npu_device: str) -> None:
     logger.info("Comparing NPU latency to CPU baseline...")
 
     # Create a simple model
-    from openvino.runtime import Model, opset10 as ops  # type: ignore
+    from openvino.runtime import Model  # type: ignore
+    from openvino.runtime import opset10 as ops
 
     input_shape = [1, 3, 224, 224]
     parameter = ops.parameter(input_shape, np.float32, name="input")

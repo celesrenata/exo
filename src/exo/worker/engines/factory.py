@@ -4,7 +4,6 @@ This module provides a factory function to instantiate the appropriate
 backend based on configuration. Adapted from exo-cuda reference implementation.
 """
 
-import os
 from typing import Any
 
 from exo.worker.engines.base import InferenceBackend
@@ -56,23 +55,6 @@ def get_inference_backend(
                 "mlx", f"MLX backend not available: {e}"
             ) from e
 
-    elif backend_name == "tinygrad":
-        try:
-            import tinygrad.helpers
-
-            from exo.worker.engines.tinygrad.tinygrad_backend import (
-                TinygradBackend,
-            )
-
-            # Set tinygrad debug level from environment
-            tinygrad.helpers.DEBUG.value = int(os.getenv("TINYGRAD_DEBUG", default="0"))
-
-            return TinygradBackend(shard_downloader)
-        except ImportError as e:
-            raise BackendNotAvailableError(
-                "tinygrad", f"tinygrad backend not available: {e}"
-            ) from e
-
     elif backend_name == "pytorch_ipex":
         try:
             from exo.worker.engines.pytorch_ipex.pytorch_ipex_backend import (
@@ -102,7 +84,6 @@ def get_inference_backend(
 # Registry of available backends
 BACKEND_REGISTRY = {
     "mlx": "MLXBackend",
-    "tinygrad": "TinygradBackend",
     "pytorch_ipex": "PyTorchIPEXBackend",
     "dummy": "DummyBackend",
 }

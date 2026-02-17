@@ -250,7 +250,6 @@ class ModelLoader:
         if not hasattr(model, "config"):
             raise ValueError(f"Model {type(model).__name__} has no config attribute")
 
-        config = model.config
 
         # Check if model has layers
         if hasattr(model, "model") and hasattr(model.model, "layers"):

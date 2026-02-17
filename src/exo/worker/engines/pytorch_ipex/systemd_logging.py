@@ -9,7 +9,7 @@ Requirements addressed:
 """
 
 import sys
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 

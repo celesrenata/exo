@@ -15,7 +15,6 @@ import time
 from collections.abc import Generator
 from typing import Any, Optional
 
-import numpy as np
 import torch
 
 from exo.shared.types.api import (

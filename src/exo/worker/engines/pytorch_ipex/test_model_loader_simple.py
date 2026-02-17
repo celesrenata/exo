@@ -12,11 +12,11 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader, TransformerShard
-from exo.shared.types.worker.shards import PipelineShardMetadata
 from exo.shared.models.model_cards import ModelCard
 from exo.shared.types.common import ModelId
 from exo.shared.types.memory import Memory
+from exo.shared.types.worker.shards import PipelineShardMetadata
+from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader, TransformerShard
 
 
 def test_model_loader_initialization():

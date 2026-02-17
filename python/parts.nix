@@ -159,11 +159,11 @@
                   numpy
                   python-multipart
                   openai-harmony
-                  # PyTorch with Intel XPU support from MordragT's nixos repo
-                  torch
-                  # Intel Extension for PyTorch (IPEX) from MordragT's nixos repo
-                ] ++ lib.optionals (pkgsExo.python313.pkgs.intel-extension-for-pytorch or null != null) [
-                  pkgsExo.python313.pkgs.intel-extension-for-pytorch
+                ] ++ [
+                  # PyTorch with Intel XPU support (2.5.1+xpu) - use top-level package
+                  self'.packages.pytorch-xpu
+                  # Intel Extension for PyTorch (IPEX) with XPU support (2.5.1+xpu) - use top-level package
+                  self'.packages.ipex-xpu
                 ];
 
                 # Install Rust bindings after main package

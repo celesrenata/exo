@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 else:
     ShardDownloader = Any
 
-from exo.shared.constants import EXO_TINYGRAD_ENABLED
 from exo.shared.types.worker.shards import ShardMetadata
 from exo.worker.engines.base import InferenceBackend
 from exo.worker.engines.factory import BackendNotAvailableError, get_inference_backend

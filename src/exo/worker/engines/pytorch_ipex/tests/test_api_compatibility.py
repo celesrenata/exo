@@ -5,7 +5,6 @@ with the OpenAI chat completions API format.
 """
 
 import json
-from typing import Any
 
 import pytest
 

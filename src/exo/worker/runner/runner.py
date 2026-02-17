@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import time
 from collections.abc import Generator
 from functools import cache
@@ -43,7 +42,6 @@ from exo.shared.types.text_generation import TextGenerationTaskParams
 from exo.shared.types.worker.instances import (
     BoundInstance,
     PyTorchIPEXRingInstance,
-    TinygradRingInstance,
 )
 from exo.shared.types.worker.runner_response import (
     GenerationResponse,
@@ -72,25 +70,16 @@ from exo.shared.types.worker.shards import (
     ShardMetadata,
 )
 from exo.utils.channels import MpReceiver, MpSender
-from exo.worker.engines.backend_selector import select_backend_from_config
 from exo.worker.runner.bootstrap import logger
 
 # Lazy imports for MLX backend - only imported when needed
 if TYPE_CHECKING:
-    import mlx.core as mx
-    from mlx_lm.models.gpt_oss import Model as GptOssModel
     from mlx_lm.tokenizer_utils import TokenizerWrapper
     from openai_harmony import (  # pyright: ignore[reportMissingTypeStubs]
-        HarmonyEncodingName,
         Role,
         StreamableParser,
     )
 
-    from exo.worker.engines.image import (
-        DistributedImageModel,
-    )
-    from exo.worker.engines.mlx import Model
-    from exo.worker.engines.mlx.cache import KVPrefixCache
 
 
 def _is_primary_output_node(shard_metadata: ShardMetadata) -> bool:
@@ -131,14 +120,6 @@ def main(
     # Detect backend type from instance
     # Handle both direct instance and Pydantic tagged union
     instance_type_name = type(instance).__name__
-    is_tinygrad = (
-        isinstance(instance, TinygradRingInstance)
-        or instance_type_name == "TinygradRingInstance"
-        or (
-            hasattr(instance, "__class__")
-            and instance.__class__.__name__ == "TinygradRingInstance"
-        )
-    )
     is_pytorch_ipex = (
         isinstance(instance, PyTorchIPEXRingInstance)
         or instance_type_name == "PyTorchIPEXRingInstance"
@@ -148,48 +129,27 @@ def main(
         )
     )
 
-    if is_tinygrad:
-        backend_type = "tinygrad"
-        logger.info(
-            f"Using Tinygrad backend for TinygradRingInstance (type: {instance_type_name})"
-        )
-
-        # Lazy-load Tinygrad backend modules
-        from exo.worker.engines.tinygrad.tinygrad_backend import TinygradBackend
-        from exo.worker.engines.tinygrad.model_loader import load_tinygrad_model
-        from exo.worker.engines.tinygrad.generator import tinygrad_generate
-        from exo.worker.engines.tinygrad.device_config import detect_capabilities
-
-        logger.info("Tinygrad backend modules loaded")
-    elif is_pytorch_ipex:
+    if is_pytorch_ipex:
         backend_type = "pytorch_ipex"
         logger.info(
             f"Using PyTorch+IPEX backend for PyTorchIPEXRingInstance (type: {instance_type_name})"
         )
 
         # Lazy-load PyTorch+IPEX backend modules
-        from exo.worker.engines.pytorch_ipex.pytorch_ipex_backend import PyTorchIPEXBackend
         from exo.worker.engines.pytorch_ipex.device_manager import DeviceManager
-        from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader
         from exo.worker.engines.pytorch_ipex.generator import pytorch_ipex_generate
+        from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader
         from exo.worker.engines.pytorch_ipex.warmup import warmup_pytorch_ipex_inference
 
         logger.info("PyTorch+IPEX backend modules loaded")
     else:
         # MLX backend - import MLX modules only when needed
         backend_type = "mlx"
-        logger.info(f"Using MLX backend")
+        logger.info("Using MLX backend")
 
         # Import MLX-specific modules
         import mlx.core as mx
         from mlx_lm.models.gpt_oss import Model as GptOssModel
-        from mlx_lm.tokenizer_utils import TokenizerWrapper
-        from openai_harmony import (  # pyright: ignore[reportMissingTypeStubs]
-            HarmonyEncodingName,
-            Role,
-            StreamableParser,
-            load_harmony_encoding,
-        )
 
         from exo.worker.engines.image import (
             DistributedImageModel,
@@ -197,7 +157,6 @@ def main(
             initialize_image_model,
             warmup_image_generator,
         )
-        from exo.worker.engines.mlx import Model
         from exo.worker.engines.mlx.cache import KVPrefixCache
         from exo.worker.engines.mlx.generator.generate import (
             mlx_generate,
@@ -208,7 +167,6 @@ def main(
             detect_thinking_prompt_suffix,
             initialize_mlx,
             load_mlx_items,
-            mlx_force_oom,
         )
 
     # Emit BackendInitialized event for observability
@@ -233,8 +191,6 @@ def main(
     tokenizer: Any = None
     group: Any = None
     kv_prefix_cache: Any = None
-    tinygrad_model: Any = None
-    tinygrad_tokenizer: Any = None
     pytorch_ipex_model: Any = None
     pytorch_ipex_tokenizer: Any = None
     device_type: Any = None
@@ -295,130 +251,7 @@ def main(
                         )
                         time.sleep(0.5)
 
-                    if backend_type == "tinygrad":
-                        # Tinygrad backend model loading
-                        try:
-                            if (
-                                ModelTask.TextGeneration
-                                in shard_metadata.model_card.tasks
-                            ):
-                                # Check if device was already configured in bootstrap
-                                # (via environment variables or detection)
-                                tinygrad_backend = os.environ.get(
-                                    "TINYGRAD_BACKEND", "CPU"
-                                )
-
-                                if tinygrad_backend == "GPU":
-                                    # GPU mode - determine runtime from environment
-                                    if os.environ.get("OPENCL") == "1":
-                                        runtime = "OPENCL"
-                                        device_name = "GPU (OpenCL)"
-                                    elif os.environ.get("LEVEL_ZERO") == "1":
-                                        runtime = "LEVEL_ZERO"
-                                        device_name = "Intel Arc GPU (Level Zero)"
-                                    elif os.environ.get("CUDA") == "1":
-                                        runtime = "CUDA"
-                                        device_name = "NVIDIA GPU (CUDA)"
-                                    else:
-                                        runtime = "OPENCL"  # Default GPU runtime
-                                        device_name = "GPU"
-
-                                    logger.info(
-                                        f"Loading tinygrad model on GPU "
-                                        f"({device_name}, runtime={runtime})"
-                                    )
-                                    device = "GPU"
-                                elif tinygrad_backend == "METAL":
-                                    logger.info(
-                                        f"Loading tinygrad model on METAL "
-                                        f"(Apple Metal GPU)"
-                                    )
-                                    device = "METAL"
-                                else:
-                                    # CPU fallback
-                                    import multiprocessing
-
-                                    cpu_count = multiprocessing.cpu_count()
-                                    logger.info(
-                                        f"Loading tinygrad model on CPU "
-                                        f"(CPU ({cpu_count} cores), runtime=None)"
-                                    )
-                                    device = "CPU"
-
-                                # Get model checkpoint path from shard downloader
-                                from exo.download.impl_shard_downloader import (
-                                    ResumableShardDownloader,
-                                )
-
-                                downloader = ResumableShardDownloader()
-
-                                # Run async operations in sync context
-                                import asyncio
-
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                                try:
-                                    checkpoint_path = loop.run_until_complete(
-                                        downloader.ensure_shard(shard_metadata)
-                                    )
-
-                                    # Load model and tokenizer
-                                    tinygrad_model, tinygrad_tokenizer = (
-                                        loop.run_until_complete(
-                                            load_tinygrad_model(
-                                                shard_metadata,
-                                                checkpoint_path,
-                                                device,
-                                            )
-                                        )
-                                    )
-                                finally:
-                                    loop.close()
-
-                                logger.info(
-                                    f"Tinygrad model loaded successfully on {device}"
-                                )
-
-                                # Determine device info for BackendInitialized event
-                                if device == "GPU":
-                                    backend_device_type = "GPU"
-                                    backend_device_name = device_name
-                                    backend_runtime = runtime
-                                elif device == "METAL":
-                                    backend_device_type = "GPU"
-                                    backend_device_name = "Apple Metal GPU"
-                                    backend_runtime = "METAL"
-                                else:
-                                    backend_device_type = "CPU"
-                                    backend_device_name = "CPU"
-                                    backend_runtime = "CPU"
-
-                                # Emit BackendInitialized event
-                                event_sender.send(
-                                    BackendInitialized(
-                                        runner_id=runner_id,
-                                        backend_type=backend_type,
-                                        device_type=backend_device_type,
-                                        device_name=backend_device_name,
-                                        runtime=backend_runtime,
-                                    )
-                                )
-                            else:
-                                raise ValueError(
-                                    f"Tinygrad backend only supports TextGeneration, got: {shard_metadata.model_card.tasks}"
-                                )
-                        except Exception as e:
-                            logger.error(f"Failed to load tinygrad model: {e}")
-                            event_sender.send(
-                                RunnerStatusUpdated(
-                                    runner_id=runner_id,
-                                    runner_status=RunnerFailed(
-                                        error_message=f"Model loading failed: {e}"
-                                    ),
-                                )
-                            )
-                            raise
-                    elif backend_type == "pytorch_ipex":
+                    if backend_type == "pytorch_ipex":
                         # PyTorch+IPEX backend model loading
                         try:
                             if (
@@ -561,10 +394,7 @@ def main(
                     logger.info("runner loaded")
                 case StartWarmup() if isinstance(current_status, RunnerLoaded):
                     # Verify model and tokenizer are loaded based on backend type
-                    if backend_type == "tinygrad":
-                        assert tinygrad_model
-                        assert tinygrad_tokenizer
-                    elif backend_type == "pytorch_ipex":
+                    if backend_type == "pytorch_ipex":
                         assert pytorch_ipex_model
                         assert pytorch_ipex_tokenizer
                     else:
@@ -604,9 +434,6 @@ def main(
                                 warmup_tokens=10,
                             )
                             logger.info(f"warmed up by generating {toks} tokens")
-                        else:
-                            # Tinygrad backend - skip warmup for now
-                            logger.info("Skipping warmup for tinygrad backend")
 
                         logger.info(
                             f"runner initialized in {time.time() - setup_start_time} seconds"
@@ -644,99 +471,7 @@ def main(
                     )
                     event_sender.send(TaskAcknowledged(task_id=task.task_id))
 
-                    if backend_type == "tinygrad":
-                        # Tinygrad backend text generation
-                        assert tinygrad_model is not None
-                        assert tinygrad_tokenizer is not None
-
-                        try:
-                            # Build prompt from messages
-                            # For now, use simple concatenation - can be improved with chat templates
-                            prompt_parts = []
-                            for msg in task_params.input:
-                                prompt_parts.append(f"{msg.role}: {msg.content}")
-                            prompt = "\n".join(prompt_parts) + "\nassistant:"
-
-                            logger.info(
-                                f"Generating with tinygrad, prompt length: {len(prompt)}"
-                            )
-
-                            # Get device from environment (already set in bootstrap)
-                            device = os.environ.get("TINYGRAD_BACKEND", "CPU")
-
-                            # Generate tokens using tinygrad
-                            tinygrad_generator = tinygrad_generate(
-                                model=tinygrad_model,
-                                tokenizer=tinygrad_tokenizer,
-                                prompt=prompt,
-                                max_tokens=task_params.max_output_tokens or 100,
-                                temperature=task_params.temperature or 1.0,
-                                top_k=task_params.top_k,
-                                top_p=task_params.top_p,
-                                device=device,
-                                model_id=str(shard_metadata.model_card.model_id),
-                            )
-
-                            # Forward responses to event sender
-                            for response in tinygrad_generator:
-                                match response:
-                                    case GenerationResponse():
-                                        if (
-                                            device_rank == 0
-                                            and response.finish_reason == "error"
-                                        ):
-                                            event_sender.send(
-                                                ChunkGenerated(
-                                                    command_id=command_id,
-                                                    chunk=ErrorChunk(
-                                                        error_message=response.text,
-                                                        model=shard_metadata.model_card.model_id,
-                                                    ),
-                                                )
-                                            )
-                                        elif device_rank == 0:
-                                            event_sender.send(
-                                                ChunkGenerated(
-                                                    command_id=command_id,
-                                                    chunk=TokenChunk(
-                                                        model=shard_metadata.model_card.model_id,
-                                                        text=response.text,
-                                                        token_id=response.token,
-                                                        usage=response.usage,
-                                                        finish_reason=response.finish_reason,
-                                                        stats=response.stats,
-                                                        logprob=response.logprob,
-                                                        top_logprobs=response.top_logprobs,
-                                                    ),
-                                                )
-                                            )
-                                    case ToolCallResponse():
-                                        if device_rank == 0:
-                                            event_sender.send(
-                                                ChunkGenerated(
-                                                    command_id=command_id,
-                                                    chunk=ToolCallChunk(
-                                                        tool_calls=response.tool_calls,
-                                                        model=shard_metadata.model_card.model_id,
-                                                        usage=response.usage,
-                                                    ),
-                                                )
-                                            )
-                        except Exception as e:
-                            logger.error(f"Tinygrad generation failed: {e}")
-                            if device_rank == 0:
-                                event_sender.send(
-                                    ChunkGenerated(
-                                        command_id=command_id,
-                                        chunk=ErrorChunk(
-                                            model=shard_metadata.model_card.model_id,
-                                            finish_reason="error",
-                                            error_message=str(e),
-                                        ),
-                                    )
-                                )
-                            raise
-                    elif backend_type == "pytorch_ipex":
+                    if backend_type == "pytorch_ipex":
                         # PyTorch+IPEX backend text generation
                         assert pytorch_ipex_model is not None
                         assert pytorch_ipex_tokenizer is not None
@@ -1092,22 +827,7 @@ def main(
                     event_sender.send(TaskAcknowledged(task_id=task.task_id))
 
                     # Clean up backend-specific resources
-                    if backend_type == "tinygrad":
-                        # Clean up tinygrad resources
-                        logger.info("Cleaning up tinygrad resources")
-                        del tinygrad_model, tinygrad_tokenizer
-
-                        # Clear any tinygrad caches if available
-                        try:
-                            # Tinygrad doesn't have a global cache clear like MLX
-                            # but we can try to free GPU memory
-                            import gc
-
-                            gc.collect()
-                            logger.info("Tinygrad resources cleaned up")
-                        except Exception as e:
-                            logger.warning(f"Error during tinygrad cleanup: {e}")
-                    elif backend_type == "pytorch_ipex":
+                    if backend_type == "pytorch_ipex":
                         # Clean up PyTorch+IPEX resources
                         logger.info("Cleaning up PyTorch+IPEX resources")
                         del pytorch_ipex_model, pytorch_ipex_tokenizer
@@ -1154,6 +874,11 @@ def main(
 
 @cache
 def get_gpt_oss_encoding():
+    from openai_harmony import (  # pyright: ignore[reportMissingTypeStubs]
+        HarmonyEncodingName,
+        load_harmony_encoding,
+    )
+    
     encoding = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
     return encoding
 
@@ -1422,7 +1147,6 @@ def patch_kimi_tokenizer(tokenizer: TokenizerWrapper):
     """
     import ast
     import json
-    from typing import Any
 
     import regex as re
 
@@ -1483,7 +1207,6 @@ def patch_glm_tokenizer(tokenizer: TokenizerWrapper):
     """
     import ast
     import json
-    from typing import Any
 
     import regex as re
 
@@ -1586,6 +1309,7 @@ def _check_for_debug_prompts(task_params: TextGenerationTaskParams) -> None:
         logger.info("raising exception")
         raise Exception("Artificial runner exception - for testing purposes only.")
     if EXO_RUNNER_MUST_OOM in prompt:
+        from exo.worker.engines.mlx.utils_mlx import mlx_force_oom
         mlx_force_oom()
     if EXO_RUNNER_MUST_TIMEOUT in prompt:
         time.sleep(100)

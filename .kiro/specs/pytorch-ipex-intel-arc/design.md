@@ -440,13 +440,92 @@ class ErrorHandler:
 
 ```nix
 {
+  # PyTorch with XPU support built from source
+  pytorch-xpu = python3Packages.buildPythonPackage rec {
+    pname = "torch";
+    version = "2.5.0";
+    
+    src = fetchFromGitHub {
+      owner = "pytorch";
+      repo = "pytorch";
+      rev = "v${version}";
+      sha256 = "...";
+      fetchSubmodules = true;
+    };
+    
+    nativeBuildInputs = [
+      cmake
+      ninja
+      intel-compute-runtime
+      level-zero
+      oneapi-dpcpp-compiler
+      oneapi-mkl
+    ];
+    
+    buildInputs = [
+      python3
+      numpy
+      pyyaml
+      typing-extensions
+    ];
+    
+    cmakeFlags = [
+      "-DUSE_XPU=ON"
+      "-DUSE_CUDA=OFF"
+      "-DBUILD_SHARED_LIBS=ON"
+      "-DCMAKE_BUILD_TYPE=Release"
+    ];
+    
+    preBuild = ''
+      export USE_XPU=1
+      export MAX_JOBS=$NIX_BUILD_CORES
+    '';
+  };
+  
+  # IPEX with XPU support built from source
+  intel-extension-for-pytorch-xpu = python3Packages.buildPythonPackage rec {
+    pname = "intel-extension-for-pytorch";
+    version = "2.5.0+xpu";
+    
+    src = fetchFromGitHub {
+      owner = "intel";
+      repo = "intel-extension-for-pytorch";
+      rev = "v${version}";
+      sha256 = "...";
+      fetchSubmodules = true;
+    };
+    
+    nativeBuildInputs = [
+      cmake
+      ninja
+      intel-compute-runtime
+      level-zero
+      oneapi-dpcpp-compiler
+    ];
+    
+    buildInputs = [
+      pytorch-xpu
+      oneapi-mkl
+    ];
+    
+    cmakeFlags = [
+      "-DUSE_XPU=ON"
+      "-DCMAKE_BUILD_TYPE=Release"
+    ];
+    
+    preBuild = ''
+      export PYTORCH_INSTALL_DIR=${pytorch-xpu}
+    '';
+  };
+  
+  # Main exo package with PyTorch+IPEX backend
   pytorch-ipex-backend = python3Packages.buildPythonPackage {
     pname = "exo-pytorch-ipex";
     version = "0.1.0";
     
     propagatedBuildInputs = [
-      torch
-      intel-extension-for-pytorch
+      pytorch-xpu
+      intel-extension-for-pytorch-xpu
       transformers
       safetensors
     ];

@@ -11,9 +11,12 @@ Requirements addressed:
 
 import logging
 from dataclasses import dataclass
-from typing import Optional, final
+from typing import TYPE_CHECKING, Optional, final
 
 from exo.worker.engines.pytorch_ipex.errors import InferenceError
+
+if TYPE_CHECKING:
+    import torch
 
 logger = logging.getLogger(__name__)
 

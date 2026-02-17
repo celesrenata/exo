@@ -180,9 +180,24 @@ This document specifies the requirements for integrating Intel Arc GPU support i
 
 ## Dependencies
 
-- PyTorch 2.0+
-- Intel Extension for PyTorch (IPEX) 2.0+
+- PyTorch 2.0+ with XPU support (built from source)
+- Intel Extension for PyTorch (IPEX) 2.0+ with XPU support (built from source)
 - HuggingFace transformers library
 - Intel GPU drivers (compute-runtime, Level Zero)
+- oneAPI Base Toolkit components
 - NixOS 23.11+
 - Python asyncio and aiohttp libraries
+
+### Requirement 11: Native XPU Support via Source Build
+
+**User Story:** As a NixOS system administrator, I want PyTorch and IPEX built from source with XPU support so that Intel Arc GPU acceleration works natively without impure pip installations.
+
+#### Acceptance Criteria
+
+1. THE System SHALL build PyTorch from source with USE_XPU=1 flag enabled
+2. THE System SHALL build IPEX from source with XPU support enabled
+3. THE System SHALL include all required oneAPI dependencies in the Nix derivation
+4. THE System SHALL verify XPU functionality after build completion
+5. THE System SHALL maintain reproducible builds via Nix flake.lock
+6. IF build fails, THEN THE System SHALL provide clear error messages with troubleshooting steps
+7. THE System SHALL not require any pip installations outside of Nix store

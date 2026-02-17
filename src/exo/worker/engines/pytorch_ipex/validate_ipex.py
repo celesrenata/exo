@@ -141,7 +141,7 @@ def benchmark_matmul(device: torch.device, size: int = 2048) -> bool:
         start_time = time.perf_counter()
 
         for _ in range(10):
-            c = torch.matmul(a, b)
+            torch.matmul(a, b)
 
         # Ensure computation is complete
         if device.type == "xpu":

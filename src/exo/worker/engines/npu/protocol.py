@@ -113,7 +113,7 @@ class NPUServiceClient:
             logger.error(f"NPU service request failed: {e}")
             raise RuntimeError(f"NPU service unavailable: {e}") from e
         except asyncio.TimeoutError as e:
-            logger.error(f"NPU service request timed out")
+            logger.error("NPU service request timed out")
             raise RuntimeError("NPU service request timed out") from e
 
     async def health(self) -> HealthResponse:
@@ -257,7 +257,6 @@ async def handle_health(service: Any) -> dict[str, Any]:
     Returns:
         Health response data
     """
-    import time
 
     # Get service status
     npu_available = service.openvino_core is not None
@@ -285,7 +284,7 @@ async def handle_list_models(service: Any) -> dict[str, Any]:
     """
     models = []
 
-    for model_id, compiled_model in service.loaded_models.items():
+    for model_id, _compiled_model in service.loaded_models.items():
         metadata = service.model_metadata.get(model_id, {})
 
         models.append(

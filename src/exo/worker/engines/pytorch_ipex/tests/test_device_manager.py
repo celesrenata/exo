@@ -6,7 +6,11 @@ These tests validate device detection, selection, and monitoring functionality.
 
 import pytest
 
-from exo.worker.engines.pytorch_ipex.device_manager import DeviceInfo, DeviceManager, DeviceType
+from exo.worker.engines.pytorch_ipex.device_manager import (
+    DeviceInfo,
+    DeviceManager,
+    DeviceType,
+)
 
 
 def test_device_manager_initialization() -> None:

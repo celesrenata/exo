@@ -8,7 +8,6 @@ from exo.shared.types.worker.instances import (
     BoundInstance,
     MlxJacclInstance,
     PyTorchIPEXRingInstance,
-    TinygradRingInstance,
 )
 from exo.shared.types.worker.runners import RunnerFailed
 from exo.utils.channels import ClosedResourceError, MpReceiver, MpSender
@@ -26,95 +25,7 @@ def entrypoint(
     logger = _logger
 
     # Configure backend-specific environment variables
-    if isinstance(bound_instance.instance, TinygradRingInstance):
-        # Tinygrad backend configuration
-        os.environ["EXO_TINYGRAD_ENABLED"] = "true"
-
-        # Check if GPU mode is forced via environment variables (e.g., from systemd)
-        opencl_forced = os.environ.get("OPENCL") == "1"
-        gpu_forced = os.environ.get("GPU") == "1"
-
-        if opencl_forced and gpu_forced:
-            # Force OpenCL GPU mode without detection
-            logger.info(
-                "Device selection: GPU with OpenCL runtime (forced via environment)",
-                backend_type="tinygrad",
-                device_type="GPU",
-                runtime="OPENCL",
-            )
-            os.environ["TINYGRAD_BACKEND"] = "GPU"
-            capabilities = None  # Skip capabilities detection
-        else:
-            # Detect hardware capabilities and configure backend
-            from exo.worker.engines.tinygrad.device_config import detect_capabilities
-
-            capabilities = detect_capabilities()
-
-            # Set TINYGRAD_BACKEND based on detected device
-            if not os.environ.get("TINYGRAD_BACKEND"):
-                if capabilities.device_type == "GPU":
-                    os.environ["TINYGRAD_BACKEND"] = "GPU"
-                elif capabilities.device_type == "METAL":
-                    os.environ["TINYGRAD_BACKEND"] = "METAL"
-                else:
-                    os.environ["TINYGRAD_BACKEND"] = "CPU"
-
-            # Set runtime-specific environment variables
-            if capabilities.runtime == "LEVEL_ZERO":
-                os.environ["LEVEL_ZERO"] = "1"
-                os.environ["GPU"] = "1"
-                logger.info(
-                    "Device selection: Intel Arc GPU with Level Zero runtime",
-                    backend_type="tinygrad",
-                    device_type=capabilities.device_type,
-                    runtime=capabilities.runtime,
-                    device_name=capabilities.device_name,
-                    memory_gb=capabilities.memory_gb,
-                )
-            elif capabilities.runtime == "OPENCL":
-                os.environ["OPENCL"] = "1"
-                os.environ["GPU"] = "1"
-                logger.info(
-                    "Device selection: GPU with OpenCL runtime",
-                    backend_type=capabilities.device_type,
-                    runtime=capabilities.runtime,
-                    device_name=capabilities.device_name,
-                    memory_gb=capabilities.memory_gb,
-                )
-            elif capabilities.runtime == "CUDA":
-                os.environ["CUDA"] = "1"
-                os.environ["GPU"] = "1"
-                logger.info(
-                    "Device selection: NVIDIA GPU with CUDA runtime",
-                    backend_type="tinygrad",
-                    device_type=capabilities.device_type,
-                    runtime=capabilities.runtime,
-                    device_name=capabilities.device_name,
-                    memory_gb=capabilities.memory_gb,
-                )
-            elif capabilities.runtime == "METAL":
-                os.environ["METAL"] = "1"
-                logger.info(
-                    "Device selection: Apple Metal GPU",
-                    backend_type="tinygrad",
-                    device_type=capabilities.device_type,
-                    runtime=capabilities.runtime,
-                    device_name=capabilities.device_name,
-                    memory_gb=capabilities.memory_gb,
-                )
-            else:
-                # CPU fallback
-                logger.info(
-                    "Device selection: CPU (no GPU runtime available)",
-                    backend_type="tinygrad",
-                    device_type=capabilities.device_type,
-                    device_name=capabilities.device_name,
-                    memory_gb=capabilities.memory_gb,
-                    compute_units=capabilities.compute_units,
-                )
-
-        logger.info(f"Tinygrad backend: {os.environ.get('TINYGRAD_BACKEND')}")
-    elif isinstance(bound_instance.instance, PyTorchIPEXRingInstance):
+    if isinstance(bound_instance.instance, PyTorchIPEXRingInstance):
         # PyTorch+IPEX backend configuration
         os.environ["EXO_PYTORCH_IPEX_ENABLED"] = "true"
         
@@ -125,8 +36,8 @@ def entrypoint(
         # Detect Intel Arc GPU and configure device
         try:
             # Lazy import to avoid loading PyTorch unless needed
+            import intel_extension_for_pytorch as ipex  # noqa: F401 - Required for XPU support
             import torch
-            import intel_extension_for_pytorch as ipex
             
             if torch.xpu.is_available():
                 device_count = torch.xpu.device_count()

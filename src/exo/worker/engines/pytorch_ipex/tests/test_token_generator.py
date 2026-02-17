@@ -7,14 +7,16 @@ top-k, top-p sampling, and special token handling.
 
 import pytest
 
-
 # Skip all tests if PyTorch is not available
 pytest.importorskip("torch")
 
 import torch
 
 from exo.worker.engines.pytorch_ipex.errors import InferenceError
-from exo.worker.engines.pytorch_ipex.token_generator import SamplingResult, TokenGenerator
+from exo.worker.engines.pytorch_ipex.token_generator import (
+    SamplingResult,
+    TokenGenerator,
+)
 
 
 def test_token_generator_initialization() -> None:

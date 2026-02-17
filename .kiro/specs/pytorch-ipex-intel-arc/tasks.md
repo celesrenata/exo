@@ -207,7 +207,7 @@ This document outlines the implementation tasks for integrating Intel Arc GPU su
   - Detect EOS (end of sequence) token
   - Handle PAD tokens appropriately
   - Support custom stop sequences
-  - Return token with metadata
+  - Return token with metadataallow it
   - _Requirements: 6.3_
 
 - [x] 7. Integrate with exo runner and architecture
@@ -315,14 +315,77 @@ This document outlines the implementation tasks for integrating Intel Arc GPU su
   - Return detailed health status
   - _Requirements: 10.5_
 
-- [ ] 10. Testing and validation
+- [ ] 10. Build PyTorch+IPEX from source with XPU support in Nix
+  - Create Nix derivation for PyTorch with XPU support
+  - Create Nix derivation for IPEX with XPU support
+  - Configure oneAPI dependencies
+  - Verify XPU functionality after build
+  - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7_
+
+- [x] 10.1 Create PyTorch XPU Nix derivation
+  - Fetch PyTorch source from GitHub with submodules
+  - Configure CMake with USE_XPU=ON flag
+  - Add oneAPI dependencies (dpcpp-compiler, mkl)
+  - Add Intel GPU runtime dependencies (compute-runtime, level-zero)
+  - Set up proper build environment variables
+  - _Requirements: 11.1, 11.3_
+
+- [x] 10.2 Create IPEX XPU Nix derivation
+  - Fetch IPEX source from GitHub with submodules
+  - Link against PyTorch XPU build
+  - Configure CMake with USE_XPU=ON flag
+  - Add oneAPI dependencies
+  - Ensure proper dependency ordering in Nix
+  - _Requirements: 11.2, 11.3_
+
+- [x] 10.3 Configure oneAPI dependencies in Nix
+  - Add oneapi-dpcpp-compiler to buildInputs
+  - Add oneapi-mkl for optimized math operations
+  - Add intel-compute-runtime for GPU runtime
+  - Add level-zero for low-level GPU access
+  - Set up proper library paths and environment
+  - _Requirements: 11.3_
+
+- [ ] 10.4 Create build verification script
+  - Test torch.xpu.is_available() after build
+  - Verify torch.xpu.device_count() returns devices
+  - Test basic tensor operations on XPU
+  - Verify IPEX import and optimization
+  - Document build success criteria
+  - _Requirements: 11.4_
+
+- [ ] 10.5 Update flake.nix with new derivations
+  - Add pytorch-xpu override to python packages
+  - Add intel-extension-for-pytorch-xpu override
+  - Update exo package to use XPU-enabled builds
+  - Pin versions in flake.lock for reproducibility
+  - Test full flake build
+  - _Requirements: 11.5, 11.7_
+
+- [ ] 10.6 Handle build failures and debugging
+  - Document common build errors
+  - Add troubleshooting steps to documentation
+  - Create fallback strategies for build issues
+  - Test build on clean NixOS system
+  - Verify no impure dependencies
+  - _Requirements: 11.6, 11.7_
+
+- [ ] 10.7 Test XPU functionality end-to-end
+  - Run detect_intel_arc.py with built packages
+  - Test model loading with XPU-enabled PyTorch
+  - Verify IPEX optimizations work correctly
+  - Benchmark against CPU to confirm GPU acceleration
+  - Document any XPU-specific issues
+  - _Requirements: 11.4, 11.5_
+
+- [ ] 11. Testing and validation
   - Write unit tests for all components
   - Create integration tests
   - Perform performance benchmarking
   - Validate on target hardware
   - _Requirements: 8.1, 8.2, 8.3_
 
-- [ ] 10.1 Write unit tests
+- [ ] 11.1 Write unit tests
   - Test DeviceManager device selection
   - Test ModelLoader model loading
   - Test KVCacheManager cache operations
@@ -330,56 +393,56 @@ This document outlines the implementation tasks for integrating Intel Arc GPU su
   - Achieve >80% code coverage
   - _Requirements: 8.1_
 
-- [ ] 10.2 Create integration tests
+- [ ] 11.2 Create integration tests
   - Test end-to-end inference pipeline via runner.py
   - Test multi-node distributed inference with exo Master/Worker
   - Test error handling and recovery
   - Test API compatibility with OpenAI format
   - _Requirements: 8.2_
 
-- [ ] 10.3 Perform benchmarking
+- [ ] 11.3 Perform benchmarking
   - Measure inference latency
   - Measure throughput (tokens/sec)
   - Profile memory usage
   - Compare with baseline performance
   - _Requirements: 8.3_
 
-- [ ] 10.4 Validate on Intel Arc hardware
+- [ ] 11.4 Validate on Intel Arc hardware
   - Test on actual Intel Arc GPU
   - Verify IPEX optimizations work
   - Test with various model sizes
   - Document any hardware-specific issues
   - _Requirements: 1.1, 2.2, 8.1_
 
-- [ ] 11. Documentation and deployment
+- [ ] 12. Documentation and deployment
   - Write user documentation
   - Create deployment guide
   - Document troubleshooting steps
   - Prepare release notes
   - _Requirements: All_
 
-- [ ] 11.1 Write user documentation
+- [ ] 12.1 Write user documentation
   - Document installation steps
   - Explain configuration options
   - Provide usage examples
   - Include API reference
   - _Requirements: 7.4, 7.5_
 
-- [ ] 11.2 Create deployment guide
+- [ ] 12.2 Create deployment guide
   - Document NixOS deployment
   - Explain multi-node setup
   - Provide configuration templates
   - Include troubleshooting section
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ] 11.3 Document known issues
+- [ ] 12.3 Document known issues
   - List hardware compatibility issues
   - Document performance limitations
   - Explain workarounds
   - Provide links to upstream issues
   - _Requirements: All_
 
-- [ ] 11.4 Prepare release notes
+- [ ] 12.4 Prepare release notes
   - Summarize new features
   - List breaking changes
   - Document migration path from tinygrad
@@ -399,20 +462,21 @@ graph TD
     T5 --> T7[7. Runner Integration]
     T7 --> T8[8. Factory & Testing]
     T8 --> T9[9. Monitoring]
-    T8 --> T10[10. Testing]
-    T10 --> T11[11. Documentation]
+    T9 --> T10[10. Build from Source]
+    T10 --> T11[11. Testing]
+    T11 --> T12[12. Documentation]
 ```
 
 ## Priority Levels
 
 ### P0 (Critical - Must Have)
-- Tasks 1, 2, 3, 4, 5, 6, 8, 10
+- Tasks 1, 2, 3, 4, 5, 6, 8, 10, 11
 
 ### P1 (High - Should Have)
 - Tasks 7, 9
 
 ### P2 (Medium - Nice to Have)
-- Task 11
+- Task 12
 
 ## Estimated Timeline
 
@@ -422,13 +486,18 @@ graph TD
 - Phase 2 (Integration & Distribution): 1-2 weeks
   - Tasks 7-8
 
-- Phase 3 (Testing & Polish): 1-2 weeks
-  - Tasks 9-11
+- Phase 3 (Monitoring & Build): 2-3 weeks
+  - Tasks 9-10
 
-Total: 4-7 weeks
+- Phase 4 (Testing & Polish): 1-2 weeks
+  - Tasks 11-12
+
+Total: 6-10 weeks
 
 ## Success Criteria
 
+- [ ] PyTorch and IPEX built from source with XPU support in Nix
+- [ ] torch.xpu.is_available() returns True after build
 - [ ] Intel Arc GPU successfully detected and selected
 - [ ] Llama-3.2-3B model loads and runs on Intel Arc via runner.py
 - [ ] Inference achieves >15 tokens/sec on Intel Arc
@@ -436,11 +505,15 @@ Total: 4-7 weeks
 - [ ] Backend integrates properly with PyTorchIPEXRingInstance
 - [ ] API maintains OpenAI compatibility
 - [ ] All tests pass with >80% coverage
-- [ ] System runs stably on NixOS
+- [ ] System runs stably on NixOS with no impure dependencies
 - [ ] Documentation is complete and accurate
 
 ## Notes
 
+- Task 10 is critical: Building PyTorch+IPEX from source with XPU support is the "NixOS way"
+- Avoid pip installations outside Nix store - everything must be in Nix derivations
+- PyTorch build requires USE_XPU=1 flag and oneAPI dependencies
+- IPEX build must link against XPU-enabled PyTorch
 - Focus on runner.py integration first - this is where the backend connects to exo
 - exo handles distributed coordination via Master/Worker pattern - no custom coordinator needed
 - Use small models (1B-3B) for initial testing
@@ -448,3 +521,4 @@ Total: 4-7 weeks
 - Test fallback mechanisms thoroughly
 - Follow the pattern established by Tinygrad backend in runner.py
 - Document all Intel Arc-specific quirks and workarounds
+- Expect Task 10 to take significant time - building PyTorch from source is complex

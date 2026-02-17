@@ -6,7 +6,7 @@ This module determines which tasks should be routed to NPU vs GPU/CPU.
 import logging
 from typing import Literal
 
-from exo.shared.types.tasks import Task, TextGeneration, ImageGeneration, ImageEdits
+from exo.shared.types.tasks import ImageEdits, ImageGeneration, Task, TextGeneration
 from exo.worker.engines.npu.discovery import NPUCapabilities
 
 logger = logging.getLogger(__name__)
@@ -78,33 +78,33 @@ def should_use_npu(task: Task, npu_caps: NPUCapabilities) -> bool:
     # Route based on workload type
     if workload_type == "embedding":
         # Embeddings are ideal for NPU
-        logger.debug(f"Routing embedding task to NPU")
+        logger.debug("Routing embedding task to NPU")
         return "embeddings" in npu_caps.supported_model_types
 
     elif workload_type == "vision":
         # Vision tasks can benefit from NPU
-        logger.debug(f"Routing vision task to NPU")
+        logger.debug("Routing vision task to NPU")
         return "vision" in npu_caps.supported_model_types
 
     elif workload_type == "audio":
         # Audio processing can benefit from NPU
-        logger.debug(f"Routing audio task to NPU")
+        logger.debug("Routing audio task to NPU")
         return "audio" in npu_caps.supported_model_types
 
     elif workload_type == "llm_decode":
         # Large LLM decode should stay on GPU/CPU
         # Only route small transformers to NPU
-        logger.debug(f"LLM decode task - keeping on GPU/CPU")
+        logger.debug("LLM decode task - keeping on GPU/CPU")
         return False
 
     elif workload_type == "image_generation":
         # Image generation (FLUX, SD) should stay on GPU
-        logger.debug(f"Image generation task - keeping on GPU")
+        logger.debug("Image generation task - keeping on GPU")
         return False
 
     else:
         # Unknown workload - default to CPU/GPU
-        logger.debug(f"Unknown workload type - routing to CPU/GPU")
+        logger.debug("Unknown workload type - routing to CPU/GPU")
         return False
 
 
@@ -169,11 +169,11 @@ class NPURouter:
 
         # Check if task should use NPU
         if should_use_npu(task, self.npu_caps):
-            logger.debug(f"Routing task to NPU")
+            logger.debug("Routing task to NPU")
             self.routed_to_npu += 1
             return "NPU"
         else:
-            logger.debug(f"Routing task to fallback device")
+            logger.debug("Routing task to fallback device")
             self.routed_to_fallback += 1
             return get_fallback_device(task)
 
