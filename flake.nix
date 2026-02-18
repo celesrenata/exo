@@ -456,13 +456,9 @@
                       };
                     });
                     
-                    # Override torch with our pytorch-xpu build (Linux only)
-                    # This ensures exo uses PyTorch with XPU support instead of standard PyTorch
-                    torch = if final.stdenv.isLinux
-                      then pself.callPackage ./nix/pytorch-xpu.nix {
-                        inherit (final) intel-compute-runtime level-zero mkl oneDNN onetbb;
-                      }
-                      else psuper.torch;
+                    # PyTorch with XPU support must be installed via pip
+                    # See nix/PYTORCH_IPEX_INSTALLATION.md
+                    # torch = standard PyTorch from nixpkgs (no override needed)
                   };
                 };
               })
@@ -533,31 +529,19 @@
               default = self'.packages.exo;
             }
           ) // lib.optionalAttrs pkgs.stdenv.isLinux {
-            # PyTorch with Intel XPU support (Linux only)
-            # Use pkgsExo.python312 which has our test-disabled packages
-            pytorch-xpu = pkgsExo.python312.pkgs.callPackage ./nix/pytorch-xpu.nix {
-              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
-            };
-            
-            # Intel Extension for PyTorch with XPU support (Linux only)
-            # Depends on pytorch-xpu, must be built after it
-            # Use pkgsExo.python312 which has our test-disabled packages
-            ipex-xpu = pkgsExo.python312.pkgs.callPackage ./nix/ipex-xpu.nix {
-              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
-              pytorch-xpu = self'.packages.pytorch-xpu;
-            };
+            # PyTorch and IPEX with XPU support must be installed via pip
+            # See nix/PYTORCH_IPEX_INSTALLATION.md for instructions
           };
 
           devShells.default =
             let
-              # Create a Python environment with PyTorch and IPEX using top-level packages
-              # On Linux, use our custom-built PyTorch XPU and IPEX XPU packages (Python 3.12)
+              # Create a Python environment without PyTorch+IPEX (installed via pip)
+              # On Linux, PyTorch+IPEX XPU must be installed via pip due to download restrictions
               # Python 3.12 is required for Intel's PyTorch+IPEX XPU wheels
               pythonWithPackages = if pkgs.stdenv.isLinux then
                 pkgsExo.python312.withPackages (ps: [
-                  # Use top-level pytorch-xpu and ipex-xpu packages (2.5.1+xpu)
-                  self'.packages.pytorch-xpu
-                  self'.packages.ipex-xpu
+                  # PyTorch and IPEX must be installed via pip
+                  # See nix/PYTORCH_IPEX_INSTALLATION.md
                 ])
               else
                 # On macOS, use standard Python (no XPU support needed)

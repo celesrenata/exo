@@ -159,12 +159,9 @@
                   numpy
                   python-multipart
                   openai-harmony
-                ] ++ [
-                  # PyTorch with Intel XPU support (2.5.1+xpu) - use top-level package
-                  self'.packages.pytorch-xpu
-                  # Intel Extension for PyTorch (IPEX) with XPU support (2.5.1+xpu) - use top-level package
-                  self'.packages.ipex-xpu
                 ];
+                # PyTorch and IPEX with XPU support must be installed via pip
+                # See nix/PYTORCH_IPEX_INSTALLATION.md
 
                 # Install Rust bindings after main package
                 postInstall = ''
