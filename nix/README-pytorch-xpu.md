@@ -76,16 +76,30 @@ Then rebuild.
 After building, verify the build with:
 
 ```bash
-# Run verification script
+# Quick verification (PyTorch only)
 nix run .#pytorch-xpu -- python nix/verify-pytorch-xpu.py
+
+# Comprehensive verification (PyTorch + IPEX)
+python nix/verify-build.py
+
+# Or use the shell wrapper
+./test_build_verification.sh
 ```
 
-This tests:
+The quick verification tests:
 - ✓ PyTorch imports successfully
 - ✓ `torch.xpu.is_available()` returns True (if Intel Arc GPU present)
 - ✓ `torch.xpu.device_count()` enumerates devices
 - ✓ Basic tensor operations work on XPU
 - ⊘ IPEX import (optional, tested in task 10.2)
+
+The comprehensive verification (task 10.4) tests all build success criteria:
+- PyTorch and IPEX imports
+- XPU availability and device enumeration
+- Tensor operations on XPU
+- IPEX optimization on CPU and XPU
+
+See `nix/BUILD_SUCCESS_CRITERIA.md` for detailed success criteria.
 
 ## Integration
 

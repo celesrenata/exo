@@ -91,12 +91,33 @@ nix run .#ipex-xpu -- python nix/verify-ipex-xpu.py
 
 ## Verification
 
-The verification script (`verify-ipex-xpu.py`) tests:
+The verification script tests:
 
 1. **PyTorch XPU Support**: Verifies PyTorch with XPU is available
 2. **IPEX Import**: Tests that IPEX imports successfully
 3. **IPEX Optimization**: Verifies IPEX can optimize models
 4. **IPEX XPU Optimization**: Tests XPU-specific optimizations (requires Intel Arc GPU)
+
+### Running Verification
+
+```bash
+# Quick verification (IPEX only)
+nix run .#ipex-xpu -- python nix/verify-ipex-xpu.py
+
+# Comprehensive verification (PyTorch + IPEX) - Task 10.4
+python nix/verify-build.py
+
+# Or use the shell wrapper
+./test_build_verification.sh
+```
+
+The comprehensive verification (task 10.4) tests all build success criteria:
+- PyTorch and IPEX imports
+- XPU availability and device enumeration
+- Tensor operations on XPU
+- IPEX optimization on CPU and XPU
+
+See `nix/BUILD_SUCCESS_CRITERIA.md` for detailed success criteria.
 
 ### Expected Results
 
