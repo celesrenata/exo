@@ -3,7 +3,7 @@ name = "exo"
 version = "0.3.0"
 description = "Exo"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "aiofiles>=24.1.0",
     "aiohttp>=3.12.14",
@@ -100,7 +100,7 @@ reportInvalidCast = "error"
 reportUnnecessaryCast = "error"
 reportUnnecessaryTypeIgnoreComment = "error"
 
-pythonVersion = "3.13"
+pythonVersion = "3.12"
 pythonPlatform = "Darwin"
 
 exclude = ["**/.venv", "**/venv", "**/__pycache__", "**/exo_scripts", "**/.direnv", "**/rust", "**/.github"]

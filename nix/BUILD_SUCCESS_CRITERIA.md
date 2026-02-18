@@ -1,327 +1,236 @@
-# Build Success Criteria for PyTorch + IPEX with XPU Support
-
-This document defines the success criteria for verifying that PyTorch and Intel Extension for PyTorch (IPEX) have been built correctly with Intel XPU (Arc GPU) support.
+# Build Success Criteria for PyTorch + IPEX with Intel XPU
 
 ## Overview
 
-The build verification process tests all requirements from task 10.4:
-1. Test `torch.xpu.is_available()` after build
-2. Verify `torch.xpu.device_count()` returns devices
-3. Test basic tensor operations on XPU
-4. Verify IPEX import and optimization
-5. Document build success criteria
+This document defines the success criteria for PyTorch and IPEX installation with Intel Arc GPU (XPU) support. Since we're using pip-installed pre-built wheels instead of building from source, "build success" means "installation success".
+
+See `PYTORCH_IPEX_INSTALLATION.md` for installation instructions and `TASK_10_PIVOT.md` for the rationale behind using pip instead of Nix builds.
 
 ## Critical Requirements (Must Pass)
 
-These requirements must pass for the build to be considered successful:
+These requirements must be met on any system, regardless of GPU presence:
 
-### 1. PyTorch Import
-**Test**: `import torch`
+### CR-1: PyTorch Import
+**Requirement**: PyTorch must be importable
+**Test**: `python -c "import torch"`
+**Success**: No ImportError
+**Failure**: Installation incomplete or corrupted
 
-**Success Criteria**:
-- PyTorch imports without errors
-- Version is 2.5.0 or higher
-- No missing dependencies
+### CR-2: PyTorch Version
+**Requirement**: PyTorch version must include '+xpu' suffix
+**Test**: `python -c "import torch; print(torch.__version__)"`
+**Success**: Output contains '+xpu' (e.g., "2.5.1+xpu")
+**Failure**: Wrong PyTorch version installed (standard instead of XPU)
 
-**Failure Indicators**:
-- ImportError when importing torch
-- Missing shared libraries
-- Version mismatch
+### CR-3: IPEX Import
+**Requirement**: IPEX must be importable
+**Test**: `python -c "import intel_extension_for_pytorch as ipex"`
+**Success**: No ImportError
+**Failure**: IPEX not installed or incompatible version
 
-### 2. XPU Module Compiled
-**Test**: `hasattr(torch, 'xpu')`
+### CR-4: IPEX Version
+**Requirement**: IPEX version must include '+xpu' suffix
+**Test**: `python -c "import intel_extension_for_pytorch as ipex; print(ipex.__version__)"`
+**Success**: Output contains '+xpu' (e.g., "2.5.10+xpu")
+**Failure**: Wrong IPEX version installed
 
-**Success Criteria**:
-- `torch.xpu` module exists
-- This proves PyTorch was built with `USE_XPU=ON`
+### CR-5: XPU Module Available
+**Requirement**: torch.xpu module must be accessible
+**Test**: `python -c "import torch; torch.xpu.is_available()"`
+**Success**: No AttributeError (returns True or False)
+**Failure**: XPU module not available (wrong PyTorch build)
 
-**Failure Indicators**:
-- `torch.xpu` module not found
-- AttributeError when accessing torch.xpu
-- Build was done without XPU support
+### CR-6: IPEX CPU Optimization
+**Requirement**: IPEX optimization must work on CPU
+**Test**: `python -c "import torch, intel_extension_for_pytorch as ipex; m = torch.nn.Linear(10,10); ipex.optimize(m)"`
+**Success**: No exceptions
+**Failure**: IPEX optimization broken
 
-### 3. IPEX Import
-**Test**: `import intel_extension_for_pytorch as ipex`
+## Optional Requirements (Require Intel Arc GPU)
 
-**Success Criteria**:
-- IPEX imports without errors
-- Version is 2.5.0+xpu or higher
-- No missing dependencies
+These requirements can only be tested on systems with Intel Arc GPU hardware:
 
-**Failure Indicators**:
-- ImportError when importing IPEX
-- Missing shared libraries
-- Version mismatch with PyTorch
+### OR-1: XPU Available
+**Requirement**: XPU must be detected when Intel Arc GPU is present
+**Test**: `python -c "import torch; print(torch.xpu.is_available())"`
+**Success**: Returns True
+**Failure**: Returns False despite GPU being present
+**Note**: Returns False on systems without Intel Arc GPU (expected)
 
-### 4. IPEX CPU Optimization
-**Test**: Create and optimize a simple model on CPU
+### OR-2: XPU Device Count
+**Requirement**: At least one XPU device must be detected
+**Test**: `python -c "import torch; print(torch.xpu.device_count())"`
+**Success**: Returns >= 1
+**Failure**: Returns 0 despite GPU being present
 
-**Success Criteria**:
-- `ipex.optimize()` succeeds on CPU
-- Model inference produces correct output shapes
-- No runtime errors
+### OR-3: XPU Device Name
+**Requirement**: XPU device name must be retrievable
+**Test**: `python -c "import torch; print(torch.xpu.get_device_name(0))"`
+**Success**: Returns device name (e.g., "Intel(R) Arc(TM) A770 Graphics")
+**Failure**: Exception or empty string
 
-**Failure Indicators**:
-- Optimization fails
-- Inference produces wrong shapes
-- Runtime errors during forward pass
+### OR-4: Tensor Creation on XPU
+**Requirement**: Tensors must be creatable on XPU device
+**Test**: `python -c "import torch; x = torch.randn(3,3).to('xpu'); print(x.device)"`
+**Success**: Device type is 'xpu'
+**Failure**: Exception or wrong device type
 
-## Optional Requirements (Hardware-Dependent)
+### OR-5: Tensor Operations on XPU
+**Requirement**: Basic tensor operations must work on XPU
+**Test**: `python -c "import torch; x = torch.randn(3,3).to('xpu'); y = torch.randn(3,3).to('xpu'); z = torch.matmul(x,y); print(z.shape)"`
+**Success**: Returns torch.Size([3, 3])
+**Failure**: Exception or wrong shape
 
-These requirements are only tested if Intel Arc GPU hardware is present:
+### OR-6: IPEX XPU Optimization
+**Requirement**: IPEX optimization must work on XPU
+**Test**: `python -c "import torch, intel_extension_for_pytorch as ipex; m = torch.nn.Linear(10,10).to('xpu'); m = ipex.optimize(m); x = torch.randn(1,10).to('xpu'); y = m(x); print(y.device)"`
+**Success**: Output device is 'xpu'
+**Failure**: Exception or wrong device
 
-### 5. XPU Hardware Detection
-**Test**: `torch.xpu.is_available()`
+## Verification Script
 
-**Success Criteria**:
-- Returns `True` when Intel Arc GPU is present
-- Returns `False` when no Intel Arc GPU (expected on build machines)
+The `nix/verify-pytorch-ipex-xpu.py` script automates all these checks:
 
-**Notes**:
-- This test is skipped in non-strict mode if no GPU present
-- In strict mode, this test must pass
-
-### 6. XPU Device Enumeration
-**Test**: `torch.xpu.device_count()`
-
-**Success Criteria**:
-- Returns count > 0 when Intel Arc GPU present
-- Device properties can be queried
-- Device name, memory, compute units are reported
-
-**Failure Indicators**:
-- Returns 0 when GPU should be present
-- Cannot query device properties
-- Driver issues
-
-### 7. XPU Tensor Operations
-**Test**: Create tensors and perform operations on XPU
-
-**Success Criteria**:
-- Tensors can be created on `xpu:0` device
-- Matrix multiplication works
-- Element-wise operations work
-- Reduction operations work
-- Data can be transferred between XPU and CPU
-
-**Failure Indicators**:
-- Cannot create tensors on XPU
-- Operations fail or produce incorrect results
-- Memory errors
-- Driver crashes
-
-### 8. IPEX XPU Optimization
-**Test**: Create and optimize a model for XPU with IPEX
-
-**Success Criteria**:
-- Model can be moved to XPU device
-- `ipex.optimize()` succeeds with `dtype=torch.bfloat16`
-- `ipex.optimize()` succeeds with `dtype=torch.float32`
-- Inference on XPU produces correct output shapes
-- Output tensors are on XPU device
-
-**Failure Indicators**:
-- Cannot move model to XPU
-- Optimization fails
-- Inference produces wrong shapes or errors
-- Output tensors not on XPU
-
-## Verification Modes
-
-### Non-Strict Mode (Default)
 ```bash
-python nix/verify-build.py
-# or
-./test_build_verification.sh
+# Run all checks (allows missing GPU)
+python nix/verify-pytorch-ipex-xpu.py
+
+# Run all checks (requires GPU)
+python nix/verify-pytorch-ipex-xpu.py --strict
 ```
 
-**Behavior**:
-- Critical requirements (1-4) must pass
-- Optional requirements (5-8) are skipped if no GPU present
-- Exit code 0 if critical requirements pass
-- Exit code 1 if critical requirements fail
+Or use the wrapper script:
 
-**Use Case**:
-- Building on machines without Intel Arc GPU
-- CI/CD pipelines
-- Development environments
-
-### Strict Mode
 ```bash
-python nix/verify-build.py --strict
-# or
-./test_build_verification.sh --strict
+# Run all checks (allows missing GPU)
+./test_pytorch_ipex_verification.sh
+
+# Run all checks (requires GPU)
+./test_pytorch_ipex_verification.sh --strict
 ```
-
-**Behavior**:
-- All requirements (1-8) must pass
-- Fails if no Intel Arc GPU detected
-- Exit code 0 if all requirements pass
-- Exit code 1 if any requirement fails
-- Exit code 2 if no XPU hardware available
-
-**Use Case**:
-- Testing on machines with Intel Arc GPU
-- Production deployment verification
-- Hardware validation
 
 ## Exit Codes
 
-| Code | Meaning | Description |
-|------|---------|-------------|
-| 0 | Success | All critical tests passed |
-| 1 | Failure | Critical tests failed |
-| 2 | No Hardware | XPU hardware not available (strict mode only) |
+The verification script uses the following exit codes:
 
-## Expected Results by Environment
+- **0**: All checks passed (or GPU checks skipped due to no GPU)
+- **1**: Critical failure (PyTorch or IPEX import failed)
+- **2**: GPU not available (only in strict mode)
+- **3**: GPU tests failed (GPU present but operations failed)
 
-### Build Machine (No Intel Arc GPU)
-**Non-Strict Mode**:
+## Interpretation Guide
+
+### Exit Code 0 (Success)
+
+**Without GPU**:
 ```
-✓ PASS    PyTorch Import
-✓ PASS    XPU Available (torch.xpu.is_available)
-⊘ SKIP    XPU Device Count (torch.xpu.device_count)
-⊘ SKIP    XPU Tensor Operations
-✓ PASS    IPEX Import
-✓ PASS    IPEX Optimization (CPU)
-⊘ SKIP    IPEX Optimization (XPU)
-
-Result: BUILD VERIFICATION PASSED (without XPU hardware)
-Exit Code: 0
+Checks passed: 6/9
+⚠️  WARNING: No Intel Arc GPU detected
+   PyTorch and IPEX are installed correctly
+   XPU features will not be available without Intel Arc GPU
 ```
+**Interpretation**: Installation is correct. GPU tests were skipped because no GPU is present. This is expected on build machines or systems without Intel Arc GPUs.
 
-**Strict Mode**:
+**With GPU**:
 ```
-✓ PASS    PyTorch Import
-✗ FAIL    XPU Available (torch.xpu.is_available)
-⊘ SKIP    XPU Device Count (torch.xpu.device_count)
-⊘ SKIP    XPU Tensor Operations
-✓ PASS    IPEX Import
-✓ PASS    IPEX Optimization (CPU)
-⊘ SKIP    IPEX Optimization (XPU)
-
-Result: XPU Hardware Not Available
-Exit Code: 2
+Checks passed: 9/9
+✅ SUCCESS: All checks passed
+   PyTorch and IPEX are correctly installed with XPU support
+   Intel Arc GPU is available and working
 ```
+**Interpretation**: Installation is correct and GPU is working. Ready for production use.
 
-### Deployment Machine (With Intel Arc GPU)
-**Both Modes**:
+### Exit Code 1 (Critical Failure)
+
 ```
-✓ PASS    PyTorch Import
-✓ PASS    XPU Available (torch.xpu.is_available)
-✓ PASS    XPU Device Count (torch.xpu.device_count)
-✓ PASS    XPU Tensor Operations
-✓ PASS    IPEX Import
-✓ PASS    IPEX Optimization (CPU)
-✓ PASS    IPEX Optimization (XPU)
-
-Result: BUILD VERIFICATION PASSED (with XPU support)
-Exit Code: 0
+❌ CRITICAL FAILURE: PyTorch or IPEX import failed
+   Please install PyTorch+IPEX following nix/PYTORCH_IPEX_INSTALLATION.md
 ```
+**Interpretation**: PyTorch or IPEX is not installed or is corrupted. Follow installation guide.
 
-## Troubleshooting
+**Common causes**:
+- PyTorch not installed
+- Wrong PyTorch version (standard instead of XPU)
+- IPEX not installed
+- Version mismatch between PyTorch and IPEX
+- Python environment issues
 
-### PyTorch Import Fails
-**Symptoms**:
-- `ImportError: cannot import name 'torch'`
-- Missing shared library errors
+**Resolution**:
+1. Check Python version (must be 3.10-3.12)
+2. Reinstall PyTorch with XPU support
+3. Reinstall IPEX with XPU support
+4. Verify versions match
 
-**Solutions**:
-1. Check PyTorch was built: `nix build .#pytorch-xpu`
-2. Verify dependencies in `nix/pytorch-xpu.nix`
-3. Check build logs for errors
-4. Ensure oneAPI dependencies are available
+### Exit Code 2 (No GPU in Strict Mode)
 
-### XPU Module Not Found
-**Symptoms**:
-- `AttributeError: module 'torch' has no attribute 'xpu'`
-- XPU support not compiled
-
-**Solutions**:
-1. Verify `USE_XPU=ON` in `nix/pytorch-xpu.nix`
-2. Check CMake configuration in build logs
-3. Rebuild PyTorch: `nix build .#pytorch-xpu --rebuild`
-4. Verify oneAPI compiler is available
-
-### IPEX Import Fails
-**Symptoms**:
-- `ImportError: cannot import name 'intel_extension_for_pytorch'`
-- Version mismatch errors
-
-**Solutions**:
-1. Check IPEX was built: `nix build .#ipex-xpu`
-2. Verify IPEX links against correct PyTorch version
-3. Check `nix/ipex-xpu.nix` configuration
-4. Ensure PyTorch XPU is built first
-
-### XPU Not Available (Hardware Present)
-**Symptoms**:
-- `torch.xpu.is_available()` returns `False`
-- GPU should be present but not detected
-
-**Solutions**:
-1. Check Intel GPU drivers: `clinfo | grep -i intel`
-2. Verify compute-runtime installed: `nix-store -q --references $(which python3) | grep compute-runtime`
-3. Check Level Zero: `ls /usr/lib/libze_loader.so*`
-4. Verify GPU visible: `lspci | grep -i vga`
-5. Check dmesg for driver errors: `dmesg | grep -i i915`
-
-### XPU Operations Fail
-**Symptoms**:
-- Tensor creation fails on XPU
-- Operations produce errors
-- Driver crashes
-
-**Solutions**:
-1. Update Intel GPU drivers
-2. Check GPU memory: `intel_gpu_top`
-3. Verify no other processes using GPU
-4. Check system logs: `journalctl -xe | grep -i gpu`
-5. Try with smaller tensors to rule out memory issues
-
-### IPEX Optimization Fails
-**Symptoms**:
-- `ipex.optimize()` raises errors
-- Inference fails after optimization
-
-**Solutions**:
-1. Check IPEX version matches PyTorch version
-2. Try different dtype (float32 vs bfloat16)
-3. Verify model is in eval mode
-4. Check for unsupported operations in model
-5. Review IPEX documentation for model compatibility
-
-## Integration with CI/CD
-
-### GitHub Actions Example
-```yaml
-- name: Verify Build
-  run: |
-    nix build .#pytorch-xpu
-    nix build .#ipex-xpu
-    ./test_build_verification.sh
 ```
+❌ FAILURE: No Intel Arc GPU detected (strict mode)
+   XPU is not available on this system
+```
+**Interpretation**: Strict mode requires GPU but none was found.
 
-### NixOS Deployment
+**Common causes**:
+- No Intel Arc GPU in system
+- GPU drivers not installed
+- GPU not enabled in BIOS
+- Permissions issues
+
+**Resolution**:
+1. Check hardware: `lspci | grep -i vga`
+2. Check drivers: `clinfo` and `sycl-ls`
+3. Check permissions: `groups` (should include 'video' or 'render')
+4. Install drivers if missing
+
+### Exit Code 3 (GPU Tests Failed)
+
+```
+❌ FAILURE: GPU tests failed
+   Intel Arc GPU is detected but some operations failed
+```
+**Interpretation**: GPU is present but not working correctly.
+
+**Common causes**:
+- Driver version mismatch
+- Incomplete driver installation
+- GPU firmware issues
+- Memory allocation failures
+
+**Resolution**:
+1. Update GPU drivers
+2. Check `dmesg | grep -i gpu` for errors
+3. Verify `/dev/dri/renderD*` exists
+4. Check GPU memory: `intel_gpu_top`
+5. Reinstall compute runtime
+
+## Troubleshooting Matrix
+
+| Symptom | Likely Cause | Resolution |
+|---------|--------------|------------|
+| ImportError: torch | PyTorch not installed | Install PyTorch with XPU |
+| ImportError: intel_extension_for_pytorch | IPEX not installed | Install IPEX with XPU |
+| Version without '+xpu' | Wrong package installed | Reinstall with correct index URL |
+| AttributeError: 'module' object has no attribute 'xpu' | Standard PyTorch installed | Reinstall PyTorch with XPU |
+| xpu.is_available() returns False | No GPU or drivers | Check hardware and drivers |
+| Tensor creation fails | GPU memory issue | Check GPU memory availability |
+| IPEX optimization fails | Version mismatch | Ensure PyTorch and IPEX versions match |
+
+## Continuous Integration
+
+For CI/CD pipelines:
+
 ```bash
-# Build on CI server (no GPU)
-./test_build_verification.sh
+# In CI without GPU (build verification)
+python nix/verify-pytorch-ipex-xpu.py
+# Should exit 0 with warning about no GPU
 
-# Deploy to production (with GPU)
-ssh production-server "cd /path/to/exo && ./test_build_verification.sh --strict"
+# In CI with GPU (full verification)
+python nix/verify-pytorch-ipex-xpu.py --strict
+# Should exit 0 with all checks passed
 ```
 
 ## References
 
-- Task 10.4: Create build verification script
-- Requirement 11.4: Validate on Intel Arc hardware
-- `nix/pytorch-xpu.nix`: PyTorch XPU build configuration
-- `nix/ipex-xpu.nix`: IPEX XPU build configuration
-- `nix/verify-build.py`: Verification script implementation
-- `test_build_verification.sh`: Shell wrapper for verification
-
-## Version History
-
-- 2026-02-17: Initial version for task 10.4
-- Covers PyTorch 2.5.0 and IPEX 2.5.0+xpu
-- Tested on NixOS with Intel Arc GPU
+- Installation Guide: `nix/PYTORCH_IPEX_INSTALLATION.md`
+- Pivot Document: `.kiro/specs/pytorch-ipex-intel-arc/TASK_10_PIVOT.md`
+- Verification Script: `nix/verify-pytorch-ipex-xpu.py`
+- Test Wrapper: `test_pytorch_ipex_verification.sh`

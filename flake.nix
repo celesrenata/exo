@@ -282,7 +282,7 @@
 
               serviceConfig = {
                 Type = "simple";
-                ExecStart = "${pkgs.python313}/bin/python -m exo.worker.engines.npu.service --port ${toString config.services.exo.intel.npu.servicePort}";
+                ExecStart = "${pkgs.python312}/bin/python -m exo.worker.engines.npu.service --port ${toString config.services.exo.intel.npu.servicePort}";
                 Restart = "on-failure";
                 RestartSec = "5s";
                 User = "exo";
@@ -367,10 +367,10 @@
                   doInstallCheck = false;
                 });
                 
-                # Use standard python313, NOT intel-python
-                # Override it to fix packages with failing tests
-                python313 = prev.python313.override {
-                  self = final.python313;
+                # Use standard python312 for PyTorch+IPEX compatibility
+                # Python 3.13 is not yet supported by Intel's PyTorch+IPEX XPU wheels
+                python312 = prev.python312.override {
+                  self = final.python312;
                   packageOverrides = pself: psuper: {
                     # Pin anyio to 4.11.0 (required by exo)
                     anyio = psuper.anyio.overridePythonAttrs (old: rec {
@@ -455,6 +455,14 @@
                         };
                       };
                     });
+                    
+                    # Override torch with our pytorch-xpu build (Linux only)
+                    # This ensures exo uses PyTorch with XPU support instead of standard PyTorch
+                    torch = if final.stdenv.isLinux
+                      then pself.callPackage ./nix/pytorch-xpu.nix {
+                        inherit (final) intel-compute-runtime level-zero mkl oneDNN onetbb;
+                      }
+                      else psuper.torch;
                   };
                 };
               })
@@ -526,15 +534,15 @@
             }
           ) // lib.optionalAttrs pkgs.stdenv.isLinux {
             # PyTorch with Intel XPU support (Linux only)
-            # Use pkgsExo.python313 which has our test-disabled packages
-            pytorch-xpu = pkgsExo.python313.pkgs.callPackage ./nix/pytorch-xpu.nix {
+            # Use pkgsExo.python312 which has our test-disabled packages
+            pytorch-xpu = pkgsExo.python312.pkgs.callPackage ./nix/pytorch-xpu.nix {
               inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
             };
             
             # Intel Extension for PyTorch with XPU support (Linux only)
             # Depends on pytorch-xpu, must be built after it
-            # Use pkgsExo.python313 which has our test-disabled packages
-            ipex-xpu = pkgsExo.python313.pkgs.callPackage ./nix/ipex-xpu.nix {
+            # Use pkgsExo.python312 which has our test-disabled packages
+            ipex-xpu = pkgsExo.python312.pkgs.callPackage ./nix/ipex-xpu.nix {
               inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
               pytorch-xpu = self'.packages.pytorch-xpu;
             };
@@ -543,16 +551,17 @@
           devShells.default =
             let
               # Create a Python environment with PyTorch and IPEX using top-level packages
-              # On Linux, use our custom-built PyTorch XPU and IPEX XPU packages
+              # On Linux, use our custom-built PyTorch XPU and IPEX XPU packages (Python 3.12)
+              # Python 3.12 is required for Intel's PyTorch+IPEX XPU wheels
               pythonWithPackages = if pkgs.stdenv.isLinux then
-                pkgsExo.python313.withPackages (ps: [
+                pkgsExo.python312.withPackages (ps: [
                   # Use top-level pytorch-xpu and ipex-xpu packages (2.5.1+xpu)
                   self'.packages.pytorch-xpu
                   self'.packages.ipex-xpu
                 ])
               else
                 # On macOS, use standard Python (no XPU support needed)
-                pkgsExo.python313;
+                pkgsExo.python312;
             in
             pkgs.mkShell {
             inputsFrom = [ self'.checks.cargo-build ];
