@@ -402,7 +402,7 @@
                     # Source: Based on nixpkgs uvloop, modified to skip flaky tests
                     uvloop = pself.buildPythonPackage rec {
                       pname = "uvloop";
-                      version = "0.22.0";
+                      version = "0.22.1";
                       pyproject = true;
 
                       src = final.fetchPypi {
