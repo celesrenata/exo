@@ -25,19 +25,19 @@
         };
       };
 
-      python = pkgs.python313;
+      python = pkgs.python312;
 
       # Overlay to provide build systems and custom packages
       buildSystemsOverlay = final: prev: {
         # Stub out MLX on Linux (not available)
       } // lib.optionalAttrs pkgs.stdenv.isLinux {
         mlx = pkgs.runCommand "mlx-stub" { } ''
-          mkdir -p $out/lib/python3.13/site-packages
-          touch $out/lib/python3.13/site-packages/mlx.py
+          mkdir -p $out/lib/python3.12/site-packages
+          touch $out/lib/python3.12/site-packages/mlx.py
         '';
         mlx-lm = pkgs.runCommand "mlx-lm-stub" { } ''
-          mkdir -p $out/lib/python3.13/site-packages
-          touch $out/lib/python3.13/site-packages/mlx_lm.py
+          mkdir -p $out/lib/python3.12/site-packages
+          touch $out/lib/python3.12/site-packages/mlx_lm.py
         '';
       } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
         # Use our pure Nix-built MLX with Metal support (macOS only)
