@@ -91,7 +91,7 @@
 
       mkSimplePythonScript = name: path: pkgs.writeShellApplication {
         inherit name;
-        runtimeInputs = [ pkgs.python313 ];
+        runtimeInputs = [ pkgs.python312 ];
         text = ''exec python ${path} "$@"'';
       };
 
@@ -117,7 +117,7 @@
           if pkgs.stdenv.isLinux then
           # On Linux: use buildPythonApplication with explicit deps (like main branch)
           # Use pkgsExo which has anyio pinned to 4.11.0
-            pkgsExo.python313.pkgs.buildPythonApplication
+            pkgsExo.python312.pkgs.buildPythonApplication
               {
                 pname = "exo";
                 version = "0.3.0";
@@ -130,7 +130,7 @@
                   sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
                 '';
 
-                nativeBuildInputs = [ pkgsExo.python313.pkgs.setuptools pkgsExo.python313.pkgs.wheel pkgsExo.python313.pkgs.pip pkgs.makeWrapper ];
+                nativeBuildInputs = [ pkgsExo.python312.pkgs.setuptools pkgsExo.python312.pkgs.wheel pkgsExo.python312.pkgs.pip pkgs.makeWrapper ];
 
                 # Add Intel GPU runtime libraries for PyTorch + IPEX
                 buildInputs = lib.optionals pkgs.stdenv.isLinux [
@@ -138,7 +138,7 @@
                   pkgsExo.level-zero
                 ];
 
-                propagatedBuildInputs = with pkgsExo.python313.pkgs; [
+                propagatedBuildInputs = with pkgsExo.python312.pkgs; [
                   aiofiles
                   aiohttp
                   pydantic
@@ -172,7 +172,7 @@
                   for wheel in ${self'.packages.exo_pyo3_bindings}/*.whl; do
                     if [ -f "$wheel" ]; then
                       echo "Extracting wheel: $wheel"
-                      ${python.pkgs.pip}/bin/pip install --no-deps --no-build-isolation --target $out/lib/python3.13/site-packages "$wheel"
+                      ${python.pkgs.pip}/bin/pip install --no-deps --no-build-isolation --target $out/lib/python3.12/site-packages "$wheel"
                       break
                     fi
                   done
