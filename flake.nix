@@ -407,7 +407,7 @@
 
                       src = final.fetchPypi {
                         inherit pname version;
-                        hash = "sha256-b0C9CTQM+VvYKhKP/rE5LhCFnfBKUT3pl/Y0DV5p6zY=";
+                        hash = "sha256-bIS640W5FHCCsXNx491dQndb3c6R+IVJkBf0YH/a858=";
                       };
 
                       env.LIBUV_CONFIGURE_HOST = pself.python.stdenv.hostPlatform.config;
@@ -529,19 +529,26 @@
               default = self'.packages.exo;
             }
           ) // lib.optionalAttrs pkgs.stdenv.isLinux {
-            # PyTorch and IPEX with XPU support must be installed via pip
-            # See nix/PYTORCH_IPEX_INSTALLATION.md for instructions
+            # PyTorch with Intel XPU support (Linux only)
+            pytorch-xpu = pkgsExo.python312.pkgs.callPackage ./nix/pytorch-xpu.nix {
+              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
+            };
+            
+            # Intel Extension for PyTorch with XPU support (Linux only)
+            ipex-xpu = pkgsExo.python312.pkgs.callPackage ./nix/ipex-xpu.nix {
+              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
+              pytorch-xpu = self'.packages.pytorch-xpu;
+            };
           };
 
           devShells.default =
             let
-              # Create a Python environment without PyTorch+IPEX (installed via pip)
-              # On Linux, PyTorch+IPEX XPU must be installed via pip due to download restrictions
-              # Python 3.12 is required for Intel's PyTorch+IPEX XPU wheels
+              # Create a Python environment with PyTorch and IPEX
+              # On Linux, use PyTorch XPU and IPEX XPU packages (Python 3.12)
               pythonWithPackages = if pkgs.stdenv.isLinux then
                 pkgsExo.python312.withPackages (ps: [
-                  # PyTorch and IPEX must be installed via pip
-                  # See nix/PYTORCH_IPEX_INSTALLATION.md
+                  self'.packages.pytorch-xpu
+                  self'.packages.ipex-xpu
                 ])
               else
                 # On macOS, use standard Python (no XPU support needed)
