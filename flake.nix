@@ -489,6 +489,17 @@
                   doCheck = false;
                   doInstallCheck = false;
                 });
+                
+                # Fix locale for Python builds
+                python312 = prev.python312.override {
+                  packageOverrides = pself: psuper: {
+                    mkDerivation = args: psuper.mkDerivation (args // {
+                      LOCALE_ARCHIVE = "${final.glibcLocales}/lib/locale/locale-archive";
+                      LC_ALL = "en_US.UTF-8";
+                    });
+                  };
+                };
+                });
               })
             ];
           };
