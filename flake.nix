@@ -361,20 +361,11 @@
               (import "${inputs.nixos-mordrag}/pkgs/overlay.nix")
               # Overlay to customize Python packages - disable failing tests
               (final: prev: {
-                # Fix locale for all builds
-                stdenv = prev.stdenv.override {
-                  extraBuildInputs = (prev.stdenv.extraBuildInputs or []) ++ [ prev.glibcLocales ];
-                };
-                
                 libffi = prev.libffi.overrideAttrs (old: {
                   outputs = old.outputs or [ "out" "dev" ];
                   doCheck = false;
                   doInstallCheck = false;
-                  LOCALE_ARCHIVE = "${prev.glibcLocales}/lib/locale/locale-archive";
                 });
-                
-                # Fix locale for Python package builds
-                glibcLocales = prev.glibcLocales;
                 
                 # Use standard python312 for PyTorch+IPEX compatibility
                 # Python 3.13 is not yet supported by Intel's PyTorch+IPEX XPU wheels
@@ -384,6 +375,7 @@
                     # Override mkDerivation to add LOCALE_ARCHIVE for all Python package builds
                     mkDerivation = args: psuper.mkDerivation (args // {
                       LOCALE_ARCHIVE = "${final.glibcLocales}/lib/locale/locale-archive";
+                      LC_ALL = "en_US.UTF-8";
                     });
                     
                     # Pin anyio to 4.11.0 (required by exo)
