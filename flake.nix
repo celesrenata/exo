@@ -361,10 +361,16 @@
               (import "${inputs.nixos-mordrag}/pkgs/overlay.nix")
               # Overlay to customize Python packages - disable failing tests
               (final: prev: {
+                # Fix locale for all builds
+                stdenv = prev.stdenv.override {
+                  extraBuildInputs = (prev.stdenv.extraBuildInputs or []) ++ [ prev.glibcLocales ];
+                };
+                
                 libffi = prev.libffi.overrideAttrs (old: {
                   outputs = old.outputs or [ "out" "dev" ];
                   doCheck = false;
                   doInstallCheck = false;
+                  LOCALE_ARCHIVE = "${prev.glibcLocales}/lib/locale/locale-archive";
                 });
                 
                 # Fix locale for Python package builds
