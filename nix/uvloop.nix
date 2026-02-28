@@ -21,7 +21,7 @@ buildPythonPackage rec {
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-b0C9CTQM+VvYKhKP/rE5LhCFnfBKUT3pl/Y0DV5p6zY=";
+    hash = "sha256-bIS640W5FHCCsXNx491dQndb3c6R+IVJkBf0YH/a858=";
   };
 
   env.LIBUV_CONFIGURE_HOST = python.stdenv.hostPlatform.config;
