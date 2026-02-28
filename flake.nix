@@ -367,11 +367,19 @@
                   doInstallCheck = false;
                 });
                 
+                # Fix locale for Python package builds
+                glibcLocales = prev.glibcLocales;
+                
                 # Use standard python312 for PyTorch+IPEX compatibility
                 # Python 3.13 is not yet supported by Intel's PyTorch+IPEX XPU wheels
                 python312 = prev.python312.override {
                   self = final.python312;
                   packageOverrides = pself: psuper: {
+                    # Override mkDerivation to add LOCALE_ARCHIVE for all Python package builds
+                    mkDerivation = args: psuper.mkDerivation (args // {
+                      LOCALE_ARCHIVE = "${final.glibcLocales}/lib/locale/locale-archive";
+                    });
+                    
                     # Pin anyio to 4.11.0 (required by exo)
                     anyio = psuper.anyio.overridePythonAttrs (old: rec {
                       version = "4.11.0";
