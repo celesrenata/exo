@@ -25,6 +25,17 @@ in
       '';
     };
 
+    intelGpuPackages = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      default = [];
+      description = ''
+        Intel GPU runtime packages (intel-compute-runtime, level-zero) to add
+        to LD_LIBRARY_PATH for torch.xpu support. These provide the Level Zero
+        driver backend that PyTorch XPU needs to detect Intel iGPUs.
+      '';
+      example = lib.literalExpression "[ pkgs.intel-compute-runtime pkgs.level-zero ]";
+    };
+
     masterAddr = lib.mkOption {
       type = lib.types.str;
       description = ''
@@ -91,6 +102,12 @@ in
       environment = {
         MASTER_ADDR = cfg.masterAddr;
         MASTER_PORT = toString cfg.masterPort;
+      } // lib.optionalAttrs (cfg.intelGpuPackages != []) {
+        # Intel GPU runtime libraries for torch.xpu (Level Zero + compute runtime)
+        LD_LIBRARY_PATH = lib.makeLibraryPath cfg.intelGpuPackages
+          + ":" + lib.concatMapStringsSep ":" (pkg: "${pkg}/lib/intel-opencl") (
+            builtins.filter (pkg: builtins.pathExists "${pkg}/lib/intel-opencl") cfg.intelGpuPackages
+          );
       };
 
       serviceConfig = {
