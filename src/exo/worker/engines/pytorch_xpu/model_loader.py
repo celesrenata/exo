@@ -177,19 +177,10 @@ class ModelLoader:
 
             # Load model
             logger.debug(f"Loading model {model_id}")
-            # Determine dtype based on device capabilities
-            # Meteor Lake-P integrated GPUs don't support bf16 compute primitives
-            # through oneDNN, so use float32 for XPU integrated GPUs
-            if device.type == "xpu":
-                model_dtype = self._torch.float32
-                logger.info("Using float32 for Intel XPU (integrated GPU bf16 not supported)")
-            else:
-                model_dtype = self._torch.bfloat16
-
             model = self._transformers.AutoModelForCausalLM.from_pretrained(
                 model_id,
                 trust_remote_code=True,
-                torch_dtype=model_dtype,
+                torch_dtype=self._torch.bfloat16,  # bf16 works on Intel XPU (Meteor Lake+)
                 low_cpu_mem_usage=True,
             )
             logger.info(f"Model loaded: {type(model).__name__}")
