@@ -95,7 +95,7 @@ def _detect_cuda_gpus() -> list[GpuInfo]:
     for i in range(device_count):
         try:
             props = torch.cuda.get_device_properties(i)
-            total_memory: int = props.total_mem
+            total_memory: int = getattr(props, "total_memory", 0) or getattr(props, "total_mem", 0)
             allocated: int = torch.cuda.memory_allocated(i)
             available_memory = total_memory - allocated
 
