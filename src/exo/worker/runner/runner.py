@@ -655,11 +655,19 @@ def main(
                             is_first_rank = rank == 0
                             is_last_rank = rank == world_size - 1
 
-                            # Build prompt from messages
-                            prompt_parts = []
-                            for msg in task_params.input:
-                                prompt_parts.append(f"{msg.role}: {msg.content}")
-                            prompt = "\n".join(prompt_parts) + "\nassistant:"
+                            # Build prompt using the tokenizer's chat template
+                            # This ensures proper formatting with system messages
+                            if hasattr(task_params, 'chat_template_messages') and task_params.chat_template_messages:
+                                prompt = pytorch_xpu_tokenizer.apply_chat_template(
+                                    task_params.chat_template_messages,
+                                    tokenize=False,
+                                    add_generation_prompt=True,
+                                )
+                            else:
+                                prompt_parts = []
+                                for msg in task_params.input:
+                                    prompt_parts.append(f"{msg.role}: {msg.content}")
+                                prompt = "\n".join(prompt_parts) + "\nassistant:"
 
                             logger.info(
                                 f"Generating with PyTorch XPU, rank={rank}/{world_size}, "
