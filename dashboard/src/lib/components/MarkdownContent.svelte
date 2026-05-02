@@ -432,7 +432,18 @@
     const code = decodeURIComponent(encodedCode);
 
     try {
-      await navigator.clipboard.writeText(code);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(code);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = code;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
       // Show copied feedback
       const originalHtml = target.innerHTML;
       target.innerHTML = `
@@ -458,7 +469,18 @@
     const source = decodeURIComponent(encodedSource);
 
     try {
-      await navigator.clipboard.writeText(source);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(source);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = source;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
       // Show copied feedback
       const originalHtml = target.innerHTML;
       target.innerHTML = `
