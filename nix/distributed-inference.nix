@@ -18,6 +18,13 @@ in
   options.services.exo.distributed = {
     enable = lib.mkEnableOption "distributed inference mode for exo";
 
+    package = lib.mkOption {
+      type = lib.types.package;
+      description = ''
+        The exo package to use. Must provide bin/exo.
+      '';
+    };
+
     masterAddr = lib.mkOption {
       type = lib.types.str;
       description = ''
@@ -60,34 +67,59 @@ in
         between all ranks through the aggregation switch.
       '';
     };
+
+    verbosity = lib.mkOption {
+      type = lib.types.str;
+      default = "-vv";
+      description = "Verbosity flags passed to exo (e.g. -v, -vv).";
+    };
+
+    apiPort = lib.mkOption {
+      type = lib.types.port;
+      default = 52415;
+      description = "Port for the exo API and dashboard.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
-    # Set MASTER_ADDR and MASTER_PORT environment variables on the exo
-    # systemd service so torch.distributed can find the rendezvous endpoint.
-    systemd.services.exo.environment = {
-      MASTER_ADDR = cfg.masterAddr;
-      MASTER_PORT = toString cfg.masterPort;
+    # Full exo systemd service definition for distributed inference
+    systemd.services.exo = {
+      description = "exo Distributed AI Inference Service";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network.target" ];
+
+      environment = {
+        MASTER_ADDR = cfg.masterAddr;
+        MASTER_PORT = toString cfg.masterPort;
+      };
+
+      serviceConfig = {
+        Type = "simple";
+        ExecStart = "${cfg.package}/bin/exo ${cfg.verbosity}";
+        Restart = "on-failure";
+        RestartSec = "5s";
+        User = "root";
+        Group = "root";
+
+        # GPU verification before starting
+        ExecStartPre = let
+          gpuVerifyScript = pkgs.writeScript "exo-verify-gpu" ''
+            #!${pkgs.python3}/bin/python3
+            ${builtins.readFile ./verify-gpu-on-startup.py}
+          '';
+        in [ "${gpuVerifyScript}" ];
+
+        # Logging
+        StandardOutput = "journal";
+        StandardError = "journal";
+        SyslogIdentifier = "exo";
+      };
     };
 
-    # Run GPU verification before the main exo service starts.
-    # This detects the GPU type, logs memory architecture (shared vs discrete)
-    # and available memory, and verifies GPU drivers are functional.
-    # Requirement: 9.4
-    systemd.services.exo.serviceConfig.ExecStartPre = let
-      gpuVerifyScript = pkgs.writeScript "exo-verify-gpu" ''
-        #!${pkgs.python3}/bin/python3
-        ${builtins.readFile ./verify-gpu-on-startup.py}
-      '';
-    in [
-      "${gpuVerifyScript}"
-    ];
-
-    # Open the ephemeral port range and the master port in the firewall
-    # for Gloo TCP communication between nodes.
+    # Open the ephemeral port range, master port, and API port in the firewall
     networking.firewall.allowedTCPPortRanges = [
       { from = cfg.ephemeralPortRange.from; to = cfg.ephemeralPortRange.to; }
     ];
-    networking.firewall.allowedTCPPorts = [ cfg.masterPort ];
+    networking.firewall.allowedTCPPorts = [ cfg.masterPort cfg.apiPort ];
   };
 }
