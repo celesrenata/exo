@@ -2,80 +2,58 @@
 inclusion: always
 ---
 
-# PyTorch XPU Backend Status
+# PyTorch XPU Backend — Project Context
 
-## Current Status: Core Components Complete, Basic Integration Enabled
+## Project Goal
 
-The PyTorch XPU backend for Intel Arc GPU support has core components implemented and basic integration enabled.
+Connect all 4 gremlin nodes' Intel iGPUs and shard large language models across them using pipeline parallelism via PyTorch's native `torch.xpu` and Gloo distributed backend.
 
-### Completed Components (Tasks 1-6)
-✅ Task 1: Environment Setup & Dependencies
-✅ Task 2: Device Manager (Intel Arc detection and selection)
-✅ Task 3: Model Loader (HuggingFace model loading with XPU optimization)
-✅ Task 4: KV Cache Manager (efficient memory management)
-✅ Task 5: PyTorchXPUBackend (main inference engine)
-✅ Task 6: Token Generator (sampling with temperature, top-k, top-p)
-✅ Basic runner integration (NotImplementedError removed)
+## Hardware
 
-### Pending Work
-❌ Task 7: Distributed Coordinator (multi-node inference)
-❌ Task 8: Full runner integration (model loading, generation loop)
-❌ Task 9: End-to-end testing
-❌ Task 10: Performance optimization
+Every gremlin node has 8× Intel Arc Graphics (Meteor Lake-P) iGPUs with shared system memory. gremlin-1 additionally has an NVIDIA RTX 4070 Ti SUPER (discrete).
 
-### Current Status
+| Node | Intel iGPU | NVIDIA | System RAM | XPU target |
+|------|-----------|--------|------------|------------|
+| gremlin-1 (10.1.1.12) | 8× Meteor Lake-P Arc | RTX 4070 Ti SUPER | ~30 GiB usable | Yes |
+| gremlin-2 (10.1.1.13) | 8× Meteor Lake-P Arc | — | ~30 GiB usable | Yes |
+| gremlin-3 (10.1.1.14) | 8× Meteor Lake-P Arc | — | ~30 GiB usable | Yes |
+| gremlin-4 (10.1.1.15) | 8× Meteor Lake-P Arc | — | ~30 GiB usable | Yes |
 
-The backend infrastructure is in place and the NotImplementedError has been removed from runner.py. However, the full runner integration (model loading and generation loop) is not yet complete.
+Total cluster memory: ~105 GiB usable across 4 nodes (shared memory architecture).
 
-**Expected behavior when using PyTorch XPU backend:**
-- The backend will attempt to initialize
-- May fail during model loading or inference due to incomplete runner integration
-- Error messages should be more specific than "not implemented"
+**The NVIDIA card on gremlin-1 is NOT the target.** The project is about the Intel iGPUs.
 
-### Workaround
+## PyTorch Version
 
-**Use Tinygrad backend instead** for Intel Arc GPU inference:
-- Tinygrad backend is fully functional
-- Supports Intel Arc GPUs via OpenCL
-- Works with the exo UI and distributed inference
+- **Required**: PyTorch 2.11+ from the XPU wheel index
+- **Nix derivation**: `nix/pytorch-xpu.nix` fetches the XPU wheel from `download.pytorch.org/whl/xpu/`
+- **Current version**: 2.11.0+xpu (updated from 2.9.1+xpu)
+- **Do NOT use CUDA wheels** (`+cu128`) — they have `torch.xpu` module but `is_available()` returns False
+- PyTorch is managed by Nix, not pip/venv. Do not pip install on gremlin nodes.
 
-### Next Steps
+## Backend Status: Core Components Complete, Integration Incomplete
 
-To make PyTorch XPU fully functional:
-1. Complete Task 7: Distributed Coordinator (for multi-node support)
-2. Complete Task 8: Full runner integration
-   - Add model loading logic for pytorch_xpu backend in runner.py
-   - Add generation loop for pytorch_xpu backend
-   - Handle warmup and inference tasks
-3. Perform end-to-end testing
-4. Optimize performance
+### Completed
+✅ Device Manager (Intel Arc detection and selection)
+✅ Model Loader (HuggingFace model loading with XPU optimization)
+✅ KV Cache Manager (efficient memory management)
+✅ PyTorchXPUBackend (main inference engine)
+✅ Token Generator (sampling with temperature, top-k, top-p)
+✅ Basic runner integration
+✅ ipex → xpu rename complete
 
-### For Development
+### Pending
+❌ Distributed Coordinator (multi-node inference via Gloo)
+❌ Full runner integration (model loading, generation loop)
+❌ End-to-end testing on actual Intel iGPU hardware
+❌ Performance optimization
+❌ PyTorch 2.11 XPU wheel deployed to all gremlin nodes
 
-If you're working on PyTorch XPU backend:
-- All core components are in `src/exo/worker/engines/pytorch_xpu/`
-- Tests are in `src/exo/worker/engines/pytorch_xpu/tests/`
-- Runner integration is in `src/exo/worker/runner/runner.py`
-- Factory integration is in `src/exo/worker/engines/factory.py`
+## Key Files
 
-### Testing Individual Components
-
-You can test individual components directly:
-```bash
-# Test device manager
-python src/exo/worker/engines/pytorch_xpu/test_device_manager_simple.py
-
-# Test model loader
-python src/exo/worker/engines/pytorch_xpu/test_model_loader_simple.py
-
-# Test KV cache
-python src/exo/worker/engines/pytorch_xpu/test_kv_cache_simple.py
-
-# Test token generator
-python src/exo/worker/engines/pytorch_xpu/test_token_generator_simple.py
-
-# Test backend
-python src/exo/worker/engines/pytorch_xpu/test_backend_simple.py
-```
-
-Note: These tests require PyTorch with XPU support to be installed.
+- Engine: `src/exo/worker/engines/pytorch_xpu/`
+- Tests: `src/exo/worker/engines/pytorch_xpu/tests/`
+- Runner: `src/exo/worker/runner/runner.py`
+- Factory: `src/exo/worker/engines/factory.py`
+- GPU detector: `src/exo/worker/engines/pytorch_xpu/gpu_detector.py`
+- Distributed: `src/exo/worker/engines/pytorch_xpu/distributed.py`

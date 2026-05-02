@@ -59,7 +59,15 @@ Add new test files to this list as they are created.
 
 ## No Git Repository
 
-There is no `.git` directory in this workspace. Do not use git commands. The `.githooks/` directory and `.gitignore` exist but are not active.
+The `.githooks/` directory and `.gitignore` exist. Push to the `xpu` branch on origin.
+
+## Cluster Hardware
+
+- **gremlin-1 (10.1.1.12)**: NVIDIA RTX 4070 Ti SUPER (discrete, 15.5 GiB VRAM) **AND** Intel Arc Graphics Meteor Lake-P iGPU (shared memory). Has both GPUs.
+- **gremlin-2/3/4 (10.1.1.13-15)**: Intel iGPUs only (shared memory) — no NVIDIA.
+- The PyTorch XPU backend (`torch.xpu`) targets the Intel iGPUs on ALL gremlin nodes, including gremlin-1.
+- **PyTorch 2.11+ with XPU wheel required** — the CUDA wheel (`+cu128`) does NOT support `torch.xpu` even though the module exists.
+- gremlin-1 was found running PyTorch 2.9.1+cu128 — must be upgraded to 2.11+ XPU wheel.
 
 ## Type Checking
 

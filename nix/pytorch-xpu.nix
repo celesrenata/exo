@@ -24,15 +24,15 @@
 , typing-extensions
 }:
 
-# PyTorch 2.9.1 with Intel XPU (Arc GPU) support
+# PyTorch 2.11.0 with Intel XPU (Arc GPU) support — native torch.xpu
 buildPythonPackage rec {
   pname = "torch";
-  version = "2.9.1+xpu";
+  version = "2.11.0+xpu";
   format = "wheel";
 
   src = fetchurl {
-    url = "https://download.pytorch.org/whl/xpu/torch-2.9.1%2Bxpu-cp312-cp312-linux_x86_64.whl";
-    hash = "sha256-1ZaNeNgcHQHvwbO/g9faPYMWHcw6n8+R9QBZHbHGx10=";
+    url = "https://download.pytorch.org/whl/xpu/torch-2.11.0%2Bxpu-cp312-cp312-linux_x86_64.whl";
+    hash = "sha256-WQyeVKmeRdgOrv/nC1OCa0m3GmV44S6bqiJ+ibYceuI=";
   };
 
   nativeBuildInputs = [
@@ -82,7 +82,7 @@ buildPythonPackage rec {
   pythonImportsCheck = [ ];
 
   meta = with lib; {
-    description = "PyTorch 2.9.1 with Intel XPU (Arc GPU) support";
+    description = "PyTorch 2.11.0 with Intel XPU (Arc GPU) support";
     homepage = "https://pytorch.org/";
     license = licenses.bsd3;
     platforms = [ "x86_64-linux" ];
