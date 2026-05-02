@@ -1,5 +1,5 @@
 model_id = "Qwen/Qwen3.5-2B"
-n_layers = 36
+n_layers = 24
 hidden_size = 2560
 supports_tensor = false
 tasks = ["TextGeneration"]
