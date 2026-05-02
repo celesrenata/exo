@@ -165,19 +165,52 @@ def pytorch_xpu_generate(
 
                 # Decode token
                 token_id = next_token.item()
-                token_text = tokenizer.decode([token_id], skip_special_tokens=False)
+
+                # Check for EOS or end-of-turn tokens before decoding
+                finish_reason = None
+                eos_ids = {eos_token_id}
+                # Many models use additional stop tokens (e.g. <|im_end|>, <|endoftext|>)
+                if hasattr(tokenizer, 'additional_special_tokens_ids'):
+                    eos_ids.update(tokenizer.additional_special_tokens_ids)
+                if hasattr(tokenizer, 'eos_token_id') and tokenizer.eos_token_id is not None:
+                    eos_ids.add(tokenizer.eos_token_id)
+                # Check chat template stop tokens
+                if hasattr(tokenizer, 'chat_template') and tokenizer.chat_template:
+                    for special_id in getattr(tokenizer, 'all_special_ids', []):
+                        special_tok = tokenizer.decode([special_id], skip_special_tokens=False)
+                        if special_tok in ('<|im_end|>', '<|endoftext|>', '<|end|>'):
+                            eos_ids.add(special_id)
+
+                if token_id in eos_ids:
+                    finish_reason = "stop"
+                    logger.debug(f"Stop token reached at step {step} (token_id={token_id})")
+                    # Don't decode stop tokens — just yield the finish
+                    yield GenerationResponse(
+                        text="",
+                        token=token_id,
+                        finish_reason=finish_reason,
+                        usage=Usage(
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=generated_tokens,
+                            total_tokens=prompt_tokens + generated_tokens,
+                            prompt_tokens_details=PromptTokensDetails(cached_tokens=0, audio_tokens=0),
+                            completion_tokens_details=CompletionTokensDetails(reasoning_tokens=0, audio_tokens=0),
+                        ),
+                        stats=None,
+                        logprob=None,
+                        top_logprobs=None,
+                    )
+                    break
+
+                token_text = tokenizer.decode([token_id], skip_special_tokens=True)
 
                 # Calculate stats
                 elapsed_time = time.time() - start_time
                 generation_tps = generated_tokens / elapsed_time if elapsed_time > 0 else 0
                 prompt_tps = prompt_tokens / elapsed_time if elapsed_time > 0 and step == 0 else 0
 
-                # Check for EOS token
-                finish_reason = None
-                if token_id == eos_token_id:
-                    finish_reason = "stop"
-                    logger.debug(f"EOS token reached at step {step}")
-                elif step == max_tokens - 1:
+                # Check for max tokens
+                if step == max_tokens - 1:
                     finish_reason = "length"
                     logger.debug(f"Max tokens reached at step {step}")
 
