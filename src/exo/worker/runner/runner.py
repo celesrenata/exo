@@ -657,12 +657,26 @@ def main(
 
                             # Build prompt using the tokenizer's chat template
                             # This ensures proper formatting with system messages
+                            # Disable thinking mode — the XPU path doesn't parse
+                            # think tags, so we suppress them at the template level
                             if hasattr(task_params, 'chat_template_messages') and task_params.chat_template_messages:
-                                prompt = pytorch_xpu_tokenizer.apply_chat_template(
-                                    task_params.chat_template_messages,
-                                    tokenize=False,
-                                    add_generation_prompt=True,
-                                )
+                                template_kwargs: dict[str, object] = {
+                                    "tokenize": False,
+                                    "add_generation_prompt": True,
+                                }
+                                # Qwen3.5 and other thinking models support enable_thinking
+                                try:
+                                    prompt = pytorch_xpu_tokenizer.apply_chat_template(
+                                        task_params.chat_template_messages,
+                                        enable_thinking=False,
+                                        **template_kwargs,
+                                    )
+                                except TypeError:
+                                    # Tokenizer doesn't support enable_thinking kwarg
+                                    prompt = pytorch_xpu_tokenizer.apply_chat_template(
+                                        task_params.chat_template_messages,
+                                        **template_kwargs,
+                                    )
                             else:
                                 prompt_parts = []
                                 for msg in task_params.input:
