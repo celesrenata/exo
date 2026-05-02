@@ -552,12 +552,6 @@
             pytorch-xpu = pkgsExo.python312.pkgs.callPackage ./nix/pytorch-xpu.nix {
               inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
             };
-            
-            # Intel Extension for PyTorch with XPU support (Linux only)
-            ipex-xpu = pkgsExo.python312.pkgs.callPackage ./nix/ipex-xpu.nix {
-              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
-              pytorch-xpu = self'.packages.pytorch-xpu;
-            };
           };
 
           devShells.default =
