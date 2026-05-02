@@ -1,7 +1,7 @@
 """
-Token Generator for PyTorch + IPEX Backend
+Token Generator for PyTorch XPU Backend
 
-This module provides token sampling functionality for the PyTorch + IPEX
+This module provides token sampling functionality for the PyTorch XPU
 inference backend, implementing temperature scaling, top-k, and top-p sampling.
 
 Requirements addressed:

@@ -1,8 +1,9 @@
 """
-PyTorch + IPEX Inference Backend
+PyTorch XPU Inference Backend
 
-This package provides Intel Arc GPU support for exo using PyTorch and
-Intel Extension for PyTorch (IPEX).
+This package provides Intel Arc GPU support for exo using native PyTorch XPU
+(2.11+). No Intel Extension for PyTorch (IPEX) dependency — all Intel GPU
+operations use native torch.xpu APIs.
 
 Components:
 - PyTorchIPEXBackend: Main inference engine

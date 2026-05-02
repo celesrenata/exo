@@ -50,7 +50,7 @@ class InferenceMetrics:
 @dataclass
 class PerformanceMetricsCollector:
     """
-    Collects and aggregates performance metrics for PyTorch+IPEX backend.
+    Collects and aggregates performance metrics for PyTorch XPU backend.
 
     This class tracks:
     - Inference latency per request

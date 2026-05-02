@@ -47,7 +47,6 @@ def get_fallback_chain(preferred: str) -> list[str]:
     - pytorch_ipex → tinygrad → mlx (on Intel Arc)
     - tinygrad → mlx (on other GPUs)
     - npu → pytorch_ipex → tinygrad → mlx
-    - mlx (no fallback, it's the baseline)
 
     Args:
         preferred: Preferred backend name ("mlx", "tinygrad", "pytorch_ipex", "npu")
@@ -64,11 +63,11 @@ def get_fallback_chain(preferred: str) -> list[str]:
         ["mlx"]
     """
     if preferred == "pytorch_ipex":
-        return ["pytorch_ipex", "tinygrad", "mlx"]  # PyTorch+IPEX → tinygrad → MLX
+        return ["pytorch_ipex", "tinygrad", "mlx"]  # PyTorch XPU → tinygrad → MLX
     elif preferred == "tinygrad":
         return ["tinygrad", "mlx"]  # Try tinygrad, fall back to MLX
     elif preferred == "npu":
-        return ["npu", "pytorch_ipex", "tinygrad", "mlx"]  # NPU → PyTorch+IPEX → tinygrad → MLX
+        return ["npu", "pytorch_ipex", "tinygrad", "mlx"]  # NPU → PyTorch XPU → tinygrad → MLX
     else:
         return [preferred]  # No fallback for MLX (it's the baseline)
 
@@ -112,7 +111,7 @@ def select_backend_from_config(
     # This allows runtime changes to the environment variable
     import os
 
-    # Check for PyTorch+IPEX first (preferred for Intel Arc)
+    # Check for PyTorch XPU first (preferred for Intel Arc)
     if os.environ.get("EXO_PYTORCH_IPEX_ENABLED", "false").lower() == "true":
         logger.info("EXO_PYTORCH_IPEX_ENABLED=true, using pytorch_ipex backend")
         return "pytorch_ipex"

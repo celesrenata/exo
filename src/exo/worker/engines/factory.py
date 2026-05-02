@@ -64,7 +64,7 @@ def get_inference_backend(
             return PyTorchIPEXBackend(shard_downloader)
         except ImportError as e:
             raise BackendNotAvailableError(
-                "pytorch_ipex", f"PyTorch+IPEX backend not available: {e}"
+                "pytorch_ipex", f"PyTorch XPU backend not available: {e}"
             ) from e
 
     elif backend_name == "dummy":

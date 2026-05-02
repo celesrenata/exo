@@ -1,8 +1,9 @@
 """
-Warmup functionality for PyTorch + IPEX Backend
+Warmup functionality for PyTorch XPU Backend
 
 This module provides warmup inference to pre-compile kernels and
-initialize the inference pipeline.
+initialize the inference pipeline. Uses native PyTorch XPU (2.11+),
+no IPEX dependency.
 
 Requirements addressed:
 - 5.5: Warmup logic for backend initialization
@@ -25,13 +26,12 @@ def warmup_pytorch_ipex_inference(
     warmup_tokens: int = 10,
 ) -> int:
     """
-    Warm up PyTorch+IPEX inference by generating a few tokens.
+    Warm up PyTorch XPU inference by generating a few tokens.
 
     This function:
     1. Creates a simple warmup prompt
     2. Generates a few tokens to trigger JIT compilation
-    3. Initializes IPEX optimizations
-    4. Pre-allocates memory buffers
+    3. Pre-allocates memory buffers
 
     Args:
         model: Loaded PyTorch model
@@ -46,7 +46,7 @@ def warmup_pytorch_ipex_inference(
     Requirements: 5.5
     """
     logger.info(
-        f"Starting PyTorch+IPEX warmup on {device_type}:{device_id}, "
+        f"Starting PyTorch XPU warmup on {device_type}:{device_id}, "
         f"generating {warmup_tokens} tokens"
     )
 

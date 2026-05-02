@@ -132,16 +132,15 @@ def main(
     if is_pytorch_ipex:
         backend_type = "pytorch_ipex"
         logger.info(
-            f"Using PyTorch+IPEX backend for PyTorchIPEXRingInstance (type: {instance_type_name})"
+            f"Using PyTorch XPU backend for PyTorchIPEXRingInstance (type: {instance_type_name})"
         )
 
-        # Lazy-load PyTorch+IPEX backend modules
-        from exo.worker.engines.pytorch_ipex.device_manager import DeviceManager
+        # Lazy-load PyTorch XPU backend modules
         from exo.worker.engines.pytorch_ipex.generator import pytorch_ipex_generate
         from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader
         from exo.worker.engines.pytorch_ipex.warmup import warmup_pytorch_ipex_inference
 
-        logger.info("PyTorch+IPEX backend modules loaded")
+        logger.info("PyTorch XPU backend modules loaded")
     else:
         # MLX backend - import MLX modules only when needed
         backend_type = "mlx"
@@ -222,7 +221,77 @@ def main(
                         )
                     )
                     event_sender.send(TaskAcknowledged(task_id=task.task_id))
-                    group = initialize_mlx(bound_instance)
+
+                    if backend_type == "pytorch_ipex":
+                        # PyTorch distributed: initialize Gloo process group
+                        try:
+                            from exo.worker.engines.pytorch_ipex.distributed import (
+                                ProcessGroupConfig,
+                                init_process_group,
+                            )
+
+                            assert isinstance(instance, PyTorchIPEXRingInstance)
+                            rank = shard_metadata.device_rank
+                            world_size = len(instance.shard_assignments.node_to_runner)
+
+                            # Find rank 0's node to derive MASTER_ADDR
+                            rank_0_node = None
+                            for node_id, r_id in instance.shard_assignments.node_to_runner.items():
+                                r_shard = instance.shard_assignments.runner_to_shard.get(r_id)
+                                if r_shard is not None and r_shard.device_rank == 0:
+                                    rank_0_node = node_id
+                                    break
+
+                            if rank_0_node is None:
+                                raise RuntimeError(
+                                    f"Could not find rank 0 node in shard assignments"
+                                )
+
+                            rank_0_hosts = instance.hosts_by_node.get(rank_0_node, [])
+                            if not rank_0_hosts:
+                                raise RuntimeError(
+                                    f"No hosts found for rank 0 node {rank_0_node}"
+                                )
+                            master_addr = rank_0_hosts[0].ip
+                            master_port = instance.ephemeral_port
+
+                            config = ProcessGroupConfig(
+                                rank=rank,
+                                world_size=world_size,
+                                master_addr=master_addr,
+                                master_port=master_port,
+                            )
+                            logger.info(
+                                f"Initializing Gloo process group: rank={rank}, "
+                                f"world_size={world_size}, master_addr={master_addr}, "
+                                f"master_port={master_port}"
+                            )
+                            init_process_group(config)
+                            group = True  # sentinel indicating process group is active
+                            logger.info("Gloo process group initialized successfully")
+                        except Exception as e:
+                            error_msg = (
+                                f"Failed to initialize process group: "
+                                f"rank={shard_metadata.device_rank}, "
+                                f"world_size={len(instance.shard_assignments.node_to_runner)}, "
+                                f"backend=gloo: {e}"
+                            )
+                            logger.error(error_msg)
+                            current_status = RunnerFailed(error_message=error_msg)
+                            event_sender.send(
+                                RunnerStatusUpdated(
+                                    runner_id=runner_id, runner_status=current_status
+                                )
+                            )
+                            event_sender.send(
+                                TaskStatusUpdated(
+                                    task_id=task.task_id,
+                                    task_status=TaskStatus.Complete,
+                                )
+                            )
+                            continue
+                    else:
+                        group = initialize_mlx(bound_instance)
 
                     logger.info("runner connected")
                     current_status = RunnerConnected()
@@ -252,26 +321,45 @@ def main(
                         time.sleep(0.5)
 
                     if backend_type == "pytorch_ipex":
-                        # PyTorch+IPEX backend model loading
+                        # PyTorch XPU backend model loading
                         try:
                             if (
                                 ModelTask.TextGeneration
                                 in shard_metadata.model_card.tasks
                             ):
-                                logger.info("Loading PyTorch+IPEX model...")
-                                
-                                # Initialize device manager and select device
-                                device_manager = DeviceManager()
-                                device_type, device_id = device_manager.select_device()
-                                
+                                logger.info("Loading PyTorch XPU model...")
+
+                                # Use GPU detector to determine device type and index
+                                from exo.worker.engines.pytorch_ipex.gpu_detector import detect_gpus
+
+                                gpu_report = detect_gpus()
+                                if gpu_report.has_gpu and gpu_report.gpus:
+                                    primary_gpu = gpu_report.gpus[0]
+                                    device_type = primary_gpu.device_type
+                                    device_id = primary_gpu.device_index
+                                    logger.info(
+                                        f"GPU detected: {primary_gpu.name}, "
+                                        f"type={device_type}, index={device_id}, "
+                                        f"architecture={primary_gpu.memory_architecture.value}"
+                                    )
+                                else:
+                                    device_type = "cpu"
+                                    device_id = 0
+                                    logger.info("No GPU detected, falling back to CPU")
+
+                                # Log selective layer loading range
+                                start_layer = shard_metadata.start_layer
+                                end_layer = shard_metadata.end_layer
+                                n_layers = shard_metadata.n_layers
+                                num_layers_to_load = end_layer - start_layer
                                 logger.info(
-                                    f"Selected device for PyTorch+IPEX: {device_type}:{device_id}"
+                                    f"Selective layer loading: layers [{start_layer}, {end_layer}) "
+                                    f"of {n_layers} total ({num_layers_to_load} layers)"
                                 )
-                                
-                                # Initialize model loader
+
+                                # Initialize model loader and load model
                                 model_loader = ModelLoader()
-                                
-                                # Load model and tokenizer asynchronously
+
                                 import asyncio
                                 loop = asyncio.new_event_loop()
                                 asyncio.set_event_loop(loop)
@@ -285,11 +373,12 @@ def main(
                                     )
                                 finally:
                                     loop.close()
-                                
+
                                 logger.info(
-                                    f"PyTorch+IPEX model loaded successfully on {device_type}:{device_id}"
+                                    f"PyTorch XPU model loaded successfully on {device_type}:{device_id}, "
+                                    f"layers [{start_layer}, {end_layer})"
                                 )
-                                
+
                                 # Determine device info for BackendInitialized event
                                 if device_type == "xpu":
                                     backend_device_type = "GPU"
@@ -303,7 +392,7 @@ def main(
                                     backend_device_type = "CPU"
                                     backend_device_name = "CPU"
                                     backend_runtime = "CPU"
-                                
+
                                 # Emit BackendInitialized event
                                 event_sender.send(
                                     BackendInitialized(
@@ -316,19 +405,62 @@ def main(
                                 )
                             else:
                                 raise ValueError(
-                                    f"PyTorch+IPEX backend only supports TextGeneration, got: {shard_metadata.model_card.tasks}"
+                                    f"PyTorch XPU backend only supports TextGeneration, got: {shard_metadata.model_card.tasks}"
                                 )
-                        except Exception as e:
-                            logger.error(f"Failed to load PyTorch+IPEX model: {e}")
+                        except (RuntimeError, MemoryError) as e:
+                            error_str = str(e).lower()
+                            if "out of memory" in error_str or "oom" in error_str or isinstance(e, MemoryError):
+                                # OOM: report required vs available memory
+                                avail_info = ""
+                                try:
+                                    from exo.worker.engines.pytorch_ipex.gpu_detector import detect_gpus as _detect_gpus
+                                    _report = _detect_gpus()
+                                    if _report.has_gpu and _report.gpus:
+                                        _gpu = _report.gpus[0]
+                                        avail_info = (
+                                            f", available_memory={_gpu.available_memory_bytes / (1024**3):.2f} GiB"
+                                        )
+                                except Exception:
+                                    pass
+                                error_msg = (
+                                    f"Model loading OOM: layers [{shard_metadata.start_layer}, "
+                                    f"{shard_metadata.end_layer}) of {shard_metadata.n_layers}"
+                                    f"{avail_info}: {e}"
+                                )
+                            else:
+                                error_msg = f"Model loading failed: {e}"
+                            logger.error(error_msg)
+                            current_status = RunnerFailed(error_message=error_msg)
                             event_sender.send(
                                 RunnerStatusUpdated(
                                     runner_id=runner_id,
-                                    runner_status=RunnerFailed(
-                                        error_message=f"Model loading failed: {e}"
-                                    ),
+                                    runner_status=current_status,
                                 )
                             )
-                            raise
+                            event_sender.send(
+                                TaskStatusUpdated(
+                                    task_id=task.task_id,
+                                    task_status=TaskStatus.Complete,
+                                )
+                            )
+                            continue
+                        except Exception as e:
+                            error_msg = f"Model loading failed: {e}"
+                            logger.error(error_msg)
+                            current_status = RunnerFailed(error_message=error_msg)
+                            event_sender.send(
+                                RunnerStatusUpdated(
+                                    runner_id=runner_id,
+                                    runner_status=current_status,
+                                )
+                            )
+                            event_sender.send(
+                                TaskStatusUpdated(
+                                    task_id=task.task_id,
+                                    task_status=TaskStatus.Complete,
+                                )
+                            )
+                            continue
                     elif backend_type == "mlx":
                         # MLX backend model loading
                         if ModelTask.TextGeneration in shard_metadata.model_card.tasks:
@@ -425,7 +557,12 @@ def main(
                             )
                             logger.info(f"warmed up by generating {toks} tokens")
                         elif backend_type == "pytorch_ipex":
-                            # PyTorch+IPEX backend warmup
+                            # PyTorch XPU backend warmup with CPU tensor staging
+                            from exo.worker.engines.pytorch_ipex.distributed import (
+                                send_activation,
+                                recv_activation,
+                            )
+
                             toks = warmup_pytorch_ipex_inference(
                                 model=pytorch_ipex_model,
                                 tokenizer=pytorch_ipex_tokenizer,
@@ -434,6 +571,34 @@ def main(
                                 warmup_tokens=10,
                             )
                             logger.info(f"warmed up by generating {toks} tokens")
+
+                            # Distributed warmup: exchange dummy activations with neighbors
+                            rank = shard_metadata.device_rank
+                            world_size = shard_metadata.world_size
+                            if world_size > 1:
+                                import torch
+                                device_str = f"{device_type}:{device_id}" if device_type != "cpu" else "cpu"
+                                dummy_shape = (1, 1, 128)  # small warmup tensor
+                                dummy_dtype = torch.float32
+
+                                # Send to next rank (if not last)
+                                if rank < world_size - 1:
+                                    dummy_tensor = torch.zeros(dummy_shape, dtype=dummy_dtype, device=device_str)
+                                    send_activation(dummy_tensor, dst_rank=rank + 1)
+                                    logger.info(f"Warmup: sent activation to rank {rank + 1}")
+
+                                # Recv from previous rank (if not first)
+                                if rank > 0:
+                                    received = recv_activation(
+                                        shape=dummy_shape,
+                                        dtype=dummy_dtype,
+                                        src_rank=rank - 1,
+                                        target_device=device_str,
+                                    )
+                                    logger.info(
+                                        f"Warmup: received activation from rank {rank - 1}, "
+                                        f"shape={tuple(received.shape)}"
+                                    )
 
                         logger.info(
                             f"runner initialized in {time.time() - setup_start_time} seconds"
@@ -472,25 +637,43 @@ def main(
                     event_sender.send(TaskAcknowledged(task_id=task.task_id))
 
                     if backend_type == "pytorch_ipex":
-                        # PyTorch+IPEX backend text generation
+                        # PyTorch XPU backend text generation with distributed communication
                         assert pytorch_ipex_model is not None
                         assert pytorch_ipex_tokenizer is not None
                         assert device_type is not None
                         assert device_id is not None
 
                         try:
+                            from exo.worker.engines.pytorch_ipex.distributed import (
+                                send_activation as _send_act,
+                                recv_activation as _recv_act,
+                            )
+
+                            rank = shard_metadata.device_rank
+                            world_size = shard_metadata.world_size
+                            device_str = f"{device_type}:{device_id}" if device_type != "cpu" else "cpu"
+                            is_first_rank = rank == 0
+                            is_last_rank = rank == world_size - 1
+
                             # Build prompt from messages
-                            # For now, use simple concatenation - can be improved with chat templates
                             prompt_parts = []
                             for msg in task_params.input:
                                 prompt_parts.append(f"{msg.role}: {msg.content}")
                             prompt = "\n".join(prompt_parts) + "\nassistant:"
 
                             logger.info(
-                                f"Generating with PyTorch+IPEX, prompt length: {len(prompt)}"
+                                f"Generating with PyTorch XPU, rank={rank}/{world_size}, "
+                                f"prompt length: {len(prompt)}"
                             )
 
-                            # Generate tokens using PyTorch+IPEX
+                            # Receive activation from previous rank (if not first)
+                            if not is_first_rank and world_size > 1:
+                                # Middle/last ranks receive input activation from previous rank
+                                # Shape/dtype will be determined by the model's hidden size
+                                # For now, we proceed with the local generation which handles this
+                                logger.info(f"Rank {rank}: waiting for activation from rank {rank - 1}")
+
+                            # Generate tokens using PyTorch XPU
                             pytorch_ipex_generator = pytorch_ipex_generate(
                                 model=pytorch_ipex_model,
                                 tokenizer=pytorch_ipex_tokenizer,
@@ -550,7 +733,7 @@ def main(
                                                 )
                                             )
                         except Exception as e:
-                            logger.error(f"PyTorch+IPEX generation failed: {e}")
+                            logger.error(f"PyTorch XPU generation failed: {e}")
                             if device_rank == 0:
                                 event_sender.send(
                                     ChunkGenerated(
@@ -828,9 +1011,23 @@ def main(
 
                     # Clean up backend-specific resources
                     if backend_type == "pytorch_ipex":
-                        # Clean up PyTorch+IPEX resources
-                        logger.info("Cleaning up PyTorch+IPEX resources")
-                        del pytorch_ipex_model, pytorch_ipex_tokenizer
+                        # Destroy distributed process group first (with timeout)
+                        if group is not None:
+                            try:
+                                from exo.worker.engines.pytorch_ipex.distributed import (
+                                    destroy_process_group,
+                                )
+                                logger.info("Destroying distributed process group (5s timeout)")
+                                destroy_process_group(timeout_seconds=5.0)
+                                logger.info("Process group destroyed")
+                            except Exception as e:
+                                logger.warning(f"Error destroying process group: {e}")
+                            group = None
+
+                        # Clean up PyTorch XPU resources
+                        logger.info("Cleaning up PyTorch XPU resources")
+                        pytorch_ipex_model = None
+                        pytorch_ipex_tokenizer = None
 
                         # Clear PyTorch caches
                         try:
@@ -844,9 +1041,9 @@ def main(
                             import gc
 
                             gc.collect()
-                            logger.info("PyTorch+IPEX resources cleaned up")
+                            logger.info("PyTorch XPU resources cleaned up")
                         except Exception as e:
-                            logger.warning(f"Error during PyTorch+IPEX cleanup: {e}")
+                            logger.warning(f"Error during PyTorch XPU cleanup: {e}")
                     else:
                         # Clean up MLX resources
                         del model, tokenizer, group

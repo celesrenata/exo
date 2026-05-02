@@ -2,7 +2,7 @@
 name = "exo-bench"
 version = "0.1.0"
 description = "Benchmarking tool for exo distributed inference"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "loguru>=0.7.3",
     "transformers>=5.0.0",

@@ -1,5 +1,5 @@
 """
-Structured Logging Configuration for PyTorch + IPEX Backend
+Structured Logging Configuration for PyTorch XPU Backend
 
 This module provides structured logging configuration using loguru,
 with JSON formatting and appropriate log levels for production use.
@@ -21,7 +21,7 @@ def configure_structured_logging(
     include_context: bool = True,
 ) -> None:
     """
-    Configure structured logging for PyTorch+IPEX backend.
+    Configure structured logging for PyTorch XPU backend.
 
     This function sets up loguru with:
     - Appropriate log levels
@@ -203,7 +203,7 @@ def log_model_info(
         model_id: Model identifier
         shard_info: Shard information (e.g., "layers 0-10")
         device: Device string (e.g., "xpu:0")
-        optimization_applied: Whether IPEX optimization was applied
+        optimization_applied: Whether native XPU optimization was applied
         load_time_seconds: Time taken to load model
 
     Requirements: 9.1, 9.4

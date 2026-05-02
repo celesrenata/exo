@@ -1,21 +1,90 @@
 { lib
-, python3Packages
+, buildPythonPackage
+, fetchurl
+, python
+, autoPatchelfHook
+, addDriverRunpath
+, stdenv
+  # Intel GPU runtime dependencies
+, intel-compute-runtime
+, level-zero
+  # oneAPI dependencies
+, mkl
+, oneDNN
+, onetbb
+  # Python dependencies
+, filelock
+, fsspec
+, jinja2
+, networkx
+, numpy
+, pyyaml
+, setuptools
+, sympy
+, typing-extensions
 }:
 
-# PyTorch with Intel XPU (Arc GPU) Support - Pip Installation Required
-#
-# IMPORTANT: Intel's PyTorch XPU wheels cannot be fetched directly in Nix
-# due to authentication/access restrictions on their download server.
-#
-# This derivation returns standard PyTorch from nixpkgs as a placeholder.
-# Users must install PyTorch+IPEX with XPU support via pip at runtime.
-#
-# Installation instructions:
-#   pip install torch==2.6.0+xpu torchvision==0.20.1+xpu \
-#     --index-url https://download.pytorch.org/whl/xpu
-#
-# See nix/PYTORCH_IPEX_INSTALLATION.md for complete instructions.
+# PyTorch 2.9.1 with Intel XPU (Arc GPU) support
+buildPythonPackage rec {
+  pname = "torch";
+  version = "2.9.1+xpu";
+  format = "wheel";
 
-# Return standard PyTorch from nixpkgs
-# Users who need XPU support should install via pip as documented
-python3Packages.pytorch
+  src = fetchurl {
+    url = "https://download.pytorch.org/whl/xpu/torch-2.9.1%2Bxpu-cp312-cp312-linux_x86_64.whl";
+    hash = "sha256-1ZaNeNgcHQHvwbO/g9faPYMWHcw6n8+R9QBZHbHGx10=";
+  };
+
+  nativeBuildInputs = [
+    autoPatchelfHook
+    addDriverRunpath
+  ];
+
+  buildInputs = [
+    stdenv.cc.cc.lib
+    # Intel GPU runtime
+    intel-compute-runtime
+    level-zero
+    # oneAPI libraries
+    mkl
+    oneDNN
+    onetbb
+  ];
+
+  propagatedBuildInputs = [
+    filelock
+    fsspec
+    jinja2
+    networkx
+    numpy
+    pyyaml
+    setuptools
+    sympy
+    typing-extensions
+  ];
+
+  postFixup = ''
+    # Add Intel runtime libraries to RPATH
+    find $out -name "*.so*" -type f | while read lib; do
+      addDriverRunpath "''${lib}"
+      patchelf --add-rpath ${lib.makeLibraryPath [ 
+        intel-compute-runtime 
+        level-zero 
+        mkl 
+        oneDNN 
+        onetbb 
+        stdenv.cc.cc.lib 
+      ]} "''${lib}" 2>/dev/null || true
+    done
+  '';
+
+  # Skip imports check - requires GPU
+  pythonImportsCheck = [ ];
+
+  meta = with lib; {
+    description = "PyTorch 2.9.1 with Intel XPU (Arc GPU) support";
+    homepage = "https://pytorch.org/";
+    license = licenses.bsd3;
+    platforms = [ "x86_64-linux" ];
+  };
+}

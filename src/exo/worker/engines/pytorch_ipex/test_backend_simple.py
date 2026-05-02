@@ -2,7 +2,7 @@
 """
 Simple test for PyTorchIPEXBackend
 
-This script tests basic functionality of the PyTorch + IPEX backend:
+This script tests basic functionality of the PyTorch XPU backend:
 - Backend initialization
 - Device detection
 - Component integration

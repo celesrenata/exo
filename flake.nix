@@ -339,6 +339,9 @@
           };
         };
 
+      # NixOS module for distributed inference with Gloo backend
+      flake.nixosModules.exo-distributed = import ./nix/distributed-inference.nix;
+
       perSystem =
         { config, self', inputs', pkgs, lib, system, ... }:
         let
@@ -559,12 +562,11 @@
 
           devShells.default =
             let
-              # Create a Python environment with PyTorch and IPEX
-              # On Linux, use PyTorch XPU and IPEX XPU packages (Python 3.12)
+              # Create a Python environment with PyTorch XPU (no IPEX — discontinued)
+              # On Linux, use PyTorch XPU package (Python 3.12)
               pythonWithPackages = if pkgs.stdenv.isLinux then
                 pkgsExo.python312.withPackages (ps: [
                   self'.packages.pytorch-xpu
-                  self'.packages.ipex-xpu
                 ])
               else
                 # On macOS, use standard Python (no XPU support needed)

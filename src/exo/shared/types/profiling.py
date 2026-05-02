@@ -8,11 +8,21 @@ from exo.shared.types.thunderbolt import ThunderboltIdentifier
 from exo.utils.pydantic_ext import CamelCaseModel
 
 
+class GpuMemoryInfo(CamelCaseModel):
+    """GPU-specific memory information for placement decisions."""
+
+    device_type: Literal["cuda", "xpu", "cpu"]
+    memory_architecture: Literal["Shared", "Discrete"]
+    gpu_total_memory: Memory
+    gpu_available_memory: Memory
+
+
 class MemoryUsage(CamelCaseModel):
     ram_total: Memory
     ram_available: Memory
     swap_total: Memory
     swap_available: Memory
+    gpu_info: GpuMemoryInfo | None = None
 
     @classmethod
     def from_bytes(

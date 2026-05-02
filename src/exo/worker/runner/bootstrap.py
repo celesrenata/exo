@@ -26,20 +26,18 @@ def entrypoint(
 
     # Configure backend-specific environment variables
     if isinstance(bound_instance.instance, PyTorchIPEXRingInstance):
-        # PyTorch+IPEX backend configuration
+        # PyTorch backend configuration
         os.environ["EXO_PYTORCH_IPEX_ENABLED"] = "true"
         
-        # Set PyTorch+IPEX environment variables for optimal performance
+        # Set PyTorch environment variables for optimal performance
         os.environ["PYTORCH_ENABLE_XPU"] = "1"
-        os.environ["IPEX_TILE_AS_DEVICE"] = "1"
         
         # Detect Intel Arc GPU and configure device
         try:
             # Lazy import to avoid loading PyTorch unless needed
-            import intel_extension_for_pytorch as ipex  # noqa: F401 - Required for XPU support
             import torch
             
-            if torch.xpu.is_available():
+            if hasattr(torch, "xpu") and torch.xpu.is_available():
                 device_count = torch.xpu.device_count()
                 if device_count > 0:
                     # Get device properties for logging
@@ -48,7 +46,7 @@ def entrypoint(
                     total_memory_gb = props.total_memory / (1024**3) if hasattr(props, 'total_memory') else 0
                     
                     logger.info(
-                        "Device selection: Intel Arc GPU with PyTorch+IPEX",
+                        "Device selection: Intel Arc GPU with native PyTorch XPU",
                         backend_type="pytorch_ipex",
                         device_type="XPU",
                         device_count=device_count,
@@ -62,12 +60,12 @@ def entrypoint(
                     )
             else:
                 logger.warning(
-                    "Intel XPU not available, PyTorch+IPEX will fall back to CPU",
+                    "Intel XPU not available, PyTorch backend will fall back to CPU",
                     backend_type="pytorch_ipex",
                 )
         except ImportError as e:
             logger.warning(
-                f"Failed to import PyTorch or IPEX: {e}. Backend will attempt initialization anyway.",
+                f"Failed to import PyTorch: {e}. Backend will attempt initialization anyway.",
                 backend_type="pytorch_ipex",
             )
         except Exception as e:

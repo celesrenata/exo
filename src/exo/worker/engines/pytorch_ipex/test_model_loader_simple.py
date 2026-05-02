@@ -32,7 +32,6 @@ def test_model_loader_initialization():
 
     print("✓ ModelLoader initialization successful")
     print(f"  - PyTorch available: {loader._torch_available}")
-    print(f"  - IPEX available: {loader._ipex_available}")
     print(f"  - Transformers available: {loader._transformers_available}")
 
 

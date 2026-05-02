@@ -1,7 +1,7 @@
 """
-Text Generation for PyTorch + IPEX Backend
+Text Generation for PyTorch XPU Backend
 
-This module provides text generation functionality for the PyTorch+IPEX backend,
+This module provides text generation functionality for the PyTorch XPU backend,
 including streaming token generation with temperature, top-k, and top-p sampling.
 
 Requirements addressed:
@@ -42,7 +42,7 @@ def pytorch_ipex_generate(
     model_id: str = "",
 ) -> Generator[GenerationResponse, None, None]:
     """
-    Generate text using PyTorch+IPEX backend.
+    Generate text using PyTorch XPU backend.
 
     This function:
     1. Tokenizes the input prompt
@@ -70,7 +70,7 @@ def pytorch_ipex_generate(
     """
     try:
         logger.info(
-            f"Starting PyTorch+IPEX generation: max_tokens={max_tokens}, "
+            f"Starting PyTorch XPU generation: max_tokens={max_tokens}, "
             f"temperature={temperature}, top_k={top_k}, top_p={top_p}"
         )
 
@@ -225,7 +225,7 @@ def pytorch_ipex_generate(
         )
 
     except Exception as e:
-        logger.error(f"PyTorch+IPEX generation failed: {e}")
+        logger.error(f"PyTorch XPU generation failed: {e}")
         # Yield error response
         yield GenerationResponse(
             text=f"Error: {str(e)}",

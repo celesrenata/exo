@@ -1,4 +1,10 @@
 { lib
+, intel-compute-runtime ? null
+, level-zero ? null
+, mkl ? null
+, oneDNN ? null
+, onetbb ? null
+, pytorch-xpu ? null
 }:
 
 # Intel Extension for PyTorch (IPEX) with XPU Support - Pip Installation Required

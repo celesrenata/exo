@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-Intel Arc GPU Detection Script for PyTorch + IPEX
+Intel Arc GPU Detection Script for PyTorch
 
-This script detects Intel Arc GPUs using torch.xpu and logs device capabilities.
-It verifies that PyTorch and Intel Extension for PyTorch (IPEX) are properly installed
-and can access Intel Arc GPUs.
+This script detects Intel Arc GPUs using native torch.xpu and logs device capabilities.
+It verifies that PyTorch is properly installed with XPU support and can access Intel Arc GPUs.
 
 Requirements:
-- PyTorch 2.0+
-- Intel Extension for PyTorch (IPEX) 2.0+
+- PyTorch 2.11+ (native XPU support, no IPEX needed)
 - Intel compute-runtime and level-zero drivers
 """
 
@@ -58,17 +56,7 @@ def detect_intel_arc_gpu() -> None:
         logger.error("Please install PyTorch 2.0+ for Intel Arc support")
         sys.exit(1)
 
-    # Step 2: Check IPEX installation
-    try:
-        import intel_extension_for_pytorch as ipex  # type: ignore
-
-        logger.info(f"Intel Extension for PyTorch (IPEX) version: {ipex.__version__}")
-    except ImportError as e:
-        logger.error(f"Intel Extension for PyTorch (IPEX) not found: {e}")
-        logger.error("Please install IPEX 2.0+ for Intel Arc support")
-        sys.exit(1)
-
-    # Step 3: Check XPU availability
+    # Step 2: Check XPU availability (native PyTorch 2.11+, no IPEX needed)
     if not hasattr(torch, "xpu"):
         logger.error("torch.xpu module not found")
         logger.error("PyTorch may not be built with Intel GPU support")

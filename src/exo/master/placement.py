@@ -9,6 +9,7 @@ from exo.master.placement_utils import (
     get_mlx_jaccl_coordinators,
     get_mlx_jaccl_devices_matrix,
     get_mlx_ring_hosts_by_node,
+    get_pytorch_ring_hosts_by_node,
     get_shard_assignments,
     get_smallest_cycles,
 )
@@ -188,7 +189,7 @@ def place_instance(
             )
         case InstanceMeta.PyTorchIPEXRing:
             ephemeral_port = random_ephemeral_port()
-            hosts_by_node = get_mlx_ring_hosts_by_node(
+            hosts_by_node = get_pytorch_ring_hosts_by_node(
                 selected_cycle=selected_cycle,
                 cycle_digraph=cycle_digraph,
                 ephemeral_port=ephemeral_port,

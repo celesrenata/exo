@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import sys
 import tomllib
@@ -8,6 +9,7 @@ from subprocess import CalledProcessError
 from typing import Self, cast
 
 import anyio
+import psutil as _psutil
 from anyio import create_task_group, open_process
 from anyio.abc import TaskGroup
 from anyio.streams.buffered import BufferedByteReceiveStream
@@ -18,6 +20,8 @@ from pydantic import ValidationError
 from exo.shared.constants import EXO_CONFIG_FILE
 from exo.shared.types.memory import Memory
 from exo.shared.types.profiling import (
+    GpuMemoryInfo,
+    InterfaceType,
     MemoryUsage,
     NetworkInterfaceInfo,
     ThunderboltBridgeStatus,
@@ -34,6 +38,7 @@ from .macmon import MacmonMetrics
 from .system_info import get_friendly_name, get_model_and_chip, get_network_interfaces
 
 IS_DARWIN = sys.platform == "darwin"
+IS_LINUX = sys.platform == "linux"
 
 
 async def _get_thunderbolt_devices() -> set[str] | None:
@@ -172,6 +177,21 @@ async def _is_service_enabled(service_name: str) -> bool | None:
     return stdout == "enabled"
 
 
+async def _read_linux_product_name() -> str:
+    """Read the product name from DMI data on Linux.
+
+    Falls back to "Unknown" if the file is not readable.
+    """
+    try:
+        path = anyio.Path("/sys/class/dmi/id/product_name")
+        content = await path.read_text()
+        name = content.strip()
+        return name if name else "Unknown"
+    except Exception:
+        logger.debug("Could not read /sys/class/dmi/id/product_name, falling back to Unknown")
+        return "Unknown"
+
+
 class StaticNodeInformation(TaggedModel):
     """Node information that should NEVER change, to be gathered once at startup"""
 
@@ -180,6 +200,10 @@ class StaticNodeInformation(TaggedModel):
 
     @classmethod
     async def gather(cls) -> Self:
+        if IS_LINUX:
+            model = await _read_linux_product_name()
+            chip = "Unknown"
+            return cls(model=model, chip=chip)
         model, chip = await get_model_and_chip()
         return cls(model=model, chip=chip)
 
@@ -304,6 +328,95 @@ async def _gather_iface_map() -> dict[str, str] | None:
     return ports
 
 
+# Linux interface naming patterns for classification
+_LINUX_ETHERNET_PATTERN = re.compile(r"^(eth|en|eno|ens|enp|bond)\d")
+_LINUX_WIFI_PATTERN = re.compile(r"^(wlan|wlp|wifi)\d")
+_LINUX_LOOPBACK_PATTERN = re.compile(r"^lo$")
+_LINUX_VIRTUAL_PATTERN = re.compile(r"^(veth|docker|br-|virbr)")
+
+
+def _classify_linux_interface(name: str) -> InterfaceType:
+    """Classify a Linux network interface by its name and naming conventions.
+
+    Ethernet: eth*, en*, eno*, ens*, enp*, bond*
+    WiFi: wlan*, wlp*, wifi*
+    Loopback: lo
+    Virtual: veth*, docker*, br-*, virbr*
+    """
+    if _LINUX_LOOPBACK_PATTERN.match(name):
+        return "unknown"
+    if _LINUX_VIRTUAL_PATTERN.match(name):
+        return "unknown"
+    if _LINUX_WIFI_PATTERN.match(name):
+        return "wifi"
+    if _LINUX_ETHERNET_PATTERN.match(name):
+        return "ethernet"
+    return "unknown"
+
+
+def _get_linux_network_interfaces() -> list[NetworkInterfaceInfo]:
+    """Detect network interfaces on Linux using psutil.
+
+    Classifies interfaces by naming conventions and filters out
+    loopback and virtual interfaces. Uses psutil.net_if_stats()
+    to verify the interface is up.
+    """
+    import socket as _socket
+
+    interfaces_info: list[NetworkInterfaceInfo] = []
+    try:
+        addrs = _psutil.net_if_addrs()
+        stats = _psutil.net_if_stats()
+    except Exception:
+        logger.warning("Failed to query network interfaces via psutil", exc_info=True)
+        return []
+
+    for iface, services in addrs.items():
+        iface_stats = stats.get(iface)
+        # Skip interfaces that are down
+        if iface_stats is not None and not iface_stats.isup:
+            continue
+
+        iface_type = _classify_linux_interface(iface)
+
+        for service in services:
+            if service.family in (_socket.AF_INET, _socket.AF_INET6):
+                interfaces_info.append(
+                    NetworkInterfaceInfo(
+                        name=iface,
+                        ip_address=service.address,
+                        interface_type=iface_type,
+                    )
+                )
+
+    return interfaces_info
+
+
+def _detect_linux_gpu_info() -> GpuMemoryInfo | None:
+    """Detect GPU on Linux and return GpuMemoryInfo, or None on failure.
+
+    Imports gpu_detector conditionally to avoid torch dependency on macOS.
+    Converts GpuInfo from gpu_detector to GpuMemoryInfo from profiling types.
+    """
+    try:
+        from exo.worker.engines.pytorch_ipex.gpu_detector import detect_gpus
+
+        report = detect_gpus()
+        if not report.has_gpu or not report.gpus:
+            return None
+
+        primary = report.gpus[0]
+        return GpuMemoryInfo(
+            device_type=primary.device_type,
+            memory_architecture=primary.memory_architecture.value,
+            gpu_total_memory=Memory.from_bytes(primary.total_memory_bytes),
+            gpu_available_memory=Memory.from_bytes(primary.available_memory_bytes),
+        )
+    except Exception:
+        logger.warning("Linux GPU detection failed, continuing without GPU info", exc_info=True)
+        return None
+
+
 GatheredInfo = (
     MacmonMetrics
     | MemoryUsage
@@ -384,16 +497,22 @@ class InfoGatherer:
         if self.memory_poll_rate is None:
             return
         while True:
-            await self.info_sender.send(
-                MemoryUsage.from_psutil(override_memory=override_memory)
-            )
+            mem = MemoryUsage.from_psutil(override_memory=override_memory)
+
+            if IS_LINUX:
+                mem = mem.model_copy(update={"gpu_info": _detect_linux_gpu_info()})
+
+            await self.info_sender.send(mem)
             await anyio.sleep(self.memory_poll_rate)
 
     async def _watch_system_info(self):
         if self.interface_watcher_interval is None:
             return
         while True:
-            nics = await get_network_interfaces()
+            if IS_LINUX:
+                nics = _get_linux_network_interfaces()
+            else:
+                nics = await get_network_interfaces()
             await self.info_sender.send(NodeNetworkInterfaces(ifaces=nics))
             await anyio.sleep(self.interface_watcher_interval)
 

@@ -1,5 +1,5 @@
 """
-Health Check for PyTorch + IPEX Backend
+Health Check for PyTorch XPU Backend
 
 This module provides health check functionality for monitoring
 backend status, device availability, and model loading state.
@@ -52,7 +52,7 @@ class HealthCheckResult:
 
 class HealthChecker:
     """
-    Health checker for PyTorch+IPEX backend.
+    Health checker for PyTorch XPU backend.
 
     This class provides comprehensive health checking including:
     - Device availability and health

@@ -1,5 +1,5 @@
 """
-KV Cache Manager for PyTorch + IPEX Backend
+KV Cache Manager for PyTorch XPU Backend
 
 This module provides key-value cache management for transformer inference,
 including LRU eviction, memory monitoring, and cache statistics.

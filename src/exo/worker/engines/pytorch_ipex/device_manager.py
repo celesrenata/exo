@@ -1,9 +1,9 @@
 """
-Device Manager for PyTorch + IPEX Backend
+Device Manager for PyTorch XPU Backend
 
 This module provides device detection, selection, and monitoring for Intel Arc GPUs,
 NVIDIA GPUs, and CPU fallback. It implements the device abstraction layer for the
-PyTorch + IPEX inference engine.
+PyTorch XPU inference engine. Uses native PyTorch XPU (2.11+), no IPEX dependency.
 
 Requirements addressed:
 - 1.1: Device detection and enumeration
@@ -58,7 +58,6 @@ class DeviceManager:
     def __init__(self) -> None:
         """Initialize the DeviceManager."""
         self._torch_available: bool = False
-        self._ipex_available: bool = False
         self._xpu_available: bool = False
         self._cuda_available: bool = False
 
@@ -69,21 +68,11 @@ class DeviceManager:
             self._torch_available = True
             self._torch = torch
 
-            # Check for IPEX
-            try:
-                import intel_extension_for_pytorch as ipex  # type: ignore
-
-                self._ipex_available = True
-                self._ipex = ipex
-                logger.info(f"Intel Extension for PyTorch (IPEX) available: {ipex.__version__}")
-            except ImportError:
-                logger.debug("Intel Extension for PyTorch (IPEX) not available")
-
-            # Check for XPU (Intel Arc)
+            # Check for XPU (Intel Arc) — native PyTorch 2.11+, no IPEX needed
             if hasattr(torch, "xpu"):
                 self._xpu_available = torch.xpu.is_available()  # type: ignore
                 if self._xpu_available:
-                    logger.info("Intel XPU (Arc GPU) available")
+                    logger.info("Intel XPU (Arc GPU) available via native PyTorch")
             else:
                 logger.debug("torch.xpu module not found")
 

@@ -2,6 +2,7 @@ from collections.abc import Generator, Mapping
 
 from loguru import logger
 
+from exo.master.memory_budget import calculate_memory_budget
 from exo.shared.models.model_cards import ModelCard
 from exo.shared.topology import Topology
 from exo.shared.types.common import Host, NodeId
@@ -18,6 +19,37 @@ from exo.shared.types.worker.shards import (
 )
 
 
+def _get_node_available_memory(node_id: NodeId, mem: MemoryUsage) -> Memory:
+    """Get available memory for a node, accounting for GPU memory architecture.
+
+    When gpu_info is present:
+    - Shared architecture: use calculate_memory_budget() to get available_for_model
+    - Discrete architecture: use GPU VRAM from gpu_info.gpu_available_memory
+    When gpu_info is absent: use ram_available (backward compat)
+    """
+    if mem.gpu_info is not None:
+        if mem.gpu_info.memory_architecture == "Shared":
+            budget = calculate_memory_budget(
+                total_memory=mem.ram_available,
+                architecture="Shared",
+            )
+            logger.debug(
+                f"Node {node_id}: Shared memory budget — "
+                f"total={mem.ram_available.in_gb:.2f} GiB, "
+                f"overhead={budget.os_overhead.in_gb:.2f} GiB, "
+                f"available_for_model={budget.available_for_model.in_gb:.2f} GiB"
+            )
+            return budget.available_for_model
+        else:
+            # Discrete: use GPU VRAM
+            logger.debug(
+                f"Node {node_id}: Discrete GPU memory — "
+                f"available={mem.gpu_info.gpu_available_memory.in_gb:.2f} GiB"
+            )
+            return mem.gpu_info.gpu_available_memory
+    return mem.ram_available
+
+
 def filter_cycles_by_memory(
     cycles: list[Cycle],
     node_memory: Mapping[NodeId, MemoryUsage],
@@ -29,7 +61,10 @@ def filter_cycles_by_memory(
             continue
 
         total_mem = sum(
-            (node_memory[node_id].ram_available for node_id in cycle.node_ids),
+            (
+                _get_node_available_memory(node_id, node_memory[node_id])
+                for node_id in cycle.node_ids
+            ),
             start=Memory(),
         )
         if total_mem >= required_memory:
@@ -405,6 +440,54 @@ def get_mlx_ring_hosts_by_node(
             if connection_ip is None:
                 raise ValueError(
                     "MLX ring backend requires connectivity between neighbouring nodes"
+                )
+
+            hosts_for_node.append(Host(ip=connection_ip, port=ephemeral_port))
+
+        hosts_by_node[node_id] = hosts_for_node
+
+    return hosts_by_node
+
+
+def get_pytorch_ring_hosts_by_node(
+    selected_cycle: Cycle,
+    cycle_digraph: Topology,
+    ephemeral_port: int,
+    node_network: Mapping[NodeId, NodeNetworkInfo],
+) -> dict[NodeId, list[Host]]:
+    """Generate per-node host lists for PyTorch distributed backend.
+
+    Unlike `get_mlx_ring_hosts_by_node()` which only resolves left/right neighbors,
+    this function resolves ethernet IPs for ALL nodes in the cycle (full-mesh
+    connectivity for `torch.distributed` rendezvous).
+
+    Each node gets a list where:
+    - Self position: Host(ip="0.0.0.0", port=ephemeral_port)
+    - All other nodes: actual ethernet IP via _find_ip_prioritised()
+
+    Raises ValueError if any node lacks an ethernet IP address.
+    """
+    world_size = len(selected_cycle)
+    if world_size == 0:
+        return {}
+
+    hosts_by_node: dict[NodeId, list[Host]] = {}
+
+    for rank, node_id in enumerate(selected_cycle):
+        hosts_for_node: list[Host] = []
+
+        for idx, other_node_id in enumerate(selected_cycle):
+            if idx == rank:
+                hosts_for_node.append(Host(ip="0.0.0.0", port=ephemeral_port))
+                continue
+
+            connection_ip = _find_ip_prioritised(
+                node_id, other_node_id, cycle_digraph, node_network
+            )
+            if connection_ip is None:
+                raise ValueError(
+                    f"PyTorch distributed backend requires ethernet connectivity "
+                    f"between all nodes, but no ethernet IP found for node {other_node_id}"
                 )
 
             hosts_for_node.append(Host(ip=connection_ip, port=ephemeral_port))

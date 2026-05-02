@@ -1,6 +1,6 @@
-"""API compatibility tests for PyTorch+IPEX backend.
+"""API compatibility tests for PyTorch XPU backend.
 
-This module tests that the PyTorch+IPEX backend maintains compatibility
+This module tests that the PyTorch XPU backend maintains compatibility
 with the OpenAI chat completions API format.
 """
 
@@ -10,7 +10,7 @@ import pytest
 
 
 class TestAPICompatibility:
-    """Test OpenAI API compatibility for PyTorch+IPEX backend."""
+    """Test OpenAI API compatibility for PyTorch XPU backend."""
 
     def test_chat_completions_request_format(self) -> None:
         """Test that chat completions request format is valid."""

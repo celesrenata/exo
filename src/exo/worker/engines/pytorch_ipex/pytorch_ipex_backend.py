@@ -1,8 +1,8 @@
 """
-PyTorch + IPEX Inference Backend
+PyTorch XPU Inference Backend
 
 This module provides the main inference engine for Intel Arc GPUs using
-PyTorch and Intel Extension for PyTorch (IPEX).
+native PyTorch XPU (2.11+). No IPEX dependency.
 
 Requirements addressed:
 - 3.1: InferenceEngine protocol implementation
@@ -45,11 +45,11 @@ from exo.worker.engines.pytorch_ipex.performance_metrics import (
 @final
 class PyTorchIPEXBackend(InferenceBackend):
     """
-    PyTorch + IPEX inference backend for Intel Arc GPUs.
+    PyTorch XPU inference backend for Intel Arc GPUs.
 
     This class implements the InferenceBackend protocol and provides:
     - Automatic device detection and selection (Intel Arc > NVIDIA > CPU)
-    - Model loading and IPEX optimization
+    - Model loading with native PyTorch XPU device placement
     - Async inference execution with KV cache
     - Token sampling with temperature and top-p
     - Graceful error handling and fallbacks
@@ -239,7 +239,7 @@ class PyTorchIPEXBackend(InferenceBackend):
         This method:
         1. Checks if the shard is already loaded
         2. Downloads and loads the model if needed
-        3. Applies IPEX optimizations
+        3. Applies native PyTorch XPU device placement
         4. Caches the model instance
 
         Args:

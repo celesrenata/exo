@@ -1,12 +1,12 @@
 """
-Model Loader for PyTorch + IPEX Backend
+Model Loader for PyTorch Backend
 
-This module provides model loading from HuggingFace, IPEX optimization,
-and model sharding support for distributed inference.
+This module provides model loading from HuggingFace and model sharding
+support for distributed inference. Uses native PyTorch XPU (2.11+) for
+Intel Arc GPU support — no IPEX dependency.
 
 Requirements addressed:
 - 2.1: Model loading from HuggingFace hub and local cache
-- 2.2: IPEX optimization with bfloat16 precision
 - 2.3: Model sharding for distributed inference
 - 2.4: Model validation and compatibility checking
 """
@@ -31,11 +31,11 @@ logger = logging.getLogger(__name__)
 @final
 class ModelLoader:
     """
-    Loads and optimizes HuggingFace models for Intel Arc GPUs using PyTorch + IPEX.
+    Loads and optimizes HuggingFace models for Intel Arc GPUs using native PyTorch XPU.
 
     This class provides:
     - Async model loading from HuggingFace hub or local cache
-    - IPEX optimization with bfloat16 precision
+    - Native PyTorch XPU device placement (no IPEX dependency)
     - Model sharding support for distributed inference
     - Model validation and compatibility checking
 
@@ -45,7 +45,6 @@ class ModelLoader:
     def __init__(self) -> None:
         """Initialize the ModelLoader."""
         self._torch_available: bool = False
-        self._ipex_available: bool = False
         self._transformers_available: bool = False
 
         # Try to import dependencies
@@ -57,15 +56,6 @@ class ModelLoader:
             logger.info(f"PyTorch available: {torch.__version__}")
         except ImportError:
             logger.error("PyTorch not available - ModelLoader cannot function")
-
-        try:
-            import intel_extension_for_pytorch as ipex  # type: ignore
-
-            self._ipex_available = True
-            self._ipex = ipex
-            logger.info(f"IPEX available: {ipex.__version__}")
-        except ImportError:
-            logger.warning("IPEX not available - optimizations will be skipped")
 
         try:
             import transformers  # type: ignore
@@ -93,7 +83,7 @@ class ModelLoader:
         1. Checks local cache first
         2. Downloads from HuggingFace if not cached
         3. Loads model using transformers.AutoModelForCausalLM
-        4. Applies IPEX optimizations
+        4. Places model on target device (XPU, CUDA, or CPU)
         5. Handles model sharding if needed
         6. Validates model compatibility
 
@@ -202,12 +192,9 @@ class ModelLoader:
             logger.debug(f"Moving model to device {device}")
             model = model.to(device)
 
-            # Apply IPEX optimizations
-            if self._ipex_available and device.type == "xpu":
-                logger.debug("Applying IPEX optimizations")
-                model = self._apply_ipex_optimization(model, device)
-            else:
-                logger.debug("Skipping IPEX optimizations (not available or not XPU)")
+            # Note: Native PyTorch 2.11+ handles XPU optimization internally.
+            # No IPEX optimization needed — just use model.to(device).
+            logger.debug("Model placed on device (native PyTorch XPU, no IPEX optimization)")
 
             # Handle model sharding if needed
             if not (
@@ -288,47 +275,6 @@ class ModelLoader:
             f"Model validation passed: {actual_layers} layers, "
             f"shard [{shard_metadata.start_layer}, {shard_metadata.end_layer})"
         )
-
-    def _apply_ipex_optimization(self, model: Any, device: Any) -> Any:
-        """
-        Apply IPEX optimizations to the model.
-
-        Optimizations include:
-        - bfloat16 precision
-        - Weights prepacking
-        - Operator fusion
-
-        Args:
-            model: Model to optimize
-            device: Target device
-
-        Returns:
-            Optimized model
-
-        Requirements: 2.2, 8.1
-        """
-        if not self._ipex_available:
-            logger.warning("IPEX not available, skipping optimization")
-            return model
-
-        try:
-            logger.debug("Applying IPEX optimizations")
-
-            # Apply IPEX optimize
-            optimized_model = self._ipex.optimize(
-                model,
-                dtype=self._torch.bfloat16,
-                inplace=True,
-                weights_prepack=True,
-            )
-
-            logger.info("IPEX optimizations applied successfully")
-            return optimized_model
-
-        except Exception as e:
-            logger.error(f"Failed to apply IPEX optimizations: {e}")
-            logger.warning("Continuing with unoptimized model")
-            return model
 
     def _create_model_shard(self, model: Any, shard_metadata: ShardMetadata) -> Any:
         """

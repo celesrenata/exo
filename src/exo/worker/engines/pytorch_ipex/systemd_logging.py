@@ -1,5 +1,5 @@
 """
-Systemd Journal Integration for PyTorch + IPEX Backend
+Systemd Journal Integration for PyTorch XPU Backend
 
 This module provides integration with systemd journal for logging,
 including service metadata and structured logging support.
@@ -33,7 +33,7 @@ def configure_systemd_logging(
 
     Example:
         >>> configure_systemd_logging("exo-pytorch-ipex", "INFO")
-        >>> logger.info("Service started", backend="pytorch_ipex")
+        >>> logger.info("Service started", backend="pytorch_xpu")
     """
     # Remove default handler
     logger.remove()
@@ -62,7 +62,7 @@ def configure_systemd_logging(
     logger.configure(
         extra={
             "service": service_name,
-            "backend": "pytorch_ipex",
+            "backend": "pytorch_xpu",
         }
     )
 
@@ -165,7 +165,7 @@ class SystemdLogHandler:
             service_name: Name of the systemd service
         """
         self.service_name = service_name
-        self.logger = logger.bind(service=service_name, backend="pytorch_ipex")
+        self.logger = logger.bind(service=service_name, backend="pytorch_xpu")
 
     def log_startup(self, **context: Any) -> None:
         """
@@ -184,7 +184,7 @@ class SystemdLogHandler:
             ... )
         """
         self.logger.info(
-            "PyTorch+IPEX backend starting",
+            "PyTorch XPU backend starting",
             event_type="startup",
             **context,
         )
@@ -202,7 +202,7 @@ class SystemdLogHandler:
             >>> handler.log_shutdown(reason="graceful", uptime_seconds=3600)
         """
         self.logger.info(
-            "PyTorch+IPEX backend shutting down",
+            "PyTorch XPU backend shutting down",
             event_type="shutdown",
             **context,
         )
