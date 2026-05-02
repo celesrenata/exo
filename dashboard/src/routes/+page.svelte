@@ -151,7 +151,7 @@
     return model.tasks.includes("ImageToImage");
   }
   let selectedSharding = $state<"Pipeline" | "Tensor">("Pipeline");
-  type InstanceMeta = "MlxRing" | "MlxIbv" | "MlxJaccl" | "PyTorchIPEXRing";
+  type InstanceMeta = "MlxRing" | "MlxIbv" | "MlxJaccl" | "PyTorchXPURing";
 
   // Launch defaults persistence
   const LAUNCH_DEFAULTS_KEY = "exo-launch-defaults";
@@ -404,8 +404,8 @@
   const matchesSelectedRuntime = (runtime: InstanceMeta): boolean =>
     selectedInstanceType === "MlxRing"
       ? runtime === "MlxRing"
-      : selectedInstanceType === "PyTorchIPEXRing"
-        ? runtime === "PyTorchIPEXRing"
+      : selectedInstanceType === "PyTorchXPURing"
+        ? runtime === "PyTorchXPURing"
         : runtime === "MlxIbv" || runtime === "MlxJaccl";
 
   // Helper to check if a model can be launched (has valid placement with >= minNodes)
@@ -1195,8 +1195,8 @@
       instanceTag === "MlxJacclInstance"
     )
       instanceType = "MLX RDMA";
-    else if (instanceTag === "PyTorchIPEXRingInstance")
-      instanceType = "PyTorch+IPEX Ring";
+    else if (instanceTag === "PyTorchXPURingInstance")
+      instanceType = "PyTorch XPU Ring";
 
     const inst = instance as {
       shardAssignments?: {
@@ -2580,25 +2580,25 @@
                   </button>
                   <button
                     onclick={() => {
-                      selectedInstanceType = "PyTorchIPEXRing";
+                      selectedInstanceType = "PyTorchXPURing";
                       saveLaunchDefaults();
                     }}
                     class="flex items-center gap-2 py-2 px-4 text-sm font-mono border rounded transition-all duration-200 cursor-pointer {selectedInstanceType ===
-                    'PyTorchIPEXRing'
+                    'PyTorchXPURing'
                       ? 'bg-transparent text-exo-yellow border-exo-yellow'
                       : 'bg-transparent text-white/70 border-exo-medium-gray/50 hover:border-exo-yellow/50'}"
                   >
                     <span
                       class="w-4 h-4 rounded-full border-2 flex items-center justify-center {selectedInstanceType ===
-                      'PyTorchIPEXRing'
+                      'PyTorchXPURing'
                         ? 'border-exo-yellow'
                         : 'border-exo-medium-gray'}"
                     >
-                      {#if selectedInstanceType === "PyTorchIPEXRing"}
+                      {#if selectedInstanceType === "PyTorchXPURing"}
                         <span class="w-2 h-2 rounded-full bg-exo-yellow"></span>
                       {/if}
                     </span>
-                    PyTorch+IPEX Ring
+                    PyTorch XPU Ring
                   </button>
                 </div>
               </div>

@@ -21,7 +21,7 @@
     } | null;
     nodes?: Record<string, NodeInfo>;
     sharding?: "Pipeline" | "Tensor";
-    runtime?: "MlxRing" | "MlxIbv" | "MlxJaccl" | "TinygradRing" | "PyTorchIPEXRing";
+    runtime?: "MlxRing" | "MlxIbv" | "MlxJaccl" | "TinygradRing" | "PyTorchXPURing";
     onLaunch?: () => void;
     tags?: string[];
     apiPreview?: PlacementPreview | null;
@@ -572,8 +572,8 @@
             ? "MLX RDMA"
             : runtime === "TinygradRing"
               ? "Tinygrad Ring"
-              : runtime === "PyTorchIPEXRing"
-                ? "PyTorch+IPEX Ring"
+              : runtime === "PyTorchXPURing"
+                ? "PyTorch XPU Ring"
                 : runtime}
       </span>
     </div>
