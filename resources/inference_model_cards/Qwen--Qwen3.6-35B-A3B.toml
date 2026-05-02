@@ -1,0 +1,12 @@
+model_id = "Qwen/Qwen3.6-35B-A3B"
+n_layers = 40
+hidden_size = 2048
+supports_tensor = false
+tasks = ["TextGeneration"]
+family = "qwen"
+quantization = ""
+base_model = "Qwen3.6 35B-A3B"
+capabilities = ["text", "thinking"]
+
+[storage_size]
+in_bytes = 70000000000

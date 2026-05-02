@@ -28,7 +28,7 @@ class TestLinuxGpuDetectionInMemoryUsage:
 
     def test_gpu_detected_populates_gpu_info(self) -> None:
         """When detect_gpus returns a GPU, _detect_linux_gpu_info returns GpuMemoryInfo."""
-        from exo.worker.engines.pytorch_ipex.gpu_detector import (
+        from exo.worker.engines.pytorch_xpu.gpu_detector import (
             GpuInfo,
             GpuMemoryArchitecture,
             NodeGpuReport,
@@ -52,7 +52,7 @@ class TestLinuxGpuDetectionInMemoryUsage:
         with patch(
             "exo.utils.info_gatherer.info_gatherer.IS_LINUX", True
         ), patch(
-            "exo.worker.engines.pytorch_ipex.gpu_detector.detect_gpus",
+            "exo.worker.engines.pytorch_xpu.gpu_detector.detect_gpus",
             return_value=fake_report,
         ):
             from exo.utils.info_gatherer.info_gatherer import _detect_linux_gpu_info
@@ -68,7 +68,7 @@ class TestLinuxGpuDetectionInMemoryUsage:
 
     def test_nvidia_gpu_detected_as_discrete(self) -> None:
         """When detect_gpus returns an NVIDIA GPU, it's reported as Discrete."""
-        from exo.worker.engines.pytorch_ipex.gpu_detector import (
+        from exo.worker.engines.pytorch_xpu.gpu_detector import (
             GpuInfo,
             GpuMemoryArchitecture,
             NodeGpuReport,
@@ -90,7 +90,7 @@ class TestLinuxGpuDetectionInMemoryUsage:
         )
 
         with patch(
-            "exo.worker.engines.pytorch_ipex.gpu_detector.detect_gpus",
+            "exo.worker.engines.pytorch_xpu.gpu_detector.detect_gpus",
             return_value=fake_report,
         ):
             from exo.utils.info_gatherer.info_gatherer import _detect_linux_gpu_info
@@ -103,7 +103,7 @@ class TestLinuxGpuDetectionInMemoryUsage:
 
     def test_no_gpu_returns_none(self) -> None:
         """When detect_gpus reports no GPU, _detect_linux_gpu_info returns None."""
-        from exo.worker.engines.pytorch_ipex.gpu_detector import NodeGpuReport
+        from exo.worker.engines.pytorch_xpu.gpu_detector import NodeGpuReport
 
         fake_report = NodeGpuReport(
             gpus=[],
@@ -112,7 +112,7 @@ class TestLinuxGpuDetectionInMemoryUsage:
         )
 
         with patch(
-            "exo.worker.engines.pytorch_ipex.gpu_detector.detect_gpus",
+            "exo.worker.engines.pytorch_xpu.gpu_detector.detect_gpus",
             return_value=fake_report,
         ):
             from exo.utils.info_gatherer.info_gatherer import _detect_linux_gpu_info
@@ -123,7 +123,7 @@ class TestLinuxGpuDetectionInMemoryUsage:
     def test_gpu_detection_failure_returns_none_no_crash(self) -> None:
         """When detect_gpus raises an exception, _detect_linux_gpu_info returns None."""
         with patch(
-            "exo.worker.engines.pytorch_ipex.gpu_detector.detect_gpus",
+            "exo.worker.engines.pytorch_xpu.gpu_detector.detect_gpus",
             side_effect=RuntimeError("torch not available"),
         ):
             from exo.utils.info_gatherer.info_gatherer import _detect_linux_gpu_info
@@ -133,7 +133,7 @@ class TestLinuxGpuDetectionInMemoryUsage:
 
     def test_memory_usage_with_gpu_info_on_linux(self) -> None:
         """MemoryUsage emitted on Linux includes gpu_info when GPU is detected."""
-        from exo.worker.engines.pytorch_ipex.gpu_detector import (
+        from exo.worker.engines.pytorch_xpu.gpu_detector import (
             GpuInfo,
             GpuMemoryArchitecture,
             NodeGpuReport,
@@ -162,7 +162,7 @@ class TestLinuxGpuDetectionInMemoryUsage:
         )
 
         with patch(
-            "exo.worker.engines.pytorch_ipex.gpu_detector.detect_gpus",
+            "exo.worker.engines.pytorch_xpu.gpu_detector.detect_gpus",
             return_value=fake_report,
         ):
             from exo.utils.info_gatherer.info_gatherer import _detect_linux_gpu_info

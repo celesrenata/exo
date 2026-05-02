@@ -4,7 +4,7 @@ Tests:
 - get_pytorch_ring_hosts_by_node() returns full-mesh hosts
 - ethernet-missing node raises ValueError
 - filter_cycles_by_memory() with shared-memory nodes subtracts OS overhead
-- place_instance() for PyTorchIPEXRing uses get_pytorch_ring_hosts_by_node()
+- place_instance() for PyTorchXPURing uses get_pytorch_ring_hosts_by_node()
 """
 
 from unittest.mock import patch
@@ -32,7 +32,7 @@ from exo.shared.types.profiling import (
 from exo.shared.types.topology import Connection, Cycle, SocketConnection
 from exo.shared.types.worker.instances import (
     InstanceMeta,
-    PyTorchIPEXRingInstance,
+    PyTorchXPURingInstance,
 )
 from exo.shared.types.worker.shards import Sharding
 
@@ -351,11 +351,11 @@ class TestFilterCyclesByMemoryWithGpuInfo:
         assert len(result) == 0
 
 
-class TestPlaceInstancePyTorchIPEXRing:
-    """Test place_instance() for PyTorchIPEXRing uses get_pytorch_ring_hosts_by_node()."""
+class TestPlaceInstancePyTorchXPURing:
+    """Test place_instance() for PyTorchXPURing uses get_pytorch_ring_hosts_by_node()."""
 
-    def test_pytorch_ipex_ring_uses_full_mesh_hosts(self):
-        """PyTorchIPEXRing placement should produce full-mesh hosts (not just neighbors)."""
+    def test_pytorch_xpu_ring_uses_full_mesh_hosts(self):
+        """PyTorchXPURing placement should produce full-mesh hosts (not just neighbors)."""
         node_a = NodeId("node-a")
         node_b = NodeId("node-b")
         node_c = NodeId("node-c")
@@ -386,7 +386,7 @@ class TestPlaceInstancePyTorchIPEXRing:
             command_id=CommandId(),
             model_card=model_card,
             sharding=Sharding.Pipeline,
-            instance_meta=InstanceMeta.PyTorchIPEXRing,
+            instance_meta=InstanceMeta.PyTorchXPURing,
             min_nodes=1,
         )
 
@@ -396,12 +396,12 @@ class TestPlaceInstancePyTorchIPEXRing:
 
         assert len(placements) == 1
         instance = list(placements.values())[0]
-        assert isinstance(instance, PyTorchIPEXRingInstance)
+        assert isinstance(instance, PyTorchXPURingInstance)
 
         # Verify full-mesh: every node's host list should have no placeholder IPs
         for nid, hosts in instance.hosts_by_node.items():
             assert len(hosts) == len(instance.shard_assignments.node_to_runner)
             for host in hosts:
                 assert host.ip != "198.51.100.1", (
-                    f"Found placeholder IP in PyTorchIPEXRing hosts for node {nid}"
+                    f"Found placeholder IP in PyTorchXPURing hosts for node {nid}"
                 )

@@ -27,7 +27,7 @@ LD_LIBRARY_PATH="/nix/store/cf1a53iqg6ncnygl698c4v0l8qam5a2q-gcc-14.3.0-lib/lib:
 
 ## Nix Flake Status
 
-The nix flake (`nix develop`) is currently broken due to an argument error in `nix/ipex-xpu.nix`:
+The nix flake (`nix develop`) is currently broken due to an argument error in `nix/xpu.nix`:
 ```
 error: function 'anonymous lambda' called with unexpected argument 'intel-compute-runtime'
 ```
@@ -37,9 +37,9 @@ Do NOT attempt to use `nix develop` or `nix flake check` until this is fixed.
 
 Some pre-existing test files fail to collect:
 - `test_opencl.py` — calls `sys.exit(1)` at module level
-- `src/exo/worker/engines/pytorch_ipex/test_kv_cache_simple.py` — broken relative import
-- `src/exo/worker/engines/pytorch_ipex/tests/test_device_manager.py` — needs real torch
-- `src/exo/worker/engines/pytorch_ipex/tests/test_model_loader.py` — needs real torch
+- `src/exo/worker/engines/pytorch_xpu/test_kv_cache_simple.py` — broken relative import
+- `src/exo/worker/engines/pytorch_xpu/tests/test_device_manager.py` — needs real torch
+- `src/exo/worker/engines/pytorch_xpu/tests/test_model_loader.py` — needs real torch
 - `src/exo/worker/tests/unittests/test_mlx/` — needs CUDA libs for mlx
 
 When running the full suite, ignore these with `--ignore=` flags. When running specific test files, target them directly.
@@ -50,8 +50,8 @@ For the distributed-gpu-sharding spec tests specifically:
 ```bash
 LD_LIBRARY_PATH="/nix/store/cf1a53iqg6ncnygl698c4v0l8qam5a2q-gcc-14.3.0-lib/lib:$LD_LIBRARY_PATH" uv run pytest \
   src/exo/shared/types/tests/test_profiling.py \
-  src/exo/worker/engines/pytorch_ipex/tests/test_gpu_detector_properties.py \
-  src/exo/worker/engines/pytorch_ipex/tests/test_gpu_detector.py \
+  src/exo/worker/engines/pytorch_xpu/tests/test_gpu_detector_properties.py \
+  src/exo/worker/engines/pytorch_xpu/tests/test_gpu_detector.py \
   -v --tb=short
 ```
 

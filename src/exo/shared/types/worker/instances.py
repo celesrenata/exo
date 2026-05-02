@@ -15,7 +15,7 @@ class InstanceMeta(str, Enum):
     MlxRing = "MlxRing"
     MlxJaccl = "MlxJaccl"
     TinygradRing = "TinygradRing"
-    PyTorchIPEXRing = "PyTorchIPEXRing"
+    PyTorchXPURing = "PyTorchXPURing"
 
 
 class BaseInstance(TaggedModel):
@@ -41,13 +41,13 @@ class TinygradRingInstance(BaseInstance):
     ephemeral_port: int
 
 
-class PyTorchIPEXRingInstance(BaseInstance):
+class PyTorchXPURingInstance(BaseInstance):
     hosts_by_node: dict[NodeId, list[Host]]
     ephemeral_port: int
 
 
 # TODO: Single node instance
-Instance = MlxRingInstance | MlxJacclInstance | TinygradRingInstance | PyTorchIPEXRingInstance
+Instance = MlxRingInstance | MlxJacclInstance | TinygradRingInstance | PyTorchXPURingInstance
 
 
 class BoundInstance(CamelCaseModel):

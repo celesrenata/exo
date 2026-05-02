@@ -41,7 +41,7 @@ from exo.shared.types.tasks import (
 from exo.shared.types.text_generation import TextGenerationTaskParams
 from exo.shared.types.worker.instances import (
     BoundInstance,
-    PyTorchIPEXRingInstance,
+    PyTorchXPURingInstance,
 )
 from exo.shared.types.worker.runner_response import (
     GenerationResponse,
@@ -120,25 +120,25 @@ def main(
     # Detect backend type from instance
     # Handle both direct instance and Pydantic tagged union
     instance_type_name = type(instance).__name__
-    is_pytorch_ipex = (
-        isinstance(instance, PyTorchIPEXRingInstance)
-        or instance_type_name == "PyTorchIPEXRingInstance"
+    is_pytorch_xpu = (
+        isinstance(instance, PyTorchXPURingInstance)
+        or instance_type_name == "PyTorchXPURingInstance"
         or (
             hasattr(instance, "__class__")
-            and instance.__class__.__name__ == "PyTorchIPEXRingInstance"
+            and instance.__class__.__name__ == "PyTorchXPURingInstance"
         )
     )
 
-    if is_pytorch_ipex:
-        backend_type = "pytorch_ipex"
+    if is_pytorch_xpu:
+        backend_type = "pytorch_xpu"
         logger.info(
-            f"Using PyTorch XPU backend for PyTorchIPEXRingInstance (type: {instance_type_name})"
+            f"Using PyTorch XPU backend for PyTorchXPURingInstance (type: {instance_type_name})"
         )
 
         # Lazy-load PyTorch XPU backend modules
-        from exo.worker.engines.pytorch_ipex.generator import pytorch_ipex_generate
-        from exo.worker.engines.pytorch_ipex.model_loader import ModelLoader
-        from exo.worker.engines.pytorch_ipex.warmup import warmup_pytorch_ipex_inference
+        from exo.worker.engines.pytorch_xpu.generator import pytorch_xpu_generate
+        from exo.worker.engines.pytorch_xpu.model_loader import ModelLoader
+        from exo.worker.engines.pytorch_xpu.warmup import warmup_pytorch_xpu_inference
 
         logger.info("PyTorch XPU backend modules loaded")
     else:
@@ -190,8 +190,8 @@ def main(
     tokenizer: Any = None
     group: Any = None
     kv_prefix_cache: Any = None
-    pytorch_ipex_model: Any = None
-    pytorch_ipex_tokenizer: Any = None
+    pytorch_xpu_model: Any = None
+    pytorch_xpu_tokenizer: Any = None
     device_type: Any = None
     device_id: Any = None
 
@@ -222,15 +222,15 @@ def main(
                     )
                     event_sender.send(TaskAcknowledged(task_id=task.task_id))
 
-                    if backend_type == "pytorch_ipex":
+                    if backend_type == "pytorch_xpu":
                         # PyTorch distributed: initialize Gloo process group
                         try:
-                            from exo.worker.engines.pytorch_ipex.distributed import (
+                            from exo.worker.engines.pytorch_xpu.distributed import (
                                 ProcessGroupConfig,
                                 init_process_group,
                             )
 
-                            assert isinstance(instance, PyTorchIPEXRingInstance)
+                            assert isinstance(instance, PyTorchXPURingInstance)
                             rank = shard_metadata.device_rank
                             world_size = len(instance.shard_assignments.node_to_runner)
 
@@ -320,7 +320,7 @@ def main(
                         )
                         time.sleep(0.5)
 
-                    if backend_type == "pytorch_ipex":
+                    if backend_type == "pytorch_xpu":
                         # PyTorch XPU backend model loading
                         try:
                             if (
@@ -330,7 +330,7 @@ def main(
                                 logger.info("Loading PyTorch XPU model...")
 
                                 # Use GPU detector to determine device type and index
-                                from exo.worker.engines.pytorch_ipex.gpu_detector import detect_gpus
+                                from exo.worker.engines.pytorch_xpu.gpu_detector import detect_gpus
 
                                 gpu_report = detect_gpus()
                                 if gpu_report.has_gpu and gpu_report.gpus:
@@ -364,7 +364,7 @@ def main(
                                 loop = asyncio.new_event_loop()
                                 asyncio.set_event_loop(loop)
                                 try:
-                                    pytorch_ipex_model, pytorch_ipex_tokenizer = loop.run_until_complete(
+                                    pytorch_xpu_model, pytorch_xpu_tokenizer = loop.run_until_complete(
                                         model_loader.load_model(
                                             shard_metadata=shard_metadata,
                                             device_type=device_type,
@@ -413,7 +413,7 @@ def main(
                                 # OOM: report required vs available memory
                                 avail_info = ""
                                 try:
-                                    from exo.worker.engines.pytorch_ipex.gpu_detector import detect_gpus as _detect_gpus
+                                    from exo.worker.engines.pytorch_xpu.gpu_detector import detect_gpus as _detect_gpus
                                     _report = _detect_gpus()
                                     if _report.has_gpu and _report.gpus:
                                         _gpu = _report.gpus[0]
@@ -526,9 +526,9 @@ def main(
                     logger.info("runner loaded")
                 case StartWarmup() if isinstance(current_status, RunnerLoaded):
                     # Verify model and tokenizer are loaded based on backend type
-                    if backend_type == "pytorch_ipex":
-                        assert pytorch_ipex_model
-                        assert pytorch_ipex_tokenizer
+                    if backend_type == "pytorch_xpu":
+                        assert pytorch_xpu_model
+                        assert pytorch_xpu_tokenizer
                     else:
                         assert model
                         assert tokenizer
@@ -556,16 +556,16 @@ def main(
                                 # kv_prefix_cache=kv_prefix_cache,  # supply for warmup-time prefix caching
                             )
                             logger.info(f"warmed up by generating {toks} tokens")
-                        elif backend_type == "pytorch_ipex":
+                        elif backend_type == "pytorch_xpu":
                             # PyTorch XPU backend warmup with CPU tensor staging
-                            from exo.worker.engines.pytorch_ipex.distributed import (
+                            from exo.worker.engines.pytorch_xpu.distributed import (
                                 send_activation,
                                 recv_activation,
                             )
 
-                            toks = warmup_pytorch_ipex_inference(
-                                model=pytorch_ipex_model,
-                                tokenizer=pytorch_ipex_tokenizer,
+                            toks = warmup_pytorch_xpu_inference(
+                                model=pytorch_xpu_model,
+                                tokenizer=pytorch_xpu_tokenizer,
                                 device_type=device_type,
                                 device_id=device_id,
                                 warmup_tokens=10,
@@ -636,15 +636,15 @@ def main(
                     )
                     event_sender.send(TaskAcknowledged(task_id=task.task_id))
 
-                    if backend_type == "pytorch_ipex":
+                    if backend_type == "pytorch_xpu":
                         # PyTorch XPU backend text generation with distributed communication
-                        assert pytorch_ipex_model is not None
-                        assert pytorch_ipex_tokenizer is not None
+                        assert pytorch_xpu_model is not None
+                        assert pytorch_xpu_tokenizer is not None
                         assert device_type is not None
                         assert device_id is not None
 
                         try:
-                            from exo.worker.engines.pytorch_ipex.distributed import (
+                            from exo.worker.engines.pytorch_xpu.distributed import (
                                 send_activation as _send_act,
                                 recv_activation as _recv_act,
                             )
@@ -674,9 +674,9 @@ def main(
                                 logger.info(f"Rank {rank}: waiting for activation from rank {rank - 1}")
 
                             # Generate tokens using PyTorch XPU
-                            pytorch_ipex_generator = pytorch_ipex_generate(
-                                model=pytorch_ipex_model,
-                                tokenizer=pytorch_ipex_tokenizer,
+                            pytorch_xpu_generator = pytorch_xpu_generate(
+                                model=pytorch_xpu_model,
+                                tokenizer=pytorch_xpu_tokenizer,
                                 prompt=prompt,
                                 device_type=device_type,
                                 device_id=device_id,
@@ -688,7 +688,7 @@ def main(
                             )
 
                             # Forward responses to event sender
-                            for response in pytorch_ipex_generator:
+                            for response in pytorch_xpu_generator:
                                 match response:
                                     case GenerationResponse():
                                         if (
@@ -1010,11 +1010,11 @@ def main(
                     event_sender.send(TaskAcknowledged(task_id=task.task_id))
 
                     # Clean up backend-specific resources
-                    if backend_type == "pytorch_ipex":
+                    if backend_type == "pytorch_xpu":
                         # Destroy distributed process group first (with timeout)
                         if group is not None:
                             try:
-                                from exo.worker.engines.pytorch_ipex.distributed import (
+                                from exo.worker.engines.pytorch_xpu.distributed import (
                                     destroy_process_group,
                                 )
                                 logger.info("Destroying distributed process group (5s timeout)")
@@ -1026,8 +1026,8 @@ def main(
 
                         # Clean up PyTorch XPU resources
                         logger.info("Cleaning up PyTorch XPU resources")
-                        pytorch_ipex_model = None
-                        pytorch_ipex_tokenizer = None
+                        pytorch_xpu_model = None
+                        pytorch_xpu_tokenizer = None
 
                         # Clear PyTorch caches
                         try:

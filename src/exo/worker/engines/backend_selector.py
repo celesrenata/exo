@@ -44,30 +44,30 @@ def get_fallback_chain(preferred: str) -> list[str]:
 
     The fallback chain ensures that inference can proceed even if the
     preferred backend is unavailable. The chain is:
-    - pytorch_ipex → tinygrad → mlx (on Intel Arc)
+    - pytorch_xpu → tinygrad → mlx (on Intel Arc)
     - tinygrad → mlx (on other GPUs)
-    - npu → pytorch_ipex → tinygrad → mlx
+    - npu → pytorch_xpu → tinygrad → mlx
 
     Args:
-        preferred: Preferred backend name ("mlx", "tinygrad", "pytorch_ipex", "npu")
+        preferred: Preferred backend name ("mlx", "tinygrad", "pytorch_xpu", "npu")
 
     Returns:
         List of backend names to try in order
 
     Example:
-        >>> get_fallback_chain("pytorch_ipex")
-        ["pytorch_ipex", "tinygrad", "mlx"]
+        >>> get_fallback_chain("pytorch_xpu")
+        ["pytorch_xpu", "tinygrad", "mlx"]
         >>> get_fallback_chain("tinygrad")
         ["tinygrad", "mlx"]
         >>> get_fallback_chain("mlx")
         ["mlx"]
     """
-    if preferred == "pytorch_ipex":
-        return ["pytorch_ipex", "tinygrad", "mlx"]  # PyTorch XPU → tinygrad → MLX
+    if preferred == "pytorch_xpu":
+        return ["pytorch_xpu", "tinygrad", "mlx"]  # PyTorch XPU → tinygrad → MLX
     elif preferred == "tinygrad":
         return ["tinygrad", "mlx"]  # Try tinygrad, fall back to MLX
     elif preferred == "npu":
-        return ["npu", "pytorch_ipex", "tinygrad", "mlx"]  # NPU → PyTorch XPU → tinygrad → MLX
+        return ["npu", "pytorch_xpu", "tinygrad", "mlx"]  # NPU → PyTorch XPU → tinygrad → MLX
     else:
         return [preferred]  # No fallback for MLX (it's the baseline)
 
@@ -80,18 +80,18 @@ def select_backend_from_config(
     This function determines which backend to use based on:
     1. Shard metadata (if backend is specified)
     2. Environment variables (EXO_PYTORCH_IPEX_ENABLED, EXO_TINYGRAD_ENABLED)
-    3. Platform defaults (MLX on macOS, pytorch_ipex on Intel Arc if enabled)
+    3. Platform defaults (MLX on macOS, pytorch_xpu on Intel Arc if enabled)
 
     Args:
         shard_metadata: Metadata describing the model shard
 
     Returns:
-        Backend name to use ("mlx", "tinygrad", "pytorch_ipex", "npu")
+        Backend name to use ("mlx", "tinygrad", "pytorch_xpu", "npu")
 
     Example:
-        >>> # With EXO_PYTORCH_IPEX_ENABLED=true
+        >>> # With EXO_PYTORCH_XPU_ENABLED=true
         >>> select_backend_from_config(shard_metadata)
-        "pytorch_ipex"
+        "pytorch_xpu"
         >>> # With EXO_TINYGRAD_ENABLED=true
         >>> select_backend_from_config(shard_metadata)
         "tinygrad"
@@ -112,9 +112,9 @@ def select_backend_from_config(
     import os
 
     # Check for PyTorch XPU first (preferred for Intel Arc)
-    if os.environ.get("EXO_PYTORCH_IPEX_ENABLED", "false").lower() == "true":
-        logger.info("EXO_PYTORCH_IPEX_ENABLED=true, using pytorch_ipex backend")
-        return "pytorch_ipex"
+    if os.environ.get("EXO_PYTORCH_XPU_ENABLED", "false").lower() == "true":
+        logger.info("EXO_PYTORCH_XPU_ENABLED=true, using pytorch_xpu backend")
+        return "pytorch_xpu"
 
     if os.environ.get("EXO_TINYGRAD_ENABLED", "false").lower() == "true":
         logger.info("EXO_TINYGRAD_ENABLED=true, using tinygrad backend")

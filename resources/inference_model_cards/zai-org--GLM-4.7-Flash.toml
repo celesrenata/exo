@@ -1,0 +1,12 @@
+model_id = "zai-org/GLM-4.7-Flash"
+n_layers = 40
+hidden_size = 3584
+supports_tensor = false
+tasks = ["TextGeneration"]
+family = "glm"
+quantization = ""
+base_model = "GLM-4.7 Flash"
+capabilities = ["text", "thinking"]
+
+[storage_size]
+in_bytes = 60000000000

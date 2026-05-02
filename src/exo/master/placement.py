@@ -36,7 +36,7 @@ from exo.shared.types.worker.instances import (
     InstanceMeta,
     MlxJacclInstance,
     MlxRingInstance,
-    PyTorchIPEXRingInstance,
+    PyTorchXPURingInstance,
 )
 from exo.shared.types.worker.shards import Sharding
 
@@ -187,7 +187,7 @@ def place_instance(
                 hosts_by_node=hosts_by_node,
                 ephemeral_port=ephemeral_port,
             )
-        case InstanceMeta.PyTorchIPEXRing:
+        case InstanceMeta.PyTorchXPURing:
             ephemeral_port = random_ephemeral_port()
             hosts_by_node = get_pytorch_ring_hosts_by_node(
                 selected_cycle=selected_cycle,
@@ -196,7 +196,7 @@ def place_instance(
                 node_network=node_network,
             )
 
-            target_instances[instance_id] = PyTorchIPEXRingInstance(
+            target_instances[instance_id] = PyTorchXPURingInstance(
                 instance_id=instance_id,
                 shard_assignments=shard_assignments,
                 hosts_by_node=hosts_by_node,

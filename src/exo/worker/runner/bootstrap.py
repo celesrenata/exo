@@ -7,7 +7,7 @@ from exo.shared.types.tasks import Task
 from exo.shared.types.worker.instances import (
     BoundInstance,
     MlxJacclInstance,
-    PyTorchIPEXRingInstance,
+    PyTorchXPURingInstance,
 )
 from exo.shared.types.worker.runners import RunnerFailed
 from exo.utils.channels import ClosedResourceError, MpReceiver, MpSender
@@ -25,9 +25,9 @@ def entrypoint(
     logger = _logger
 
     # Configure backend-specific environment variables
-    if isinstance(bound_instance.instance, PyTorchIPEXRingInstance):
+    if isinstance(bound_instance.instance, PyTorchXPURingInstance):
         # PyTorch backend configuration
-        os.environ["EXO_PYTORCH_IPEX_ENABLED"] = "true"
+        os.environ["EXO_PYTORCH_XPU_ENABLED"] = "true"
         
         # Set PyTorch environment variables for optimal performance
         os.environ["PYTORCH_ENABLE_XPU"] = "1"
@@ -47,7 +47,7 @@ def entrypoint(
                     
                     logger.info(
                         "Device selection: Intel Arc GPU with native PyTorch XPU",
-                        backend_type="pytorch_ipex",
+                        backend_type="pytorch_xpu",
                         device_type="XPU",
                         device_count=device_count,
                         device_name=device_name,
@@ -56,22 +56,22 @@ def entrypoint(
                 else:
                     logger.warning(
                         "PyTorch XPU available but no devices found, will fall back to CPU",
-                        backend_type="pytorch_ipex",
+                        backend_type="pytorch_xpu",
                     )
             else:
                 logger.warning(
                     "Intel XPU not available, PyTorch backend will fall back to CPU",
-                    backend_type="pytorch_ipex",
+                    backend_type="pytorch_xpu",
                 )
         except ImportError as e:
             logger.warning(
                 f"Failed to import PyTorch: {e}. Backend will attempt initialization anyway.",
-                backend_type="pytorch_ipex",
+                backend_type="pytorch_xpu",
             )
         except Exception as e:
             logger.warning(
                 f"Failed to detect Intel Arc GPU: {e}. Backend will attempt initialization anyway.",
-                backend_type="pytorch_ipex",
+                backend_type="pytorch_xpu",
             )
     else:
         # MLX backend configuration

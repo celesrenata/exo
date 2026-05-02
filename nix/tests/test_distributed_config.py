@@ -73,8 +73,10 @@ class TestEnvironmentVariables:
             "Module must configure MASTER_ADDR environment variable"
         )
         # Verify it's set in the systemd service environment block
-        assert "systemd.services.exo.environment" in content, (
-            "MASTER_ADDR must be set via systemd.services.exo.environment"
+        # The Nix module uses nested attribute syntax:
+        #   systemd.services.exo = { ... environment = { MASTER_ADDR = ...; }; ... };
+        assert "environment" in content and "systemd.services.exo" in content, (
+            "MASTER_ADDR must be set via the systemd service environment block"
         )
 
     def test_master_port_env_configured(self) -> None:
@@ -174,7 +176,7 @@ class TestNoIpexImportsReference:
     """Cross-reference: verify no IPEX imports remain in the codebase.
 
     The comprehensive IPEX removal tests live in:
-        src/exo/worker/engines/pytorch_ipex/tests/test_no_ipex_imports.py
+        src/exo/worker/engines/pytorch_xpu/tests/test_no_ipex_imports.py
 
     This test provides a lightweight check from the nix/tests location
     to confirm the same invariant holds.
@@ -190,7 +192,7 @@ class TestNoIpexImportsReference:
         # Exclude the dedicated IPEX removal test file (it references the
         # string in test names and search patterns, not as actual imports)
         excluded = {
-            (src_root / "exo" / "worker" / "engines" / "pytorch_ipex"
+            (src_root / "exo" / "worker" / "engines" / "pytorch_xpu"
              / "tests" / "test_no_ipex_imports.py").resolve(),
         }
         violations: list[str] = []
@@ -224,11 +226,11 @@ class TestNoIpexImportsReference:
             / "exo"
             / "worker"
             / "engines"
-            / "pytorch_ipex"
+            / "pytorch_xpu"
             / "tests"
             / "test_no_ipex_imports.py"
         )
         assert test_file.is_file(), (
             "Expected dedicated IPEX removal test at "
-            "src/exo/worker/engines/pytorch_ipex/tests/test_no_ipex_imports.py"
+            "src/exo/worker/engines/pytorch_xpu/tests/test_no_ipex_imports.py"
         )

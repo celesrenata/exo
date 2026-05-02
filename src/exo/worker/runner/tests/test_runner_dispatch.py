@@ -29,7 +29,7 @@ from exo.shared.types.tasks import (
 )
 from exo.shared.types.worker.instances import (
     BoundInstance,
-    PyTorchIPEXRingInstance,
+    PyTorchXPURingInstance,
 )
 from exo.shared.types.worker.runners import (
     RunnerConnected,
@@ -83,8 +83,8 @@ def _make_shard(
 def _make_instance(
     num_nodes: int = 4,
     ephemeral_port: int = 29500,
-) -> tuple[PyTorchIPEXRingInstance, dict[str, PipelineShardMetadata]]:
-    """Create a PyTorchIPEXRingInstance with num_nodes nodes."""
+) -> tuple[PyTorchXPURingInstance, dict[str, PipelineShardMetadata]]:
+    """Create a PyTorchXPURingInstance with num_nodes nodes."""
     node_ids = [NodeId(f"node-{i}") for i in range(num_nodes)]
     runner_ids = [RunnerId(f"runner-{i}") for i in range(num_nodes)]
 
@@ -111,7 +111,7 @@ def _make_instance(
         node_to_runner=node_to_runner,
     )
 
-    instance = PyTorchIPEXRingInstance(
+    instance = PyTorchXPURingInstance(
         instance_id="test-instance",
         shard_assignments=shard_assignments,
         hosts_by_node=hosts_by_node,
@@ -181,7 +181,7 @@ class TestConnectToGroupSuccess:
         and transitions to RunnerConnected."""
         bound = _make_bound_instance(rank=0, num_nodes=4)
         instance = bound.instance
-        assert isinstance(instance, PyTorchIPEXRingInstance)
+        assert isinstance(instance, PyTorchXPURingInstance)
 
         event_sender = FakeEventSender()
         connect_task = ConnectToGroup(
@@ -198,20 +198,20 @@ class TestConnectToGroupSuccess:
         # Mock all heavy dependencies
         with (
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.init_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.init_process_group"
             ) as mock_init_pg,
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.destroy_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.destroy_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.generator.pytorch_ipex_generate",
+                "exo.worker.engines.pytorch_xpu.generator.pytorch_xpu_generate",
                 return_value=iter([]),
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.model_loader.ModelLoader"
+                "exo.worker.engines.pytorch_xpu.model_loader.ModelLoader"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.warmup.warmup_pytorch_ipex_inference",
+                "exo.worker.engines.pytorch_xpu.warmup.warmup_pytorch_xpu_inference",
                 return_value=0,
             ),
         ):
@@ -241,7 +241,7 @@ class TestConnectToGroupFailure:
         """ConnectToGroup failure transitions to RunnerFailed with rank/world_size/gloo info."""
         bound = _make_bound_instance(rank=1, num_nodes=4)
         instance = bound.instance
-        assert isinstance(instance, PyTorchIPEXRingInstance)
+        assert isinstance(instance, PyTorchXPURingInstance)
 
         event_sender = FakeEventSender()
         connect_task = ConnectToGroup(
@@ -257,21 +257,21 @@ class TestConnectToGroupFailure:
 
         with (
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.init_process_group",
+                "exo.worker.engines.pytorch_xpu.distributed.init_process_group",
                 side_effect=RuntimeError("Connection refused"),
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.destroy_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.destroy_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.generator.pytorch_ipex_generate",
+                "exo.worker.engines.pytorch_xpu.generator.pytorch_xpu_generate",
                 return_value=iter([]),
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.model_loader.ModelLoader"
+                "exo.worker.engines.pytorch_xpu.model_loader.ModelLoader"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.warmup.warmup_pytorch_ipex_inference",
+                "exo.worker.engines.pytorch_xpu.warmup.warmup_pytorch_xpu_inference",
                 return_value=0,
             ),
         ):
@@ -299,7 +299,7 @@ class TestLoadModelSuccess:
         """LoadModel with PyTorch backend loads model and transitions to RunnerLoaded."""
         bound = _make_bound_instance(rank=0, num_nodes=4)
         instance = bound.instance
-        assert isinstance(instance, PyTorchIPEXRingInstance)
+        assert isinstance(instance, PyTorchXPURingInstance)
 
         event_sender = FakeEventSender()
         connect_task = ConnectToGroup(
@@ -341,25 +341,25 @@ class TestLoadModelSuccess:
 
         with (
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.init_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.init_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.destroy_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.destroy_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.generator.pytorch_ipex_generate",
+                "exo.worker.engines.pytorch_xpu.generator.pytorch_xpu_generate",
                 return_value=iter([]),
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.model_loader.ModelLoader",
+                "exo.worker.engines.pytorch_xpu.model_loader.ModelLoader",
                 return_value=mock_loader_instance,
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.warmup.warmup_pytorch_ipex_inference",
+                "exo.worker.engines.pytorch_xpu.warmup.warmup_pytorch_xpu_inference",
                 return_value=0,
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.gpu_detector.detect_gpus",
+                "exo.worker.engines.pytorch_xpu.gpu_detector.detect_gpus",
                 return_value=mock_gpu_report,
             ),
         ):
@@ -379,7 +379,7 @@ class TestLoadModelOOM:
         """LoadModel OOM transitions to RunnerFailed with memory information."""
         bound = _make_bound_instance(rank=0, num_nodes=4)
         instance = bound.instance
-        assert isinstance(instance, PyTorchIPEXRingInstance)
+        assert isinstance(instance, PyTorchXPURingInstance)
 
         event_sender = FakeEventSender()
         connect_task = ConnectToGroup(
@@ -419,25 +419,25 @@ class TestLoadModelOOM:
 
         with (
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.init_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.init_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.destroy_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.destroy_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.generator.pytorch_ipex_generate",
+                "exo.worker.engines.pytorch_xpu.generator.pytorch_xpu_generate",
                 return_value=iter([]),
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.model_loader.ModelLoader",
+                "exo.worker.engines.pytorch_xpu.model_loader.ModelLoader",
                 return_value=mock_loader_instance,
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.warmup.warmup_pytorch_ipex_inference",
+                "exo.worker.engines.pytorch_xpu.warmup.warmup_pytorch_xpu_inference",
                 return_value=0,
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.gpu_detector.detect_gpus",
+                "exo.worker.engines.pytorch_xpu.gpu_detector.detect_gpus",
                 return_value=mock_gpu_report,
             ),
         ):
@@ -463,7 +463,7 @@ class TestStartWarmupSuccess:
         """StartWarmup with PyTorch backend transitions to RunnerReady."""
         bound = _make_bound_instance(rank=0, num_nodes=4)
         instance = bound.instance
-        assert isinstance(instance, PyTorchIPEXRingInstance)
+        assert isinstance(instance, PyTorchXPURingInstance)
 
         event_sender = FakeEventSender()
         connect_task = ConnectToGroup(
@@ -510,32 +510,32 @@ class TestStartWarmupSuccess:
 
         with (
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.init_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.init_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.destroy_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.destroy_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.send_activation"
+                "exo.worker.engines.pytorch_xpu.distributed.send_activation"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.recv_activation",
+                "exo.worker.engines.pytorch_xpu.distributed.recv_activation",
                 return_value=MagicMock(),
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.generator.pytorch_ipex_generate",
+                "exo.worker.engines.pytorch_xpu.generator.pytorch_xpu_generate",
                 return_value=iter([]),
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.model_loader.ModelLoader",
+                "exo.worker.engines.pytorch_xpu.model_loader.ModelLoader",
                 return_value=mock_loader_instance,
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.warmup.warmup_pytorch_ipex_inference",
+                "exo.worker.engines.pytorch_xpu.warmup.warmup_pytorch_xpu_inference",
                 return_value=10,
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.gpu_detector.detect_gpus",
+                "exo.worker.engines.pytorch_xpu.gpu_detector.detect_gpus",
                 return_value=mock_gpu_report,
             ),
             patch("torch.zeros", return_value=MagicMock()),
@@ -556,7 +556,7 @@ class TestShutdownCleanup:
         """Shutdown calls destroy_process_group and clears GPU caches."""
         bound = _make_bound_instance(rank=0, num_nodes=4)
         instance = bound.instance
-        assert isinstance(instance, PyTorchIPEXRingInstance)
+        assert isinstance(instance, PyTorchXPURingInstance)
 
         event_sender = FakeEventSender()
         connect_task = ConnectToGroup(
@@ -572,20 +572,20 @@ class TestShutdownCleanup:
 
         with (
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.init_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.init_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.destroy_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.destroy_process_group"
             ) as mock_destroy,
             patch(
-                "exo.worker.engines.pytorch_ipex.generator.pytorch_ipex_generate",
+                "exo.worker.engines.pytorch_xpu.generator.pytorch_xpu_generate",
                 return_value=iter([]),
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.model_loader.ModelLoader"
+                "exo.worker.engines.pytorch_xpu.model_loader.ModelLoader"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.warmup.warmup_pytorch_ipex_inference",
+                "exo.worker.engines.pytorch_xpu.warmup.warmup_pytorch_xpu_inference",
                 return_value=0,
             ),
             patch("torch.xpu", create=True) as mock_xpu,
@@ -605,19 +605,19 @@ class TestShutdownCleanup:
 
 
 class TestBackendDispatch:
-    """Test: Backend dispatch: PyTorchIPEXRingInstance → PyTorch path, MlxRingInstance → MLX path."""
+    """Test: Backend dispatch: PyTorchXPURingInstance → PyTorch path, MlxRingInstance → MLX path."""
 
     def test_pytorch_instance_uses_pytorch_backend(self) -> None:
-        """PyTorchIPEXRingInstance triggers pytorch_ipex backend type."""
+        """PyTorchXPURingInstance triggers pytorch_xpu backend type."""
         instance, _ = _make_instance(num_nodes=2)
-        assert isinstance(instance, PyTorchIPEXRingInstance)
+        assert isinstance(instance, PyTorchXPURingInstance)
 
         # The backend detection logic in runner.py checks isinstance
-        is_pytorch_ipex = isinstance(instance, PyTorchIPEXRingInstance)
-        assert is_pytorch_ipex is True
+        is_pytorch_xpu = isinstance(instance, PyTorchXPURingInstance)
+        assert is_pytorch_xpu is True
 
     def test_mlx_instance_not_pytorch(self) -> None:
-        """MlxRingInstance does not trigger pytorch_ipex backend."""
+        """MlxRingInstance does not trigger pytorch_xpu backend."""
         from exo.shared.types.worker.instances import MlxRingInstance
 
         instance, _ = _make_instance(num_nodes=2)
@@ -628,8 +628,8 @@ class TestBackendDispatch:
             hosts_by_node=instance.hosts_by_node,
             ephemeral_port=29500,
         )
-        is_pytorch_ipex = isinstance(mlx_instance, PyTorchIPEXRingInstance)
-        assert is_pytorch_ipex is False
+        is_pytorch_xpu = isinstance(mlx_instance, PyTorchXPURingInstance)
+        assert is_pytorch_xpu is False
 
 
 class TestImportIsolation:
@@ -639,7 +639,7 @@ class TestImportIsolation:
         """When running PyTorch backend, MLX modules should not be imported."""
         bound = _make_bound_instance(rank=0, num_nodes=2)
         instance = bound.instance
-        assert isinstance(instance, PyTorchIPEXRingInstance)
+        assert isinstance(instance, PyTorchXPURingInstance)
 
         # Track which modules get imported
         original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
@@ -664,20 +664,20 @@ class TestImportIsolation:
 
         with (
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.init_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.init_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.distributed.destroy_process_group"
+                "exo.worker.engines.pytorch_xpu.distributed.destroy_process_group"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.generator.pytorch_ipex_generate",
+                "exo.worker.engines.pytorch_xpu.generator.pytorch_xpu_generate",
                 return_value=iter([]),
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.model_loader.ModelLoader"
+                "exo.worker.engines.pytorch_xpu.model_loader.ModelLoader"
             ),
             patch(
-                "exo.worker.engines.pytorch_ipex.warmup.warmup_pytorch_ipex_inference",
+                "exo.worker.engines.pytorch_xpu.warmup.warmup_pytorch_xpu_inference",
                 return_value=0,
             ),
             patch("builtins.__import__", side_effect=tracking_import),

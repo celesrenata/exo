@@ -55,16 +55,16 @@ def get_inference_backend(
                 "mlx", f"MLX backend not available: {e}"
             ) from e
 
-    elif backend_name == "pytorch_ipex":
+    elif backend_name == "pytorch_xpu":
         try:
-            from exo.worker.engines.pytorch_ipex.pytorch_ipex_backend import (
-                PyTorchIPEXBackend,
+            from exo.worker.engines.pytorch_xpu.pytorch_xpu_backend import (
+                PyTorchXPUBackend,
             )
 
-            return PyTorchIPEXBackend(shard_downloader)
+            return PyTorchXPUBackend(shard_downloader)
         except ImportError as e:
             raise BackendNotAvailableError(
-                "pytorch_ipex", f"PyTorch XPU backend not available: {e}"
+                "pytorch_xpu", f"PyTorch XPU backend not available: {e}"
             ) from e
 
     elif backend_name == "dummy":
@@ -84,6 +84,6 @@ def get_inference_backend(
 # Registry of available backends
 BACKEND_REGISTRY = {
     "mlx": "MLXBackend",
-    "pytorch_ipex": "PyTorchIPEXBackend",
+    "pytorch_xpu": "PyTorchXPUBackend",
     "dummy": "DummyBackend",
 }

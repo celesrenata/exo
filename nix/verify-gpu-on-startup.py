@@ -25,7 +25,7 @@ logger = logging.getLogger("exo-gpu-verify")
 def main() -> int:
     """Detect GPU and log results. Returns 0 on success, 1 on failure."""
     try:
-        from exo.worker.engines.pytorch_ipex.gpu_detector import detect_gpus
+        from exo.worker.engines.pytorch_xpu.gpu_detector import detect_gpus
     except ImportError as exc:
         logger.error("Cannot import gpu_detector module: %s", exc)
         logger.error("Ensure exo is installed in the service environment.")

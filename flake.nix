@@ -49,7 +49,7 @@
     # Pinned nixpkgs for swift-format (swift is broken on x86_64-linux in newer nixpkgs)
     nixpkgs-swift.url = "github:NixOS/nixpkgs/08dacfca559e1d7da38f3cf05f1f45ee9bfd213c";
 
-    # Intel PyTorch and IPEX packages
+    # Intel PyTorch and XPU packages
     nixos-mordrag = {
       url = "github:MordragT/nixos";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -94,14 +94,14 @@
               };
             };
 
-            pytorch_ipex = {
-              enable = lib.mkEnableOption "PyTorch+IPEX backend for exo" // {
+            pytorch_xpu = {
+              enable = lib.mkEnableOption "PyTorch XPU backend for exo" // {
                 default = false;
               };
               preferredBackend = lib.mkOption {
                 type = lib.types.bool;
                 default = false;
-                description = "Use PyTorch+IPEX as the preferred backend over tinygrad";
+                description = "Use PyTorch XPU as the preferred backend over tinygrad";
               };
             };
 
@@ -140,7 +140,7 @@
               ];
             };
 
-            # Additional system packages for PyTorch + IPEX support
+            # Additional system packages for PyTorch XPU support
             environment.systemPackages = lib.mkIf config.services.exo.intel.enable (
               with pkgs; [
                 # Add exo package from the flake (includes patched tinygrad)
@@ -149,7 +149,7 @@
                 # Monitoring and debugging tools for Intel Arc
                 intel-gpu-tools # intel_gpu_top for GPU monitoring
                 clinfo # OpenCL device information
-                # Intel compute runtime and Level Zero for PyTorch + IPEX
+                # Intel compute runtime and Level Zero for PyTorch XPU
                 intel-compute-runtime
                 level-zero
               ]
@@ -199,10 +199,9 @@
               # Intel GPU compute runtime settings
               NEOReadDebugKeys = lib.mkIf config.services.exo.intel.arc.enable "1";
 
-              # PyTorch+IPEX environment variables
-              EXO_PYTORCH_IPEX_ENABLED = lib.mkIf config.services.exo.intel.pytorch_ipex.enable "true";
-              PYTORCH_ENABLE_XPU = lib.mkIf config.services.exo.intel.pytorch_ipex.enable "1";
-              IPEX_TILE_AS_DEVICE = lib.mkIf config.services.exo.intel.pytorch_ipex.enable "1";
+              # PyTorch XPU environment variables
+              EXO_PYTORCH_XPU_ENABLED = lib.mkIf config.services.exo.intel.pytorch_xpu.enable "true";
+              PYTORCH_ENABLE_XPU = lib.mkIf config.services.exo.intel.pytorch_xpu.enable "1";
             };
 
             # OpenCL ICD configuration for Intel runtime
@@ -370,8 +369,8 @@
                   doInstallCheck = false;
                 });
                 
-                # Use standard python312 for PyTorch+IPEX compatibility
-                # Python 3.13 is not yet supported by Intel's PyTorch+IPEX XPU wheels
+                # Use standard python312 for PyTorch XPU compatibility
+                # Python 3.13 is not yet supported by Intel's PyTorch XPU wheels
                 python312 = prev.python312.override {
                   self = final.python312;
                   packageOverrides = pself: psuper: {
@@ -466,7 +465,7 @@
                     });
                     
                     # PyTorch with XPU support must be installed via pip
-                    # See nix/PYTORCH_IPEX_INSTALLATION.md
+                    # See nix/PYTORCH_XPU_INSTALLATION.md
                     # torch = standard PyTorch from nixpkgs (no override needed)
                   };
                 };
@@ -574,7 +573,7 @@
                 # FORMATTING
                 config.treefmt.build.wrapper
 
-                # PYTHON - use Python with PyTorch + IPEX packages from pkgsExo
+                # PYTHON - use Python with PyTorch XPU packages from pkgsExo
                 pythonWithPackages
                 pkgs.uv
                 pkgs.ruff
@@ -596,7 +595,7 @@
               ]
               ++ lib.optionals pkgs.stdenv.isLinux [
                 pkgs.unixtools.ifconfig
-                # Intel GPU runtime libraries for PyTorch + IPEX - use pkgsExo to get libffi fix
+                # Intel GPU runtime libraries for PyTorch XPU - use pkgsExo to get libffi fix
                 pkgsExo.intel-compute-runtime
                 pkgsExo.level-zero
                 pkgsExo.intel-gpu-tools # For monitoring with intel_gpu_top
@@ -612,12 +611,11 @@
               export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pythonWithPackages}/lib"
               ${lib.optionalString pkgs.stdenv.isLinux ''
                 export LD_LIBRARY_PATH="${pkgs.openssl.out}/lib:$LD_LIBRARY_PATH"
-                # Add Intel GPU runtime libraries and oneAPI libraries for PyTorch + IPEX (from pkgsExo)
+                # Add Intel GPU runtime libraries and oneAPI libraries for PyTorch XPU (from pkgsExo)
                 export LD_LIBRARY_PATH="${pkgsExo.intel-compute-runtime}/lib:${pkgsExo.level-zero}/lib:${pkgsExo.mkl}/lib:${pkgsExo.oneDNN}/lib:${pkgsExo.onetbb}/lib:$LD_LIBRARY_PATH"
                 # Enable PyTorch XPU (Intel GPU) support
                 export PYTORCH_ENABLE_XPU=1
-                export IPEX_TILE_AS_DEVICE=1
-                echo "Intel Arc GPU support enabled for PyTorch + IPEX"
+                echo "Intel Arc GPU support enabled for PyTorch XPU"
                 echo "LD_LIBRARY_PATH includes Intel compute runtime, Level Zero, and oneAPI libraries (MKL, oneDNN, TBB)"
                 echo "Python: ${pythonWithPackages}/bin/python"
               ''}

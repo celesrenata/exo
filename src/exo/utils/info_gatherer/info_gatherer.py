@@ -399,7 +399,7 @@ def _detect_linux_gpu_info() -> GpuMemoryInfo | None:
     Converts GpuInfo from gpu_detector to GpuMemoryInfo from profiling types.
     """
     try:
-        from exo.worker.engines.pytorch_ipex.gpu_detector import detect_gpus
+        from exo.worker.engines.pytorch_xpu.gpu_detector import detect_gpus
 
         report = detect_gpus()
         if not report.has_gpu or not report.gpus:
