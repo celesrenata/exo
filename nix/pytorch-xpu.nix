@@ -45,6 +45,21 @@ buildPythonPackage rec {
     glibcLocales
   ];
 
+  # These libraries are provided at runtime by pip-installed Intel oneAPI packages
+  # (intel-cmplr-lib-rt, onemkl-sycl-*, oneccl) — not available in the Nix sandbox
+  autoPatchelfIgnoreMissingDeps = [
+    "libsycl.so.8"
+    "libpti_view.so.0"
+    "libccl.so.1"
+    "libmkl_sycl_blas.so.5"
+    "libmkl_sycl_dft.so.5"
+    "libmkl_sycl_lapack.so.5"
+    "libsvml.so"
+    "libirng.so"
+    "libimf.so"
+    "libintlc.so.5"
+  ];
+
   buildInputs = [
     stdenv.cc.cc.lib
     # Intel GPU runtime
