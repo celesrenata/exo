@@ -54,6 +54,18 @@ class Node:
         await router.register_topic(topics.CONNECTION_MESSAGES)
         await router.register_topic(topics.DOWNLOAD_COMMANDS)
 
+        # Dial static peers if EXO_PEERS is set (for networks where mDNS multicast doesn't work)
+        peers_env = os.environ.get("EXO_PEERS", "")
+        if peers_env:
+            for peer_addr in peers_env.split(","):
+                peer_addr = peer_addr.strip()
+                if peer_addr:
+                    logger.info(f"Dialing static peer: {peer_addr}")
+                    try:
+                        await router._net.dial_peer(peer_addr)
+                    except Exception as e:
+                        logger.warning(f"Failed to dial peer {peer_addr}: {e}")
+
         logger.info(f"Starting node {node_id}")
 
         # Create shared event index counter for Worker and DownloadCoordinator

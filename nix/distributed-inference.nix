@@ -90,6 +90,23 @@ in
       default = 52415;
       description = "Port for the exo API and dashboard.";
     };
+
+    libp2pPort = lib.mkOption {
+      type = lib.types.port;
+      default = 4001;
+      description = "Fixed TCP port for libp2p peer-to-peer communication.";
+    };
+
+    peers = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = ''
+        List of static peer multiaddrs to dial on startup.
+        Use when mDNS multicast doesn't work (e.g., switch blocks multicast).
+        Format: /ip4/IP/tcp/PORT
+      '';
+      example = [ "/ip4/10.1.1.13/tcp/4001" "/ip4/10.1.1.14/tcp/4001" ];
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -102,6 +119,9 @@ in
       environment = {
         MASTER_ADDR = cfg.masterAddr;
         MASTER_PORT = toString cfg.masterPort;
+        EXO_LIBP2P_PORT = toString cfg.libp2pPort;
+      } // lib.optionalAttrs (cfg.peers != []) {
+        EXO_PEERS = lib.concatStringsSep "," cfg.peers;
       } // lib.optionalAttrs (cfg.intelGpuPackages != []) {
         # Intel GPU runtime libraries for torch.xpu (Level Zero + compute runtime)
         LD_LIBRARY_PATH = lib.makeLibraryPath cfg.intelGpuPackages
@@ -129,7 +149,7 @@ in
     networking.firewall.allowedTCPPortRanges = [
       { from = cfg.ephemeralPortRange.from; to = cfg.ephemeralPortRange.to; }
     ];
-    networking.firewall.allowedTCPPorts = [ cfg.masterPort cfg.apiPort ];
+    networking.firewall.allowedTCPPorts = [ cfg.masterPort cfg.apiPort cfg.libp2pPort ];
     # mDNS for libp2p peer discovery
     networking.firewall.allowedUDPPorts = [ 5353 ];
   };
