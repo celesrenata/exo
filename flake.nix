@@ -476,8 +476,14 @@
                       doInstallCheck = false;
                     });
 
-                    # transformers tests also import torch
-                    transformers = psuper.transformers.overridePythonAttrs (old: {
+                    # transformers — nixpkgs has 4.x, we need 5.7+ for Qwen3.5
+                    transformers = psuper.transformers.overridePythonAttrs (old: rec {
+                      version = "5.7.0";
+                      src = final.fetchPypi {
+                        pname = "transformers";
+                        inherit version;
+                        hash = "sha256-qdNc85gE40VsH5vBp5rV/6h4ZAph9R9m9xyX9LTizhA=";
+                      };
                       doCheck = false;
                       doInstallCheck = false;
                     });
