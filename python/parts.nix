@@ -124,13 +124,17 @@
                 format = "pyproject";
                 src = inputs.self;
 
+                # Fix locale for Python in Nix sandbox (remote builders)
+                LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
+                LC_ALL = "en_US.UTF-8";
+
                 # Patch pyproject.toml to use setuptools instead of uv_build
                 postPatch = ''
                   sed -i 's/requires = \["uv_build.*"\]/requires = ["setuptools>=61.0", "wheel"]/' pyproject.toml
                   sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
                 '';
 
-                nativeBuildInputs = [ pkgsExo.python312.pkgs.setuptools pkgsExo.python312.pkgs.wheel pkgsExo.python312.pkgs.pip pkgs.makeWrapper ];
+                nativeBuildInputs = [ pkgsExo.python312.pkgs.setuptools pkgsExo.python312.pkgs.wheel pkgsExo.python312.pkgs.pip pkgs.makeWrapper pkgs.glibcLocales ];
 
                 # Add Intel GPU runtime libraries for torch.xpu
                 buildInputs = lib.optionals pkgs.stdenv.isLinux [
