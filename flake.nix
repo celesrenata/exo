@@ -469,6 +469,18 @@
                     torch = pself.callPackage (inputs.self + /nix/pytorch-xpu.nix) {
                       inherit (final) intel-compute-runtime level-zero mkl oneDNN onetbb glibcLocales;
                     };
+
+                    # safetensors tests import torch which needs libsycl.so.8 at runtime
+                    safetensors = psuper.safetensors.overridePythonAttrs (old: {
+                      doCheck = false;
+                      doInstallCheck = false;
+                    });
+
+                    # transformers tests also import torch
+                    transformers = psuper.transformers.overridePythonAttrs (old: {
+                      doCheck = false;
+                      doInstallCheck = false;
+                    });
                   };
                 };
               })
