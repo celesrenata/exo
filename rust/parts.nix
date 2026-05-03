@@ -47,18 +47,18 @@
 
         nativeBuildInputs = [
           pkgs.pkg-config
-          pkgs.python313 # Required for pyo3-build-config
+          pkgs.python312 # Required for pyo3-build-config
         ];
 
         buildInputs = [
           pkgs.openssl
-          pkgs.python313 # Required for pyo3 tests
+          pkgs.python312 # Required for pyo3 tests
         ];
 
         OPENSSL_NO_VENDOR = "1";
 
         # Required for pyo3 tests to find libpython
-        LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.python313 ];
+        LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.python312 ];
       };
 
       # Build dependencies once for caching
@@ -98,7 +98,7 @@
                   --manylinux off \
                   --manifest-path rust/exo_pyo3_bindings/Cargo.toml \
                   --features "pyo3/extension-module,pyo3/experimental-async" \
-                  --interpreter ${pkgs.python313}/bin/python \
+                  --interpreter ${pkgs.python312}/bin/python \
                   --out dist
               '';
 
