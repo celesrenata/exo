@@ -464,9 +464,11 @@
                       };
                     });
                     
-                    # PyTorch with XPU support must be installed via pip
-                    # See nix/PYTORCH_XPU_INSTALLATION.md
-                    # torch = standard PyTorch from nixpkgs (no override needed)
+                    # PyTorch with XPU support — override the nixpkgs torch
+                    # so all transitive deps (transformers, etc.) use our XPU build
+                    torch = pself.callPackage (inputs.self + /nix/pytorch-xpu.nix) {
+                      inherit (final) intel-compute-runtime level-zero mkl oneDNN onetbb glibcLocales;
+                    };
                   };
                 };
               })
@@ -548,9 +550,7 @@
             }
           ) // lib.optionalAttrs pkgs.stdenv.isLinux {
             # PyTorch with Intel XPU support (Linux only)
-            pytorch-xpu = pkgsExo.python312.pkgs.callPackage ./nix/pytorch-xpu.nix {
-              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb glibcLocales;
-            };
+            pytorch-xpu = pkgsExo.python312.pkgs.torch;
           };
 
           devShells.default =
