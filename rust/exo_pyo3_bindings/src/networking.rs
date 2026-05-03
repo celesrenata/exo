@@ -291,6 +291,13 @@ async fn networking_task(
     }
 
     log::info!("RUST: networking task stopped");
+
+    // IMPORTANT: Do not drop connection_update_tx or gossipsub_message_tx on this
+    // tokio thread. Dropping them wakes the pyo3 AsyncioWaker on the receiver side,
+    // which tries to call into Python from a non-Python thread and panics.
+    // mem::forget prevents the drop and the associated panic.
+    std::mem::forget(connection_update_tx);
+    std::mem::forget(gossipsub_message_tx);
 }
 
 #[gen_stub_pyclass]
