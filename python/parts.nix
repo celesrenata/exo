@@ -132,7 +132,7 @@
 
                 nativeBuildInputs = [ pkgsExo.python312.pkgs.setuptools pkgsExo.python312.pkgs.wheel pkgsExo.python312.pkgs.pip pkgs.makeWrapper ];
 
-                # Add Intel GPU runtime libraries for PyTorch + IPEX
+                # Add Intel GPU runtime libraries for torch.xpu
                 buildInputs = lib.optionals pkgs.stdenv.isLinux [
                   pkgsExo.intel-compute-runtime
                   pkgsExo.level-zero
@@ -160,8 +160,7 @@
                   python-multipart
                   openai-harmony
                 ] ++ lib.optionals pkgs.stdenv.isLinux [
-                  # PyTorch with Intel XPU support (2.9.1+xpu)
-                  # PyTorch with native XPU support (no IPEX — discontinued)
+                  # PyTorch 2.11+ with native XPU support for Intel iGPUs
                   self'.packages.pytorch-xpu
                 ];
                 # PyTorch and IPEX with XPU support included on Linux
@@ -199,14 +198,15 @@
                   "--set EXO_RESOURCES_DIR ${inputs.self}/resources"
                   "--set EXO_DASHBOARD_DIR ${self'.packages.dashboard}"
                 ] ++ lib.optionals pkgs.stdenv.isLinux [
-                  # Add Intel GPU runtime libraries to LD_LIBRARY_PATH for PyTorch + IPEX
+                  # Intel GPU runtime: Level Zero for device detection, OpenCL for oneDNN compute kernels
                   "--prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath [
                     pkgsExo.intel-compute-runtime
                     pkgsExo.level-zero
-                  ]}"
+                  ]}:${pkgsExo.intel-compute-runtime}/lib/intel-opencl"
+                  # OpenCL ICD vendor path for oneDNN
+                  "--set OCL_ICD_VENDORS ${pkgsExo.intel-compute-runtime}/etc/OpenCL/vendors"
                   # Enable PyTorch XPU (Intel GPU) support
                   "--set PYTORCH_ENABLE_XPU 1"
-                  "--set IPEX_TILE_AS_DEVICE 1"
                 ];
               }
           else

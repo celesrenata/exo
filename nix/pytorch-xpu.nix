@@ -5,6 +5,7 @@
 , autoPatchelfHook
 , addDriverRunpath
 , stdenv
+, glibcLocales
   # Intel GPU runtime dependencies
 , intel-compute-runtime
 , level-zero
@@ -35,9 +36,13 @@ buildPythonPackage rec {
     hash = "sha256-WQyeVKmeRdgOrv/nC1OCa0m3GmV44S6bqiJ+ibYceuI=";
   };
 
+  LOCALE_ARCHIVE = "${glibcLocales}/lib/locale/locale-archive";
+  LC_ALL = "en_US.UTF-8";
+
   nativeBuildInputs = [
     autoPatchelfHook
     addDriverRunpath
+    glibcLocales
   ];
 
   buildInputs = [

@@ -549,7 +549,7 @@
           ) // lib.optionalAttrs pkgs.stdenv.isLinux {
             # PyTorch with Intel XPU support (Linux only)
             pytorch-xpu = pkgsExo.python312.pkgs.callPackage ./nix/pytorch-xpu.nix {
-              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
+              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb glibcLocales;
             };
           };
 
