@@ -378,6 +378,7 @@
                     mkDerivation = args: psuper.mkDerivation (args // {
                       LOCALE_ARCHIVE = "${final.glibcLocales}/lib/locale/locale-archive";
                       LC_ALL = "en_US.UTF-8";
+                      nativeBuildInputs = (args.nativeBuildInputs or []) ++ [ final.glibcLocales ];
                     });
                     
                     # Pin anyio to 4.11.0 (required by exo)
