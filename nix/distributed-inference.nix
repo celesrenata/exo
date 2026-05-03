@@ -118,14 +118,6 @@ in
         User = "root";
         Group = "root";
 
-        # GPU verification before starting
-        ExecStartPre = let
-          gpuVerifyScript = pkgs.writeScript "exo-verify-gpu" ''
-            #!${pkgs.python3}/bin/python3
-            ${builtins.readFile ./verify-gpu-on-startup.py}
-          '';
-        in [ "${gpuVerifyScript}" ];
-
         # Logging
         StandardOutput = "journal";
         StandardError = "journal";
