@@ -145,6 +145,10 @@ enum ToTask {
         data: Vec<u8>,
         result_tx: oneshot::Sender<PyResult<MessageId>>,
     },
+    /// Dial a peer at a specific multiaddr (for static peer discovery when mDNS doesn't work)
+    DialPeer {
+        addr: String,
+    },
 }
 
 #[allow(clippy::enum_glob_use)]
@@ -210,6 +214,20 @@ async fn networking_task(
                         if let Err(e) = result_tx.send(pyresult) {
                             log::error!("RUST: could not publish gossipsub message since channel already closed: {e:?}");
                             continue;
+                        }
+                    }
+                    DialPeer { addr } => {
+                        // Parse multiaddr and dial the peer directly
+                        match addr.parse::<libp2p::Multiaddr>() {
+                            Ok(multiaddr) => {
+                                log::info!("RUST: dialing peer at {}", multiaddr);
+                                if let Err(e) = swarm.dial(multiaddr) {
+                                    log::error!("RUST: failed to dial peer: {e}");
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("RUST: invalid multiaddr '{}': {e}", addr);
+                            }
                         }
                     }
                 }
@@ -563,6 +581,16 @@ impl PyNetworkingHandle {
     // fn gossipsub_len(&self) -> usize {
     //     self.gossipsub_message_rx.blocking_lock().len()
     // }
+
+    /// Dial a peer at a specific multiaddr.
+    /// Use this when mDNS discovery doesn't work (e.g., multicast blocked by switch).
+    /// Example multiaddr: "/ip4/10.1.1.13/tcp/PORT/p2p/PEER_ID"
+    async fn dial_peer(&self, addr: String) -> PyResult<()> {
+        self.to_task_tx()
+            .send_py(ToTask::DialPeer { addr })
+            .allow_threads_py()
+            .await
+    }
 }
 
 pub fn networking_submodule(m: &Bound<'_, PyModule>) -> PyResult<()> {
