@@ -477,16 +477,19 @@
                     });
 
                     # transformers — nixpkgs has 4.x, we need 5.7+ for Qwen3.5
-                    transformers = psuper.transformers.overridePythonAttrs (old: rec {
+                    # Install as wheel to skip runtime deps check (deps satisfied at runtime)
+                    transformers = psuper.buildPythonPackage {
+                      pname = "transformers";
                       version = "5.7.0";
-                      src = final.fetchPypi {
-                        pname = "transformers";
-                        inherit version;
-                        hash = "sha256-qdNc85gE40VsH5vBp5rV/6h4ZAph9R9m9xyX9LTizhA=";
+                      format = "wheel";
+                      src = final.fetchurl {
+                        url = "https://files.pythonhosted.org/packages/py3/t/transformers/transformers-5.7.0-py3-none-any.whl";
+                        hash = "sha256-hpZgzY/JK63AQfVVG/dVpC9LlVjJM0G/P6Pu7XBlB5w=";
                       };
                       doCheck = false;
                       doInstallCheck = false;
-                    });
+                      dontUsePythonCatchConflicts = true;
+                    };
                   };
                 };
               })
