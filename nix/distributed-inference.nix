@@ -130,5 +130,7 @@ in
       { from = cfg.ephemeralPortRange.from; to = cfg.ephemeralPortRange.to; }
     ];
     networking.firewall.allowedTCPPorts = [ cfg.masterPort cfg.apiPort ];
+    # mDNS for libp2p peer discovery
+    networking.firewall.allowedUDPPorts = [ 5353 ];
   };
 }
