@@ -42,3 +42,6 @@ log = { workspace = true }
 
 # networking
 libp2p = { workspace = true, features = ["full"] }
+
+[dev-dependencies]
+proptest = "1"

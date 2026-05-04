@@ -13,6 +13,7 @@ use crate::pylibp2p::ident::{PyKeypair, PyPeerId};
 use libp2p::futures::StreamExt as _;
 use libp2p::gossipsub::{IdentTopic, Message, MessageId, PublishError};
 use libp2p::swarm::SwarmEvent;
+use libp2p::multiaddr::Protocol;
 use libp2p::{gossipsub, mdns};
 use networking::discovery;
 use networking::swarm::create_swarm;
@@ -217,12 +218,25 @@ async fn networking_task(
                         }
                     }
                     DialPeer { addr } => {
-                        // Parse multiaddr and dial the peer directly
+                        // Parse multiaddr and register as a static peer if PeerId is present
                         match addr.parse::<libp2p::Multiaddr>() {
                             Ok(multiaddr) => {
-                                log::info!("RUST: dialing peer at {}", multiaddr);
-                                if let Err(e) = swarm.dial(multiaddr) {
-                                    log::error!("RUST: failed to dial peer: {e}");
+                                // Extract PeerId from the /p2p/<peer_id> component if present
+                                let peer_id = multiaddr.iter().find_map(|p| match p {
+                                    Protocol::P2p(peer_id) => Some(peer_id),
+                                    _ => None,
+                                });
+
+                                if let Some(peer_id) = peer_id {
+                                    // Register as static peer — this both tracks and dials
+                                    log::info!("RUST: adding static peer {} at {}", peer_id, multiaddr);
+                                    swarm.behaviour_mut().discovery.add_static_peer(peer_id, multiaddr);
+                                } else {
+                                    // No PeerId in multiaddr — fall back to direct dial
+                                    log::info!("RUST: dialing peer at {} (no peer ID, cannot track)", multiaddr);
+                                    if let Err(e) = swarm.dial(multiaddr) {
+                                        log::error!("RUST: failed to dial peer: {e}");
+                                    }
                                 }
                             }
                             Err(e) => {
