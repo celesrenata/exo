@@ -160,6 +160,7 @@ class Node:
             if self.api:
                 tg.start_soon(self.api.run)
             tg.start_soon(self._elect_loop)
+            tg.start_soon(self._peer_dial_loop)
             signal.signal(signal.SIGINT, lambda _, __: self.shutdown())
             signal.signal(signal.SIGTERM, lambda _, __: self.shutdown())
 
@@ -259,6 +260,39 @@ class Node:
                 else:
                     if self.api:
                         self.api.unpause(result.won_clock)
+
+    async def _peer_dial_loop(self):
+        """Periodically re-dial EXO_PEERS until connections are established.
+
+        The Rust discovery layer promotes peers to static_peers after the first
+        successful connection (learning the peer ID). After that, the Rust retry
+        loop handles reconnection. This Python loop only needs to keep trying
+        until the initial connections succeed.
+        """
+        peers_env = os.environ.get("EXO_PEERS", "")
+        if not peers_env:
+            return
+
+        peer_addrs = [p.strip() for p in peers_env.split(",") if p.strip()]
+        if not peer_addrs:
+            return
+
+        # Keep dialing until we stop getting errors, then slow down
+        fast_interval = 5  # seconds between retries during initial connection
+        slow_interval = 60  # seconds between retries once connected
+
+        interval = fast_interval
+        while True:
+            await anyio.sleep(interval)
+            any_failed = False
+            for peer_addr in peer_addrs:
+                try:
+                    await self.router._net.dial_peer(peer_addr)
+                except Exception:
+                    any_failed = True
+            # Once all dials succeed (no exceptions), slow down significantly
+            # The Rust static_peers retry loop handles reconnection from here
+            interval = fast_interval if any_failed else slow_interval
 
 
 def main():

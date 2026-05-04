@@ -232,8 +232,10 @@ async fn networking_task(
                                     log::info!("RUST: adding static peer {} at {}", peer_id, multiaddr);
                                     swarm.behaviour_mut().discovery.add_static_peer(peer_id, multiaddr);
                                 } else {
-                                    // No PeerId in multiaddr — fall back to direct dial
-                                    log::info!("RUST: dialing peer at {} (no peer ID, cannot track)", multiaddr);
+                                    // No PeerId in multiaddr — dial and register for promotion
+                                    // when the connection establishes and we learn the peer ID
+                                    log::info!("RUST: dialing peer at {} (will promote to static on connect)", multiaddr);
+                                    swarm.behaviour_mut().discovery.dial_unknown_peer(multiaddr.clone());
                                     if let Err(e) = swarm.dial(multiaddr) {
                                         log::error!("RUST: failed to dial peer: {e}");
                                     }

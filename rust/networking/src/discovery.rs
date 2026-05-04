@@ -106,6 +106,10 @@ pub struct Behaviour {
     managed: managed::Behaviour,
     mdns_discovered: HashMap<PeerId, BTreeSet<Multiaddr>>,
     static_peers: HashMap<PeerId, BTreeSet<Multiaddr>>,
+    /// Multiaddrs dialed without a peer ID (from EXO_PEERS).
+    /// When a connection is established, we match the remote address
+    /// and promote the peer to `static_peers` for retry tracking.
+    pending_static_addrs: BTreeSet<Multiaddr>,
 
     retry_delay: Delay, // retry interval
 
@@ -119,6 +123,7 @@ impl Behaviour {
             managed: managed::Behaviour::new(keypair)?,
             mdns_discovered: HashMap::new(),
             static_peers: HashMap::new(),
+            pending_static_addrs: BTreeSet::new(),
             retry_delay: Delay::new(RETRY_CONNECT_INTERVAL),
             pending_events: WakerDeque::new(),
         })
@@ -130,6 +135,14 @@ impl Behaviour {
             .or_insert_with(BTreeSet::new)
             .insert(addr.clone());
         self.dial(peer_id, addr);
+    }
+
+    /// Register a multiaddr for static peer tracking without a known peer ID.
+    /// The address is stored in `pending_static_addrs`. When a connection is
+    /// established to this address, the peer ID is learned and the peer is
+    /// promoted to `static_peers` for automatic retry.
+    pub fn dial_unknown_peer(&mut self, addr: Multiaddr) {
+        self.pending_static_addrs.insert(addr);
     }
 
     fn dial(&mut self, peer_id: PeerId, addr: Multiaddr) {
@@ -188,6 +201,41 @@ impl Behaviour {
         remote_ip: IpAddr,
         remote_tcp_port: u16,
     ) {
+        // Check if this connection matches a pending static addr (dialed without peer ID).
+        // If so, promote to static_peers for automatic retry on disconnect.
+        if !self.pending_static_addrs.is_empty() {
+            // Build the multiaddr for this connection to match against pending
+            let mut connected_addr = Multiaddr::empty();
+            match remote_ip {
+                IpAddr::V4(ip) => connected_addr.push(libp2p::multiaddr::Protocol::Ip4(ip)),
+                IpAddr::V6(ip) => connected_addr.push(libp2p::multiaddr::Protocol::Ip6(ip)),
+            }
+            connected_addr.push(libp2p::multiaddr::Protocol::Tcp(remote_tcp_port));
+
+            // Check if any pending addr matches this connection's IP (port may differ
+            // due to ephemeral ports, so match on IP only)
+            let matching_addr = self.pending_static_addrs.iter().find(|pending| {
+                pending.iter().any(|p| match (p, remote_ip) {
+                    (libp2p::multiaddr::Protocol::Ip4(a), IpAddr::V4(b)) => a == b,
+                    (libp2p::multiaddr::Protocol::Ip6(a), IpAddr::V6(b)) => a == b,
+                    _ => false,
+                })
+            }).cloned();
+
+            if let Some(addr) = matching_addr {
+                log::info!(
+                    "RUST: promoting peer {} to static_peers (connected via {})",
+                    peer_id, addr
+                );
+                self.static_peers
+                    .entry(peer_id)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(addr.clone());
+                // Don't remove from pending — we want to keep the addr for future
+                // connections if this peer's identity changes on restart
+            }
+        }
+
         // send out connected event
         self.pending_events
             .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished {
