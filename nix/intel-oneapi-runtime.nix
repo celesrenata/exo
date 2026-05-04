@@ -2,6 +2,7 @@
 #
 # Provides the shared libraries needed by PyTorch 2.11+xpu at runtime:
 #   - libsycl.so.8 (from intel-sycl-rt)
+#   - libur_loader.so.0 (from intel-cmplr-lib-ur)
 #   - libpti_view.so.0 (from intel-pti)
 #   - libsvml.so, libirng.so, libimf.so, libintlc.so.5 (from intel-cmplr-lib-rt)
 #   - libccl.so.1 (from oneccl)
@@ -25,6 +26,13 @@ let
   intel-sycl-rt = fetchurl {
     url = "https://files.pythonhosted.org/packages/py2.py3/i/intel_sycl_rt/intel_sycl_rt-2025.3.3-py2.py3-none-manylinux_2_28_x86_64.whl";
     hash = "sha256-++9fUWNJK+FPZe2QD2m0U0Mr7D0/P2Tl5VF1i/pM7N8=";
+  };
+
+  # Intel Unified Runtime — provides libur_loader.so.0, libur_adapter_level_zero.so
+  # Required by PyTorch XPU for device discovery via Level Zero backend
+  intel-cmplr-lib-ur = fetchurl {
+    url = "https://files.pythonhosted.org/packages/py2.py3/i/intel_cmplr_lib_ur/intel_cmplr_lib_ur-2025.3.3-py2.py3-none-manylinux_2_28_x86_64.whl";
+    hash = "sha256-oYzq3TNq0vgvR5dyFN3JRWjFoz4mLuO50bNjG3iXtmk=";
   };
 
   # Intel Compiler Runtime — provides libsvml.so, libirng.so, libimf.so, libintlc.so.5
@@ -94,7 +102,7 @@ stdenv.mkDerivation {
     "libmpicxx.so.12"
     "libmpifort.so.12"
     "libfabric.so.1"
-    "libur_loader.so.0"
+    "libumf.so.1"
     "libiomp5.so"
     "libOpenCL.so.1"
     "libtbb.so.12"
@@ -106,7 +114,7 @@ stdenv.mkDerivation {
     mkdir -p $out/lib
 
     # Extract .so files from each wheel's data directory
-    for wheel in ${intel-sycl-rt} ${intel-cmplr-lib-rt} ${intel-pti} ${oneccl} ${onemkl-sycl-blas} ${onemkl-sycl-dft} ${onemkl-sycl-lapack} ${mkl-core}; do
+    for wheel in ${intel-sycl-rt} ${intel-cmplr-lib-ur} ${intel-cmplr-lib-rt} ${intel-pti} ${oneccl} ${onemkl-sycl-blas} ${onemkl-sycl-dft} ${onemkl-sycl-lapack} ${mkl-core}; do
       echo "Extracting from: $wheel"
       ${stdenv.shell} -c "unzip -o -j '$wheel' '*.data/data/lib/*.so*' -d $out/lib/ 2>/dev/null || true"
     done
