@@ -477,6 +477,43 @@
                       doInstallCheck = false;
                     });
 
+                    # regex — transformers 5.7.0 requires >= 2025.10.22
+                    regex = psuper.buildPythonPackage {
+                      pname = "regex";
+                      version = "2025.11.3";
+                      format = "wheel";
+                      src = final.fetchurl {
+                        url = "https://files.pythonhosted.org/packages/84/bd/9ce9f629fcb714ffc2c3faf62b6766ecb7a585e1e885eb699bcf130a5209/regex-2025.11.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl";
+                        hash = "sha256-oSqx9cKbTpPbUY9eOHIRa36bFkbJ+fQm93e1DUSgnow=";
+                      };
+                      doCheck = false;
+                      doInstallCheck = false;
+                    };
+
+                    # huggingface-hub — transformers 5.7.0 requires >= 1.5.0
+                    # nixpkgs/uv.lock has 0.35.x which is incompatible
+                    huggingface-hub = psuper.buildPythonPackage {
+                      pname = "huggingface-hub";
+                      version = "1.5.0";
+                      format = "wheel";
+                      src = final.fetchurl {
+                        url = "https://files.pythonhosted.org/packages/py3/h/huggingface_hub/huggingface_hub-1.5.0-py3-none-any.whl";
+                        hash = "sha256-ycCzq5Wnd/yRZmER87Pt5xwM3O02FMVTpk6YkgWFxO4=";
+                      };
+                      dependencies = with pself; [
+                        filelock
+                        fsspec
+                        packaging
+                        pyyaml
+                        requests
+                        tqdm
+                        typing-extensions
+                      ];
+                      doCheck = false;
+                      doInstallCheck = false;
+                      dontUsePythonCatchConflicts = true;
+                    };
+
                     # transformers — nixpkgs has 4.x, we need 5.7+ for Qwen3.5
                     # Install as wheel to skip runtime deps check (deps satisfied at runtime)
                     transformers = psuper.buildPythonPackage {
