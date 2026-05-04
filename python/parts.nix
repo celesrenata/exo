@@ -203,11 +203,9 @@
                   "--set EXO_DASHBOARD_DIR ${self'.packages.dashboard}"
                 ] ++ lib.optionals pkgs.stdenv.isLinux [
                   # Intel GPU runtime: Level Zero for device detection, OpenCL for oneDNN compute kernels
-                  # Intel SYCL runtime (libsycl.so.8) for PyTorch XPU operations
                   "--prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath [
                     pkgsExo.intel-compute-runtime
                     pkgsExo.level-zero
-                    pkgsExo.intel-llvm.lib
                   ]}:${pkgsExo.intel-compute-runtime}/lib/intel-opencl"
                   # OpenCL ICD vendor path for oneDNN
                   "--set OCL_ICD_VENDORS ${pkgsExo.intel-compute-runtime}/etc/OpenCL/vendors"
