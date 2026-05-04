@@ -252,7 +252,48 @@ def main(
                                 raise RuntimeError(
                                     f"No hosts found for rank 0 node {rank_0_node}"
                                 )
-                            master_addr = rank_0_hosts[0].ip
+                            # hosts_by_node is a per-node view: each node's list contains
+                            # IPs as seen FROM that node. To find rank 0's IP, we look at
+                            # OUR OWN hosts_by_node entry at rank 0's position (index).
+                            # Find our own node_id
+                            my_node_id = None
+                            for node_id, r_id in instance.shard_assignments.node_to_runner.items():
+                                r_shard = instance.shard_assignments.runner_to_shard.get(r_id)
+                                if r_shard is not None and r_shard.device_rank == rank:
+                                    my_node_id = node_id
+                                    break
+
+                            # Find rank 0's index in the cycle (position in hosts list)
+                            node_ids = list(instance.shard_assignments.node_to_runner.keys())
+                            rank_0_index = node_ids.index(rank_0_node) if rank_0_node in node_ids else 0
+
+                            if rank == 0:
+                                # Rank 0 needs its own routable IP for Gloo to advertise.
+                                # Look at another node's hosts_by_node entry at our index
+                                # to find how they see us.
+                                master_addr = "0.0.0.0"  # default fallback
+                                for other_nid, other_hosts in instance.hosts_by_node.items():
+                                    if other_nid != my_node_id and rank_0_index < len(other_hosts):
+                                        candidate = other_hosts[rank_0_index].ip
+                                        if candidate != "0.0.0.0":
+                                            master_addr = candidate
+                                            break
+                            elif my_node_id and my_node_id in instance.hosts_by_node:
+                                my_hosts = instance.hosts_by_node[my_node_id]
+                                if rank_0_index < len(my_hosts):
+                                    master_addr = my_hosts[rank_0_index].ip
+                                else:
+                                    # Fallback: skip 0.0.0.0 from rank 0's own view
+                                    master_addr = next(
+                                        (h.ip for h in rank_0_hosts if h.ip != "0.0.0.0"),
+                                        rank_0_hosts[0].ip,
+                                    )
+                            else:
+                                # Fallback: skip 0.0.0.0 from rank 0's own view
+                                master_addr = next(
+                                    (h.ip for h in rank_0_hosts if h.ip != "0.0.0.0"),
+                                    rank_0_hosts[0].ip,
+                                )
                             master_port = instance.ephemeral_port
 
                             config = ProcessGroupConfig(

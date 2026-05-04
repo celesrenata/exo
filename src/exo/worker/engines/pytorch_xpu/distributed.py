@@ -73,6 +73,26 @@ def init_process_group(config: ProcessGroupConfig) -> None:
     os.environ["MASTER_ADDR"] = config.master_addr
     os.environ["MASTER_PORT"] = str(config.master_port)
 
+    # Tell Gloo which network interface to use for mesh connections.
+    # Without this, Gloo resolves the hostname which may point to a loopback
+    # address (e.g., 127.0.0.2 in /etc/hosts on NixOS), causing connection failures.
+    # We detect the interface that owns MASTER_ADDR.
+    if "GLOO_SOCKET_IFNAME" not in os.environ:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["ip", "-4", "addr", "show"],
+                capture_output=True, text=True, timeout=5
+            )
+            for line in result.stdout.splitlines():
+                if config.master_addr in line:
+                    # Line format: "    inet 10.1.1.13/24 ... bond0"
+                    ifname = line.strip().split()[-1]
+                    os.environ["GLOO_SOCKET_IFNAME"] = ifname
+                    break
+        except Exception:
+            pass  # Best effort — Gloo will use default interface
+
     try:
         dist.init_process_group(
             backend="gloo",
