@@ -171,7 +171,7 @@ class Node:
         import anyio
         peers = [p.strip() for p in peers_env.split(",") if p.strip()]
         while True:
-            await anyio.sleep(30)
+            await anyio.sleep(5)
             for peer_addr in peers:
                 try:
                     await self.router._net.dial_peer(peer_addr)
