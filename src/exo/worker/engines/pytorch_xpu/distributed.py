@@ -76,43 +76,50 @@ def init_process_group(config: ProcessGroupConfig) -> None:
     # Tell Gloo which network interface to use for mesh connections.
     # Without this, Gloo resolves the hostname which may point to a loopback
     # address (e.g., 127.0.0.2 in /etc/hosts on NixOS), causing connection failures.
-    # We use psutil to find the network interface with a routable (non-loopback) IP.
+    # We use stdlib socket/fcntl to find the network interface on the same subnet.
     # Both GLOO_SOCKET_IFNAME and TP_SOCKET_IFNAME must be set — the former
     # controls rendezvous, the latter controls the actual data transport.
     if "GLOO_SOCKET_IFNAME" not in os.environ:
         try:
-            import psutil
+            import fcntl
             import socket
+            import struct
             detected_ifname: str | None = None
 
-            # Strategy: find the interface whose IP is on the same subnet as MASTER_ADDR,
-            # or failing that, the first non-loopback interface with a global IPv4 address.
-            addrs = psutil.net_if_addrs()
-            for ifname, if_addrs in addrs.items():
-                if ifname == "lo":
-                    continue
-                for addr in if_addrs:
-                    if addr.family == socket.AF_INET and not addr.address.startswith("127."):
-                        # Check if this interface is on the same /24 as MASTER_ADDR
-                        local_prefix = ".".join(addr.address.split(".")[:3])
-                        master_prefix = ".".join(config.master_addr.split(".")[:3])
-                        if local_prefix == master_prefix:
-                            detected_ifname = ifname
-                            break
-                if detected_ifname:
-                    break
+            # Get all network interfaces using /proc/net/dev (Linux-specific, stdlib only)
+            with open("/proc/net/dev") as f:
+                lines = f.readlines()[2:]  # Skip header lines
 
-            # Fallback: first non-loopback interface with any IPv4
-            if detected_ifname is None:
-                for ifname, if_addrs in addrs.items():
-                    if ifname == "lo":
-                        continue
-                    for addr in if_addrs:
-                        if addr.family == socket.AF_INET and not addr.address.startswith("127."):
-                            detected_ifname = ifname
-                            break
-                    if detected_ifname:
-                        break
+            master_prefix = ".".join(config.master_addr.split(".")[:3])
+
+            for line in lines:
+                ifname = line.split(":")[0].strip()
+                if ifname == "lo" or ifname.startswith("veth") or ifname.startswith("docker") or ifname.startswith("cni") or ifname.startswith("flannel"):
+                    continue
+                # Get IPv4 address for this interface using ioctl
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    ip_bytes = fcntl.ioctl(
+                        sock.fileno(),
+                        0x8915,  # SIOCGIFADDR
+                        struct.pack("256s", ifname.encode("utf-8")[:15])
+                    )[20:24]
+                    ip_addr = socket.inet_ntoa(ip_bytes)
+                    sock.close()
+                except (OSError, IOError):
+                    continue
+
+                if ip_addr.startswith("127."):
+                    continue
+
+                # Prefer interface on same /24 as MASTER_ADDR
+                local_prefix = ".".join(ip_addr.split(".")[:3])
+                if local_prefix == master_prefix:
+                    detected_ifname = ifname
+                    break
+                # Keep first non-loopback as fallback
+                if detected_ifname is None:
+                    detected_ifname = ifname
 
             if detected_ifname:
                 os.environ["GLOO_SOCKET_IFNAME"] = detected_ifname

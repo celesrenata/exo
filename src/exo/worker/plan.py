@@ -80,6 +80,12 @@ def _kill_runner(
                 continue
 
             if isinstance(all_runners.get(global_runner_id, None), RunnerFailed):
+                # Don't kill a runner that hasn't connected yet due to a peer failure.
+                # The peer may have failed because WE weren't ready (timing issue in
+                # distributed process group initialization). Only kill if we've already
+                # progressed past the connecting phase.
+                if isinstance(runner.status, (RunnerIdle, RunnerConnecting)):
+                    continue
                 return Shutdown(
                     instance_id=instance_id,
                     runner_id=runner_id,
