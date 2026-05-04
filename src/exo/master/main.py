@@ -349,10 +349,11 @@ class Master:
     async def _plan(self) -> None:
         while True:
             # kill broken instances
-            connected_node_ids = set(self.state.topology.list_nodes())
+            now = datetime.now(tz=timezone.utc)
             for instance_id, instance in self.state.instances.items():
                 for node_id in instance.shard_assignments.node_to_runner:
-                    if node_id not in connected_node_ids:
+                    last_seen_time = self.state.last_seen.get(node_id)
+                    if last_seen_time is None or (now - last_seen_time) > timedelta(seconds=30):
                         await self.event_sender.send(
                             InstanceDeleted(instance_id=instance_id)
                         )
