@@ -159,8 +159,24 @@ class Node:
             if self.api:
                 tg.start_soon(self.api.run)
             tg.start_soon(self._elect_loop)
+            # Re-dial static peers periodically (mDNS expiry disconnects them)
+            peers_env = os.environ.get("EXO_PEERS", "")
+            if peers_env:
+                tg.start_soon(self._peer_dial_loop, peers_env)
             signal.signal(signal.SIGINT, lambda _, __: self.shutdown())
             signal.signal(signal.SIGTERM, lambda _, __: self.shutdown())
+
+    async def _peer_dial_loop(self, peers_env: str):
+        """Periodically re-dial static peers to maintain connections."""
+        import anyio
+        peers = [p.strip() for p in peers_env.split(",") if p.strip()]
+        while True:
+            await anyio.sleep(30)
+            for peer_addr in peers:
+                try:
+                    await self.router._net.dial_peer(peer_addr)
+                except Exception:
+                    pass  # Silently retry next cycle
 
     def shutdown(self):
         # if this is our second call to shutdown, just sys.exit
