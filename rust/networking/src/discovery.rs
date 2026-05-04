@@ -32,8 +32,8 @@ mod managed {
 
     const MDNS_RECORD_TTL: Duration = Duration::from_secs(2_500);
     const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(1_500);
-    const PING_TIMEOUT: Duration = Duration::from_millis(2_500);
-    const PING_INTERVAL: Duration = Duration::from_millis(2_500);
+    const PING_TIMEOUT: Duration = Duration::from_secs(10);
+    const PING_INTERVAL: Duration = Duration::from_secs(10);
 
     #[derive(NetworkBehaviour)]
     pub struct Behaviour {
