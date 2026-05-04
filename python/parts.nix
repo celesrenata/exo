@@ -206,6 +206,7 @@
                   "--prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath [
                     pkgsExo.intel-compute-runtime
                     pkgsExo.level-zero
+                    pkgsExo.intel-llvm-nightly
                   ]}:${pkgsExo.intel-compute-runtime}/lib/intel-opencl"
                   # OpenCL ICD vendor path for oneDNN
                   "--set OCL_ICD_VENDORS ${pkgsExo.intel-compute-runtime}/etc/OpenCL/vendors"
