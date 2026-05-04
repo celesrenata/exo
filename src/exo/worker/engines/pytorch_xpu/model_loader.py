@@ -54,8 +54,8 @@ class ModelLoader:
             self._torch_available = True
             self._torch = torch
             logger.info(f"PyTorch available: {torch.__version__}")
-        except ImportError:
-            logger.error("PyTorch not available - ModelLoader cannot function")
+        except ImportError as e:
+            logger.error(f"PyTorch not available - ModelLoader cannot function: {e}")
 
         try:
             import transformers  # type: ignore
@@ -63,8 +63,8 @@ class ModelLoader:
             self._transformers_available = True
             self._transformers = transformers
             logger.info(f"Transformers available: {transformers.__version__}")
-        except ImportError:
-            logger.error("Transformers not available - cannot load HuggingFace models")
+        except ImportError as e:
+            logger.error(f"Transformers not available - cannot load HuggingFace models: {e}")
 
         # Cache for loaded models
         self._model_cache: dict[str, Any] = {}

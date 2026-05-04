@@ -4,6 +4,7 @@ import multiprocessing as mp
 import os
 import resource
 import signal
+import sys
 from dataclasses import dataclass, field
 from typing import Iterator, Self
 
@@ -266,6 +267,17 @@ def main():
     resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 65535), hard))
 
     mp.set_start_method("spawn")
+
+    # Propagate sys.path to spawned subprocesses via PYTHONPATH.
+    # The Nix wrapper adds site-packages via site.addsitedir() which only affects
+    # the current process. Spawned subprocesses (multiprocessing with "spawn") start
+    # a fresh Python interpreter that doesn't inherit sys.path modifications.
+    site_paths = [p for p in sys.path if "site-packages" in p]
+    if site_paths:
+        os.environ["PYTHONPATH"] = os.pathsep.join(site_paths)
+        print(f"[exo] Set PYTHONPATH with {len(site_paths)} paths", flush=True)
+    else:
+        print(f"[exo] WARNING: No site-packages in sys.path! sys.path={sys.path[:5]}", flush=True)
     # TODO: Refactor the current verbosity system
     logger_setup(EXO_LOG, args.verbosity)
     logger.info("Starting EXO")

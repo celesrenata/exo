@@ -24,6 +24,10 @@ def entrypoint(
     global logger
     logger = _logger
 
+    import sys as _sys
+    print(f"[runner] PYTHONPATH={os.environ.get('PYTHONPATH', 'NOT SET')[:200]}", flush=True)
+    print(f"[runner] sys.path has {len(_sys.path)} entries, site-packages: {[p for p in _sys.path if 'site-packages' in p][:3]}", flush=True)
+
     # Configure backend-specific environment variables
     if isinstance(bound_instance.instance, PyTorchXPURingInstance):
         # PyTorch backend configuration
