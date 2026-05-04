@@ -76,22 +76,59 @@ def init_process_group(config: ProcessGroupConfig) -> None:
     # Tell Gloo which network interface to use for mesh connections.
     # Without this, Gloo resolves the hostname which may point to a loopback
     # address (e.g., 127.0.0.2 in /etc/hosts on NixOS), causing connection failures.
-    # We detect the interface that owns MASTER_ADDR.
+    # We use psutil to find the network interface with a routable (non-loopback) IP.
+    # Both GLOO_SOCKET_IFNAME and TP_SOCKET_IFNAME must be set — the former
+    # controls rendezvous, the latter controls the actual data transport.
     if "GLOO_SOCKET_IFNAME" not in os.environ:
         try:
-            import subprocess
-            result = subprocess.run(
-                ["ip", "-4", "addr", "show"],
-                capture_output=True, text=True, timeout=5
-            )
-            for line in result.stdout.splitlines():
-                if config.master_addr in line:
-                    # Line format: "    inet 10.1.1.13/24 ... bond0"
-                    ifname = line.strip().split()[-1]
-                    os.environ["GLOO_SOCKET_IFNAME"] = ifname
+            import psutil
+            import socket
+            detected_ifname: str | None = None
+
+            # Strategy: find the interface whose IP is on the same subnet as MASTER_ADDR,
+            # or failing that, the first non-loopback interface with a global IPv4 address.
+            addrs = psutil.net_if_addrs()
+            for ifname, if_addrs in addrs.items():
+                if ifname == "lo":
+                    continue
+                for addr in if_addrs:
+                    if addr.family == socket.AF_INET and not addr.address.startswith("127."):
+                        # Check if this interface is on the same /24 as MASTER_ADDR
+                        local_prefix = ".".join(addr.address.split(".")[:3])
+                        master_prefix = ".".join(config.master_addr.split(".")[:3])
+                        if local_prefix == master_prefix:
+                            detected_ifname = ifname
+                            break
+                if detected_ifname:
                     break
-        except Exception:
-            pass  # Best effort — Gloo will use default interface
+
+            # Fallback: first non-loopback interface with any IPv4
+            if detected_ifname is None:
+                for ifname, if_addrs in addrs.items():
+                    if ifname == "lo":
+                        continue
+                    for addr in if_addrs:
+                        if addr.family == socket.AF_INET and not addr.address.startswith("127."):
+                            detected_ifname = ifname
+                            break
+                    if detected_ifname:
+                        break
+
+            if detected_ifname:
+                os.environ["GLOO_SOCKET_IFNAME"] = detected_ifname
+                os.environ["TP_SOCKET_IFNAME"] = detected_ifname
+                logger.info(f"Set GLOO_SOCKET_IFNAME={detected_ifname}")
+            else:
+                logger.warning("Could not detect network interface for Gloo")
+        except Exception as e:
+            logger.warning(f"Failed to detect network interface for Gloo: {e}")
+
+    logger.info(
+        f"Gloo env: MASTER_ADDR={os.environ.get('MASTER_ADDR')}, "
+        f"MASTER_PORT={os.environ.get('MASTER_PORT')}, "
+        f"GLOO_SOCKET_IFNAME={os.environ.get('GLOO_SOCKET_IFNAME', 'NOT SET')}, "
+        f"TP_SOCKET_IFNAME={os.environ.get('TP_SOCKET_IFNAME', 'NOT SET')}"
+    )
 
     try:
         dist.init_process_group(
