@@ -258,7 +258,7 @@
                 # Environment variables
                 Environment = [
                   "EXO_TINYGRAD_ENABLED=true"
-                  "LD_LIBRARY_PATH=${pkgs.ocl-icd}/lib:${pkgs.intel-compute-runtime}/lib"
+                  "LD_LIBRARY_PATH=${pkgs.ocl-icd}/lib:${pkgs.intel-compute-runtime}/lib:${inputs.self.packages.${pkgs.system}.intel-oneapi-runtime}/lib"
                   "OPENCL=1"
                   "GPU=1"
                   "OPENCL_DEVICE=0" # Force Intel Arc GPU (device 0)
@@ -504,7 +504,7 @@
             config = {
               allowUnfreePredicate = pkg: 
                 let pname = pkg.pname or "";
-                in (pname == "metal-toolchain") || (pname == "mkl");
+                in (pname == "metal-toolchain") || (pname == "mkl") || (pname == "intel-oneapi-runtime");
               doCheckByDefault = false;
             };
             overlays = [
@@ -573,6 +573,9 @@
           ) // lib.optionalAttrs pkgs.stdenv.isLinux {
             # PyTorch with Intel XPU support (Linux only)
             pytorch-xpu = pkgsExo.python312.pkgs.torch;
+            # Intel oneAPI runtime libraries (libsycl.so.8, libpti_view.so.0, etc.)
+            # Needed by PyTorch XPU at runtime
+            intel-oneapi-runtime = pkgs.callPackage (inputs.self + /nix/intel-oneapi-runtime.nix) { };
             # Intel SYCL runtime (libsycl.so.8) — needed by torch XPU at runtime
             # Exposed so the gremlin NixOS config can add it to intelGpuPackages
             intel-sycl-runtime = pkgsExo.intel-compute-runtime;  # placeholder — actual SYCL comes from service env
@@ -637,7 +640,7 @@
               ${lib.optionalString pkgs.stdenv.isLinux ''
                 export LD_LIBRARY_PATH="${pkgs.openssl.out}/lib:$LD_LIBRARY_PATH"
                 # Add Intel GPU runtime libraries and oneAPI libraries for PyTorch XPU (from pkgsExo)
-                export LD_LIBRARY_PATH="${pkgsExo.intel-compute-runtime}/lib:${pkgsExo.level-zero}/lib:${pkgsExo.mkl}/lib:${pkgsExo.oneDNN}/lib:${pkgsExo.onetbb}/lib:$LD_LIBRARY_PATH"
+                export LD_LIBRARY_PATH="${pkgsExo.intel-compute-runtime}/lib:${pkgsExo.level-zero}/lib:${pkgsExo.mkl}/lib:${pkgsExo.oneDNN}/lib:${pkgsExo.onetbb}/lib:${self'.packages.intel-oneapi-runtime}/lib:$LD_LIBRARY_PATH"
                 # Enable PyTorch XPU (Intel GPU) support
                 export PYTORCH_ENABLE_XPU=1
                 echo "Intel Arc GPU support enabled for PyTorch XPU"

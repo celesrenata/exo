@@ -206,7 +206,7 @@
                   "--prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath [
                     pkgsExo.intel-compute-runtime
                     pkgsExo.level-zero
-                  ]}:${pkgsExo.intel-compute-runtime}/lib/intel-opencl"
+                  ]}:${pkgsExo.intel-compute-runtime}/lib/intel-opencl:${self'.packages.intel-oneapi-runtime}/lib"
                   # OpenCL ICD vendor path for oneDNN
                   "--set OCL_ICD_VENDORS ${pkgsExo.intel-compute-runtime}/etc/OpenCL/vendors"
                   # Enable PyTorch XPU (Intel GPU) support
