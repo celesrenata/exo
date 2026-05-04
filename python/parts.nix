@@ -159,6 +159,7 @@
                   tomlkit
                   pillow
                   safetensors
+                  tokenizers
                   transformers
                   numpy
                   python-multipart

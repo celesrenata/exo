@@ -477,6 +477,12 @@
                       doInstallCheck = false;
                     });
 
+                    # tokenizers — disable tests (they pull in datasets which has circular deps)
+                    tokenizers = psuper.tokenizers.overridePythonAttrs (old: {
+                      doCheck = false;
+                      doInstallCheck = false;
+                    });
+
                     # regex — transformers 5.7.0 requires >= 2025.10.22
                     regex = psuper.buildPythonPackage {
                       pname = "regex";
@@ -503,6 +509,8 @@
                       dependencies = with pself; [
                         filelock
                         fsspec
+                        httpcore
+                        httpx
                         packaging
                         pyyaml
                         requests
