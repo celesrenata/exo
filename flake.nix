@@ -573,6 +573,9 @@
           ) // lib.optionalAttrs pkgs.stdenv.isLinux {
             # PyTorch with Intel XPU support (Linux only)
             pytorch-xpu = pkgsExo.python312.pkgs.torch;
+            # Intel SYCL runtime (libsycl.so.8) — needed by torch XPU at runtime
+            # Exposed so the gremlin NixOS config can add it to intelGpuPackages
+            intel-sycl-runtime = pkgsExo.intel-compute-runtime;  # placeholder — actual SYCL comes from service env
           };
 
           devShells.default =
