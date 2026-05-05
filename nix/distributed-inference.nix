@@ -110,6 +110,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Ensure Intel GPU compute runtime is discoverable by Level Zero loader.
+    # NixOS populates /run/opengl-driver/lib/ from hardware.graphics.extraPackages,
+    # which is where the Level Zero loader scans for libze_intel_gpu.so.
+    hardware.graphics.extraPackages = cfg.intelGpuPackages;
+
     # Full exo systemd service definition for distributed inference
     systemd.services.exo = {
       description = "exo Distributed AI Inference Service";
@@ -124,10 +129,14 @@ in
         EXO_PEERS = lib.concatStringsSep "," cfg.peers;
       } // lib.optionalAttrs (cfg.intelGpuPackages != []) {
         # Intel GPU runtime libraries for torch.xpu (Level Zero + compute runtime)
-        LD_LIBRARY_PATH = lib.makeLibraryPath cfg.intelGpuPackages
-          + ":" + lib.concatMapStringsSep ":" (pkg: "${pkg}/lib/intel-opencl") (
-            builtins.filter (pkg: builtins.pathExists "${pkg}/lib/intel-opencl") cfg.intelGpuPackages
-          );
+        # Include /run/opengl-driver/lib where NixOS places GPU driver libraries
+        # that the Level Zero loader scans for libze_intel_gpu.so
+        LD_LIBRARY_PATH = lib.concatStringsSep ":" ([
+          "/run/opengl-driver/lib"
+        ] ++ (map (pkg: "${pkg}/lib") cfg.intelGpuPackages)
+          ++ (builtins.filter (p: p != "") (
+            map (pkg: if builtins.pathExists "${pkg}/lib/intel-opencl" then "${pkg}/lib/intel-opencl" else "") cfg.intelGpuPackages
+          )));
       };
 
       serviceConfig = {
