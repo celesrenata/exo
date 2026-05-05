@@ -19,6 +19,7 @@
 , autoPatchelfHook
 , unzip
 , zlib
+, hwloc
 }:
 
 let
@@ -99,6 +100,7 @@ stdenv.mkDerivation {
   buildInputs = [
     stdenv.cc.cc.lib # libstdc++
     zlib
+    hwloc # libhwloc.so.15 needed by libumf.so.1
   ];
 
   # Some Intel libs have circular deps or need runtime-only libs — ignore them
