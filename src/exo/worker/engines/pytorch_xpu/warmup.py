@@ -73,22 +73,35 @@ def warmup_pytorch_xpu_inference(
         with torch.no_grad():
             for _ in range(warmup_tokens):
                 # Forward pass
-                if past_key_values is None:
-                    outputs = model(
-                        input_ids=input_ids,
-                        past_key_values=None,
-                        use_cache=True,
-                    )
+                if hasattr(model, 'is_first_layer'):
+                    # TransformerShard — uses input_data parameter
+                    if past_key_values is None:
+                        output, past_key_values = model.forward(
+                            input_data=input_ids,
+                            past_key_values=None,
+                        )
+                    else:
+                        output, past_key_values = model.forward(
+                            input_data=input_ids[:, -1:],
+                            past_key_values=past_key_values,
+                        )
+                    logits = output
                 else:
-                    outputs = model(
-                        input_ids=input_ids[:, -1:],
-                        past_key_values=past_key_values,
-                        use_cache=True,
-                    )
-
-                # Extract logits and KV cache
-                logits = outputs.logits
-                past_key_values = outputs.past_key_values
+                    # Standard HuggingFace model — uses input_ids parameter
+                    if past_key_values is None:
+                        outputs = model(
+                            input_ids=input_ids,
+                            past_key_values=None,
+                            use_cache=True,
+                        )
+                    else:
+                        outputs = model(
+                            input_ids=input_ids[:, -1:],
+                            past_key_values=past_key_values,
+                            use_cache=True,
+                        )
+                    logits = outputs.logits
+                    past_key_values = outputs.past_key_values
 
                 # Sample next token (greedy for warmup)
                 next_token = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)

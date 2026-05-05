@@ -100,24 +100,35 @@ def pytorch_xpu_generate(
         with torch.no_grad():
             for step in range(max_tokens):
                 # Forward pass
-                if past_key_values is None:
-                    # First forward pass - use full prompt
-                    outputs = model(
-                        input_ids=input_ids,
-                        past_key_values=None,
-                        use_cache=True,
-                    )
+                if hasattr(model, 'is_first_layer'):
+                    # TransformerShard — uses input_data parameter, returns (output, kv_cache)
+                    if past_key_values is None:
+                        output, past_key_values = model.forward(
+                            input_data=input_ids,
+                            past_key_values=None,
+                        )
+                    else:
+                        output, past_key_values = model.forward(
+                            input_data=input_ids[:, -1:],
+                            past_key_values=past_key_values,
+                        )
+                    logits = output
                 else:
-                    # Subsequent passes - use only last token
-                    outputs = model(
-                        input_ids=input_ids[:, -1:],
-                        past_key_values=past_key_values,
-                        use_cache=True,
-                    )
-
-                # Extract logits and KV cache
-                logits = outputs.logits
-                past_key_values = outputs.past_key_values
+                    # Standard HuggingFace model — uses input_ids parameter
+                    if past_key_values is None:
+                        outputs = model(
+                            input_ids=input_ids,
+                            past_key_values=None,
+                            use_cache=True,
+                        )
+                    else:
+                        outputs = model(
+                            input_ids=input_ids[:, -1:],
+                            past_key_values=past_key_values,
+                            use_cache=True,
+                        )
+                    logits = outputs.logits
+                    past_key_values = outputs.past_key_values
 
                 # Get logits for last position
                 next_token_logits = logits[:, -1, :]
