@@ -475,6 +475,14 @@ class TransformerShard:
         Returns:
             Tuple of (output, new_past_key_values)
         """
+        import torch
+
+        # Detect Qwen3.5 architecture (uses DynamicCache and 4D position IDs)
+        is_qwen3_5 = hasattr(self.model, 'model') and type(self.model.model).__name__ == 'Qwen3_5TextModel'
+
+        if is_qwen3_5:
+            return self._forward_qwen3_5(input_data, attention_mask, past_key_values)
+
         # If first layer, embed tokens
         if self.is_first_layer and self.embed_tokens is not None:
             hidden_states = self.embed_tokens(input_data)
@@ -485,7 +493,6 @@ class TransformerShard:
         # (required by newer transformers for Qwen, Llama, etc.)
         position_embeddings = None
         if self.rotary_emb is not None:
-            import torch
             seq_len = hidden_states.shape[1]
             # Compute position IDs based on sequence length and past KV cache
             past_len = 0
@@ -517,7 +524,7 @@ class TransformerShard:
 
             # Extract hidden states and new KV
             hidden_states = layer_outputs[0]
-            if len(layer_outputs) > 1:
+            if isinstance(layer_outputs, tuple) and len(layer_outputs) > 1 and layer_outputs[1] is not None:
                 new_past_key_values.append(layer_outputs[1])
 
         # If last layer, apply norm and lm_head
@@ -528,6 +535,94 @@ class TransformerShard:
                 hidden_states = self.lm_head(hidden_states)
 
         return hidden_states, new_past_key_values if new_past_key_values else None
+
+    def _forward_qwen3_5(
+        self,
+        input_data: Any,
+        attention_mask: Optional[Any] = None,
+        past_key_values: Optional[Any] = None,
+    ) -> tuple[Any, Optional[Any]]:
+        """
+        Forward pass for Qwen3.5 architecture.
+
+        Qwen3.5 uses DynamicCache, 4D position IDs, and layers that mutate
+        the cache in-place. We delegate to the Qwen3_5TextModel's forward
+        method which handles all the internal complexity.
+        """
+        import torch
+        from transformers import DynamicCache  # pyright: ignore[reportMissingImports]
+
+        text_model = self.model.model  # Qwen3_5TextModel
+
+        # For first shard: embed tokens
+        if self.is_first_layer and self.embed_tokens is not None:
+            inputs_embeds = self.embed_tokens(input_data)
+        else:
+            inputs_embeds = input_data
+
+        # Create or reuse DynamicCache
+        if past_key_values is None:
+            cache = DynamicCache()
+        else:
+            cache = past_key_values  # Already a DynamicCache from previous call
+
+        # Compute position IDs (4D for Qwen3.5: text, temporal, height, width)
+        seq_len = inputs_embeds.shape[1]
+        batch_size = inputs_embeds.shape[0]
+        past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+        position_ids = torch.arange(seq_len, device=inputs_embeds.device) + past_seen_tokens
+        position_ids = position_ids.view(1, 1, -1).expand(4, batch_size, -1)
+
+        # Split into text_position_ids and spatial position_ids
+        text_position_ids = position_ids[0]
+        spatial_position_ids = position_ids[1:]
+
+        # Compute position embeddings using rotary_emb
+        position_embeddings = text_model.rotary_emb(inputs_embeds, spatial_position_ids)
+
+        # Compute causal mask
+        from transformers.modeling_utils import create_causal_mask  # pyright: ignore[reportMissingImports]
+        try:
+            causal_mask = create_causal_mask(
+                config=text_model.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=cache,
+                position_ids=text_position_ids,
+            )
+        except Exception:
+            causal_mask = None
+
+        # Compute linear attention mask
+        linear_attn_mask = text_model._update_linear_attn_mask(attention_mask, cache)
+
+        # Process through our assigned layers only
+        hidden_states = inputs_embeds
+        layer_types = text_model.config.layer_types
+
+        for i, layer in enumerate(self.layers):
+            # Determine the global layer index
+            global_layer_idx = self.start_layer + i
+            layer_type = layer_types[global_layer_idx] if global_layer_idx < len(layer_types) else "full_attention"
+            layer_mask = linear_attn_mask if layer_type == "linear_attention" else causal_mask
+
+            hidden_states = layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=layer_mask,
+                position_ids=text_position_ids,
+                past_key_values=cache,
+                use_cache=True,
+            )
+
+        # If last layer, apply norm and lm_head
+        if self.is_last_layer:
+            if self.norm is not None:
+                hidden_states = self.norm(hidden_states)
+            if self.lm_head is not None:
+                hidden_states = self.lm_head(hidden_states)
+
+        return hidden_states, cache
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Make the shard callable like a model."""
