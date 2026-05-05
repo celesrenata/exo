@@ -412,7 +412,49 @@ The tool outputs performance metrics including prompt tokens per second (prompt_
 
 ## Hardware Accelerator Support
 
-On macOS, exo uses the GPU. On Linux, exo currently runs on CPU. We are working on extending hardware accelerator support. If you'd like support for a new hardware platform, please [search for an existing feature request](https://github.com/exo-explore/exo/issues) and add a thumbs up so we know what hardware is important to the community.
+On macOS, exo uses the GPU via MLX. On Linux, exo supports Intel Arc GPUs via PyTorch XPU for distributed pipeline-parallel inference.
+
+### Intel Arc GPU (PyTorch XPU) — Linux/NixOS
+
+This fork adds support for Intel Arc integrated GPUs (Meteor Lake-P) using PyTorch 2.11+ with native `torch.xpu` and the Gloo distributed backend for pipeline-parallel inference across multiple nodes.
+
+**Tested hardware:** 4× NixOS nodes with Intel Arc Graphics (Meteor Lake-P iGPU, shared system memory ~94 GiB each).
+
+**Requirements:**
+- PyTorch 2.11+ XPU wheel (from `download.pytorch.org/whl/xpu/`)
+- Intel compute runtime (Level Zero driver: `libze_intel_gpu.so.1`)
+- Intel oneAPI runtime (`libsycl.so.8`, `libur_adapter_level_zero.so`, `libumf.so.1`)
+- Level Zero loader (`libze_loader.so.1`)
+- `i915` kernel driver with SR-IOV support
+- NixOS with the `exo-distributed` NixOS module
+
+**Key constraint:** All GPU runtime libraries must use the **same glibc version** as the Python interpreter. On NixOS, use the exo flake's `pkgsExo` packages (not the system's `pkgs`) for `intel-compute-runtime` and `level-zero` to avoid glibc mismatch.
+
+**Architecture:**
+```
+Rank 0 (first shard) → send_activation → Rank 1 (middle) → ... → Last Rank (lm_head)
+    ↑                                                                      |
+    └──────────────── recv logits ← send_activation ───────────────────────┘
+```
+
+Each node runs a subset of transformer layers. Rank 0 tokenizes, orchestrates, and streams tokens. Non-rank-0 nodes run a blocking worker loop receiving activations and forwarding results.
+
+**NixOS deployment:**
+```nix
+# In your gremlin flake:
+services.exo.distributed = {
+  enable = true;
+  package = exo.packages.x86_64-linux.exo;
+  masterAddr = "10.1.1.12";
+  intelGpuPackages = [
+    exo.packages.x86_64-linux.intel-compute-runtime
+    exo.packages.x86_64-linux.intel-compute-runtime-drivers
+    exo.packages.x86_64-linux.level-zero
+    exo.packages.x86_64-linux.intel-oneapi-runtime
+  ];
+  peers = [ "/ip4/10.1.1.12/tcp/4001" "/ip4/10.1.1.13/tcp/4001" ... ];
+};
+```
 
 ---
 
