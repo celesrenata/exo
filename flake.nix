@@ -624,6 +624,11 @@
             # Intel SYCL runtime (libsycl.so.8) — needed by torch XPU at runtime
             # Exposed so the gremlin NixOS config can add it to intelGpuPackages
             intel-sycl-runtime = pkgsExo.intel-compute-runtime;  # placeholder — actual SYCL comes from service env
+            # Intel compute runtime and Level Zero — built with the same glibc as the exo package
+            # Use these in the gremlin flake's intelGpuPackages to avoid glibc version mismatch
+            intel-compute-runtime = pkgsExo.intel-compute-runtime;
+            intel-compute-runtime-drivers = pkgsExo.intel-compute-runtime.drivers;
+            level-zero = pkgsExo.level-zero;
           };
 
           devShells.default =
