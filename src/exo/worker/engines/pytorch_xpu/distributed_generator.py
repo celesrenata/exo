@@ -165,7 +165,7 @@ def distributed_generate(
     # Tokenize prompt (Requirement 2.1)
     input_ids: list[int] = tokenizer.encode(prompt)  # pyright: ignore[reportAny]
     prompt_tokens: int = len(input_ids)
-    input_tensor = torch.tensor([input_ids], dtype=torch.long)
+    input_tensor = torch.tensor([input_ids], dtype=torch.long, device=f"{device_type}:{device_id}")
 
     logger.debug(f"Tokenized prompt: {prompt_tokens} tokens")
 
@@ -333,7 +333,7 @@ def distributed_generate(
 
         for _ in range(max_tokens - 1):
             # Create single-token input tensor: shape (1, 1) (Requirement 8.2, 8.4)
-            token_input = torch.tensor([[prev_token_id]], dtype=torch.long)
+            token_input = torch.tensor([[prev_token_id]], dtype=torch.long, device=target_device)
 
             # Forward through local TransformerShard with KV cache (Requirement 5.3, 5.4)
             hidden_states, past_key_values = model.forward(input_data=token_input, past_key_values=past_key_values)  # pyright: ignore[reportAny]

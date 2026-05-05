@@ -581,8 +581,8 @@ class TransformerShard:
         position_embeddings = text_model.rotary_emb(inputs_embeds, spatial_position_ids)
 
         # Compute causal mask
-        from transformers.modeling_utils import create_causal_mask  # pyright: ignore[reportMissingImports]
         try:
+            from transformers.modeling_utils import create_causal_mask  # pyright: ignore[reportMissingImports]
             causal_mask = create_causal_mask(
                 config=text_model.config,
                 inputs_embeds=inputs_embeds,
@@ -590,7 +590,7 @@ class TransformerShard:
                 past_key_values=cache,
                 position_ids=text_position_ids,
             )
-        except Exception:
+        except (ImportError, Exception):
             causal_mask = None
 
         # Compute linear attention mask
