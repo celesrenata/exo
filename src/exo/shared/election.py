@@ -174,8 +174,62 @@ class Election:
                 logger.debug(
                     f"Connection messages received: {first} followed by {rest}"
                 )
+
+                # Check if this is just a flap (Connected immediately followed by Disconnected or vice versa)
+                # LACP bond failovers cause rapid connect/disconnect cycles that should NOT trigger re-election
+                all_messages = [first] + rest
+                disconnected_nodes = set()
+                connected_nodes = set()
+                for msg in all_messages:
+                    if msg.connection_type.value == 1:  # Disconnected
+                        disconnected_nodes.add(msg.node_id)
+                    else:  # Connected
+                        connected_nodes.add(msg.node_id)
+
+                # If a node both connected and disconnected in the same batch, it's a flap — ignore it
+                flapping_nodes = disconnected_nodes & connected_nodes
+                actually_disconnected = disconnected_nodes - connected_nodes
+                actually_connected = connected_nodes - disconnected_nodes
+
+                if not actually_disconnected and not actually_connected:
+                    logger.debug("Connection flap detected (connect+disconnect in same batch), ignoring")
+                    continue
+
+                # Only trigger re-election if the CURRENT MASTER disconnected (and didn't reconnect)
+                # Other nodes connecting/disconnecting should not destabilize the master
+                master_disconnected = self.current_session.master_node_id in actually_disconnected
+
+                if not master_disconnected:
+                    logger.debug(
+                        f"Non-master connection change (master={self.current_session.master_node_id}), "
+                        f"disconnected={actually_disconnected}, connected={actually_connected}. "
+                        f"Not triggering re-election."
+                    )
+                    continue
+
+                # Master disconnected — wait a grace period before triggering re-election
+                # This handles brief LACP failovers where the master reconnects quickly
+                logger.info(
+                    f"Master {self.current_session.master_node_id} disconnected, "
+                    f"waiting 5s grace period before re-election"
+                )
+                await anyio.sleep(5.0)
+
+                # Check if more messages arrived during grace period (master may have reconnected)
+                grace_messages = connection_messages.collect()
+                master_reconnected = any(
+                    msg.node_id == self.current_session.master_node_id
+                    and msg.connection_type.value == 0  # Connected
+                    for msg in grace_messages
+                )
+
+                if master_reconnected:
+                    logger.info("Master reconnected during grace period, cancelling re-election")
+                    continue
+
+                # Master is truly gone — trigger re-election
+                logger.info("Master confirmed disconnected after grace period, triggering re-election")
                 logger.debug(f"Current clock: {self.clock}")
-                # These messages are strictly peer to peer
                 self.clock += 1
                 logger.debug(f"New clock: {self.clock}")
                 assert self._tg is not None
@@ -186,7 +240,6 @@ class Election:
                     self._campaign, candidates, DEFAULT_ELECTION_TIMEOUT
                 )
                 logger.debug("Campaign started")
-                logger.debug("Connection message added")
 
     async def _command_counter(self) -> None:
         with self._co_receiver as commands:
