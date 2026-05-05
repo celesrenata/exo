@@ -755,7 +755,8 @@ def main(
                                 else:
                                     # Non-rank-0: run worker loop (blocks until generation ends)
                                     hidden_size: int = shard_metadata.model_card.hidden_size
-                                    model_dtype = next(pytorch_xpu_model.parameters()).dtype  # pyright: ignore[reportAny]
+                                    # Get dtype from the model's first layer parameter
+                                    model_dtype = next(pytorch_xpu_model.model.parameters()).dtype  # pyright: ignore[reportAny]
                                     distributed_worker_loop(
                                         model=pytorch_xpu_model,
                                         device_type=device_type,
