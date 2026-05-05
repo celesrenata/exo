@@ -262,12 +262,11 @@ class Node:
                         self.api.unpause(result.won_clock)
 
     async def _peer_dial_loop(self):
-        """Periodically re-dial EXO_PEERS until connections are established.
+        """Dial EXO_PEERS once at startup with retries, then stop.
 
-        The Rust discovery layer promotes peers to static_peers after the first
-        successful connection (learning the peer ID). After that, the Rust retry
-        loop handles reconnection. This Python loop only needs to keep trying
-        until the initial connections succeed.
+        After the initial connection succeeds, the Rust discovery layer's
+        static_peers retry loop handles reconnection. We only need to keep
+        trying until the first successful connection per peer.
         """
         peers_env = os.environ.get("EXO_PEERS", "")
         if not peers_env:
@@ -277,22 +276,20 @@ class Node:
         if not peer_addrs:
             return
 
-        # Keep dialing until we stop getting errors, then slow down
-        fast_interval = 5  # seconds between retries during initial connection
-        slow_interval = 60  # seconds between retries once connected
-
-        interval = fast_interval
-        while True:
-            await anyio.sleep(interval)
-            any_failed = False
-            for peer_addr in peer_addrs:
+        # Try each peer up to 12 times (60 seconds total) then stop
+        remaining = set(peer_addrs)
+        for _ in range(12):
+            if not remaining:
+                break
+            await anyio.sleep(5)
+            connected = set()
+            for peer_addr in remaining:
                 try:
                     await self.router._net.dial_peer(peer_addr)
+                    connected.add(peer_addr)
                 except Exception:
-                    any_failed = True
-            # Once all dials succeed (no exceptions), slow down significantly
-            # The Rust static_peers retry loop handles reconnection from here
-            interval = fast_interval if any_failed else slow_interval
+                    pass
+            remaining -= connected
 
 
 def main():
