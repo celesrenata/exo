@@ -44,7 +44,7 @@ def plan_health_check(
     for instance_id, instance in instances.items():
         for node_id in instance.shard_assignments.node_to_runner:
             last_seen_time = last_seen.get(node_id)
-            if last_seen_time is None or (now - last_seen_time) > timedelta(seconds=30):
+            if last_seen_time is None or (now - last_seen_time) > timedelta(seconds=120):
                 deleted.append(instance_id)
                 break
     return deleted
@@ -111,9 +111,9 @@ def _make_two_node_instance(
 
 @st.composite
 def recent_timestamp(draw: st.DrawFn) -> datetime:
-    """Generate a timestamp within the last 30 seconds (exclusive of boundary)."""
+    """Generate a timestamp within the last 120 seconds (exclusive of boundary)."""
     now = datetime.now(tz=timezone.utc)
-    seconds_ago = draw(st.floats(min_value=0.0, max_value=29.9))
+    seconds_ago = draw(st.floats(min_value=0.0, max_value=119.9))
     return now - timedelta(seconds=seconds_ago)
 
 
@@ -219,9 +219,9 @@ def _make_single_node_instance(
 
 @st.composite
 def stale_timestamp(draw: st.DrawFn) -> datetime:
-    """Generate a timestamp older than 30 seconds (genuinely disconnected)."""
+    """Generate a timestamp older than 120 seconds (genuinely disconnected)."""
     now = datetime.now(tz=timezone.utc)
-    seconds_ago = draw(st.floats(min_value=31.0, max_value=300.0))
+    seconds_ago = draw(st.floats(min_value=121.0, max_value=600.0))
     return now - timedelta(seconds=seconds_ago)
 
 
