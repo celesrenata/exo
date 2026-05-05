@@ -130,6 +130,14 @@ def init_process_group(config: ProcessGroupConfig) -> None:
         except Exception as e:
             logger.warning(f"Failed to detect network interface for Gloo: {e}")
 
+    # Force Gloo to use ports in the firewall-allowed range (49152-65535)
+    # This is set before init_process_group so Gloo's TCPStore and mesh
+    # connections bind to ports that pass through the NixOS firewall.
+    if "GLOO_PORT_RANGE" not in os.environ:
+        os.environ["GLOO_PORT_RANGE"] = "49152,65535"
+    if "TP_PORT_RANGE" not in os.environ:
+        os.environ["TP_PORT_RANGE"] = "49152,65535"
+
     logger.info(
         f"Gloo env: MASTER_ADDR={os.environ.get('MASTER_ADDR')}, "
         f"MASTER_PORT={os.environ.get('MASTER_PORT')}, "

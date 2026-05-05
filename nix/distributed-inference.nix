@@ -146,8 +146,9 @@ in
     };
 
     # Open the ephemeral port range, master port, and API port in the firewall
+    # Gloo uses OS-assigned ports for its mesh connections which may be below 49152
     networking.firewall.allowedTCPPortRanges = [
-      { from = cfg.ephemeralPortRange.from; to = cfg.ephemeralPortRange.to; }
+      { from = 1024; to = 65535; }
     ];
     networking.firewall.allowedTCPPorts = [ cfg.masterPort cfg.apiPort cfg.libp2pPort ];
     # mDNS for libp2p peer discovery
