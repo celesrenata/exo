@@ -560,9 +560,9 @@ class TransformerShard:
         else:
             inputs_embeds = input_data
 
-        # Create or reuse DynamicCache
+        # Create or reuse DynamicCache — pass config so it knows about linear_attention layers
         if past_key_values is None:
-            cache = DynamicCache()
+            cache = DynamicCache(config=text_model.config)
         else:
             cache = past_key_values  # Already a DynamicCache from previous call
 
