@@ -19,6 +19,8 @@
 , autoPatchelfHook
 , unzip
 , zlib
+, unified-memory-framework
+, level-zero
 }:
 
 let
@@ -92,17 +94,17 @@ stdenv.mkDerivation {
   buildInputs = [
     stdenv.cc.cc.lib # libstdc++
     zlib
+    unified-memory-framework
+    level-zero
   ];
 
   # Some Intel libs have circular deps or need runtime-only libs — ignore them
   autoPatchelfIgnoreMissingDeps = [
-    "libze_loader.so.1"
     "libze_tracing_layer.so.1"
     "libmpi.so.12"
     "libmpicxx.so.12"
     "libmpifort.so.12"
     "libfabric.so.1"
-    "libumf.so.1"
     "libiomp5.so"
     "libOpenCL.so.1"
     "libtbb.so.12"
