@@ -34,8 +34,8 @@ from exo.shared.types.worker.shards import ShardMetadata
 from exo.utils.channels import MpReceiver, MpSender, Sender, mp_channel
 from exo.worker.runner.bootstrap import entrypoint
 
-PREFILL_TIMEOUT_SECONDS = 60
-DECODE_TIMEOUT_SECONDS = 5
+PREFILL_TIMEOUT_SECONDS = 300
+DECODE_TIMEOUT_SECONDS = 60
 
 
 @dataclass(eq=False)
