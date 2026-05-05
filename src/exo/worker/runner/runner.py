@@ -729,26 +729,57 @@ def main(
                                 f"prompt length: {len(prompt)}"
                             )
 
-                            # Receive activation from previous rank (if not first)
-                            if not is_first_rank and world_size > 1:
-                                # Middle/last ranks receive input activation from previous rank
-                                # Shape/dtype will be determined by the model's hidden size
-                                # For now, we proceed with the local generation which handles this
-                                logger.info(f"Rank {rank}: waiting for activation from rank {rank - 1}")
+                            # Dispatch to distributed or single-node generation
+                            if world_size > 1:
+                                from exo.worker.engines.pytorch_xpu.distributed_generator import (
+                                    distributed_generate,
+                                    distributed_worker_loop,
+                                )
 
-                            # Generate tokens using PyTorch XPU
-                            pytorch_xpu_generator = pytorch_xpu_generate(
-                                model=pytorch_xpu_model,
-                                tokenizer=pytorch_xpu_tokenizer,
-                                prompt=prompt,
-                                device_type=device_type,
-                                device_id=device_id,
-                                max_tokens=task_params.max_output_tokens or 100,
-                                temperature=task_params.temperature or 1.0,
-                                top_k=task_params.top_k,
-                                top_p=task_params.top_p,
-                                model_id=str(shard_metadata.model_card.model_id),
-                            )
+                                if rank == 0:
+                                    # Rank 0: orchestrate distributed generation
+                                    pytorch_xpu_generator = distributed_generate(
+                                        model=pytorch_xpu_model,
+                                        tokenizer=pytorch_xpu_tokenizer,
+                                        prompt=prompt,
+                                        device_type=device_type,
+                                        device_id=device_id,
+                                        rank=rank,
+                                        world_size=world_size,
+                                        max_tokens=task_params.max_output_tokens or 100,
+                                        temperature=task_params.temperature or 1.0,
+                                        top_k=task_params.top_k,
+                                        top_p=task_params.top_p,
+                                        model_id=str(shard_metadata.model_card.model_id),
+                                    )
+                                else:
+                                    # Non-rank-0: run worker loop (blocks until generation ends)
+                                    hidden_size: int = pytorch_xpu_model.config.hidden_size  # pyright: ignore[reportAny]
+                                    model_dtype = next(pytorch_xpu_model.parameters()).dtype  # pyright: ignore[reportAny]
+                                    distributed_worker_loop(
+                                        model=pytorch_xpu_model,
+                                        device_type=device_type,
+                                        device_id=device_id,
+                                        rank=rank,
+                                        world_size=world_size,
+                                        hidden_size=hidden_size,
+                                        dtype=model_dtype,
+                                    )
+                                    pytorch_xpu_generator = iter([])  # No responses from non-first ranks
+                            else:
+                                # Single-node: existing path unchanged
+                                pytorch_xpu_generator = pytorch_xpu_generate(
+                                    model=pytorch_xpu_model,
+                                    tokenizer=pytorch_xpu_tokenizer,
+                                    prompt=prompt,
+                                    device_type=device_type,
+                                    device_id=device_id,
+                                    max_tokens=task_params.max_output_tokens or 100,
+                                    temperature=task_params.temperature or 1.0,
+                                    top_k=task_params.top_k,
+                                    top_p=task_params.top_p,
+                                    model_id=str(shard_metadata.model_card.model_id),
+                                )
 
                             # Forward responses to event sender
                             for response in pytorch_xpu_generator:
