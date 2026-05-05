@@ -437,6 +437,8 @@ class TransformerShard:
             self.embed_tokens = model.model.embed_tokens if is_first_layer else None
             self.norm = model.model.norm if is_last_layer else None
             self.lm_head = model.lm_head if is_last_layer else None
+            # Rotary embeddings for position encoding (required by newer transformers)
+            self.rotary_emb = getattr(model.model, "rotary_emb", None)
         elif hasattr(model, "transformer") and hasattr(model.transformer, "h"):
             self.layers = model.transformer.h[start_layer:end_layer]
             self.embed_tokens = (
@@ -444,6 +446,7 @@ class TransformerShard:
             )  # word token embeddings
             self.norm = model.transformer.ln_f if is_last_layer else None  # final norm
             self.lm_head = model.lm_head if is_last_layer else None
+            self.rotary_emb = None
         else:
             raise ValueError(f"Unsupported model architecture: {type(model).__name__}")
 
@@ -478,6 +481,23 @@ class TransformerShard:
         else:
             hidden_states = input_data
 
+        # Compute position embeddings if rotary_emb is available
+        # (required by newer transformers for Qwen, Llama, etc.)
+        position_embeddings = None
+        if self.rotary_emb is not None:
+            import torch
+            seq_len = hidden_states.shape[1]
+            # Compute position IDs based on sequence length and past KV cache
+            past_len = 0
+            if past_key_values and len(past_key_values) > 0 and past_key_values[0] is not None:
+                # past_key_values[0] is a tuple (key, value) for the first layer
+                if isinstance(past_key_values[0], tuple) and len(past_key_values[0]) >= 1:
+                    past_len = past_key_values[0][0].shape[2]
+                elif hasattr(past_key_values[0], 'key_cache'):
+                    past_len = past_key_values[0].key_cache.shape[2]
+            position_ids = torch.arange(past_len, past_len + seq_len, device=hidden_states.device).unsqueeze(0)
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         # Process through layers
         new_past_key_values = []
         for i, layer in enumerate(self.layers):
@@ -485,12 +505,15 @@ class TransformerShard:
             layer_past = past_key_values[i] if past_key_values else None
 
             # Forward through layer
-            layer_outputs = layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                past_key_value=layer_past,
-                use_cache=True,
-            )
+            layer_kwargs: dict[str, Any] = {
+                "attention_mask": attention_mask,
+                "past_key_value": layer_past,
+                "use_cache": True,
+            }
+            if position_embeddings is not None:
+                layer_kwargs["position_embeddings"] = position_embeddings
+
+            layer_outputs = layer(hidden_states, **layer_kwargs)
 
             # Extract hidden states and new KV
             hidden_states = layer_outputs[0]
