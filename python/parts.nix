@@ -160,10 +160,8 @@
                   pillow
                   safetensors
                   tokenizers
-                  (transformers.overridePythonAttrs (old: {
-                    # Skip runtime deps check — all deps are provided at runtime via exo's propagatedBuildInputs
-                    pythonRuntimeDepsCheckHook = "";
-                    nativeBuildInputs = builtins.filter (x: (x.pname or x.name or "") != "python-runtime-deps-check-hook") (old.nativeBuildInputs or []);
+                  (transformers.overridePythonAttrs (_: {
+                    dontCheckRuntimeDeps = true;
                   }))
                   numpy
                   python-multipart
