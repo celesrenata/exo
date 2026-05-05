@@ -19,8 +19,6 @@
 , autoPatchelfHook
 , unzip
 , zlib
-, unified-memory-framework
-, level-zero
 }:
 
 let
@@ -81,6 +79,13 @@ let
     hash = "sha256-2zHln6No3U+kW0lDUfS34OYgSwjX2yeDYRjE4TcOsBE=";
   };
 
+  # Unified Memory Framework — provides libumf.so.1
+  # Required by libur_adapter_level_zero.so for SYCL device discovery
+  umf = fetchurl {
+    url = "https://files.pythonhosted.org/packages/py2.py3/u/umf/umf-1.0.3-py2.py3-none-manylinux_2_28_x86_64.whl";
+    hash = "sha256-yJwJdNrtMKHKx3+3zl/5FA0Xjihrst2Rt1FIbV0KZbA=";
+  };
+
 in
 stdenv.mkDerivation {
   pname = "intel-oneapi-runtime";
@@ -94,12 +99,11 @@ stdenv.mkDerivation {
   buildInputs = [
     stdenv.cc.cc.lib # libstdc++
     zlib
-    unified-memory-framework
-    level-zero
   ];
 
   # Some Intel libs have circular deps or need runtime-only libs — ignore them
   autoPatchelfIgnoreMissingDeps = [
+    "libze_loader.so.1"
     "libze_tracing_layer.so.1"
     "libmpi.so.12"
     "libmpicxx.so.12"
@@ -116,7 +120,7 @@ stdenv.mkDerivation {
     mkdir -p $out/lib
 
     # Extract .so files from each wheel's data directory
-    for wheel in ${intel-sycl-rt} ${intel-cmplr-lib-ur} ${intel-cmplr-lib-rt} ${intel-pti} ${oneccl} ${onemkl-sycl-blas} ${onemkl-sycl-dft} ${onemkl-sycl-lapack} ${mkl-core}; do
+    for wheel in ${intel-sycl-rt} ${intel-cmplr-lib-ur} ${intel-cmplr-lib-rt} ${intel-pti} ${oneccl} ${onemkl-sycl-blas} ${onemkl-sycl-dft} ${onemkl-sycl-lapack} ${mkl-core} ${umf}; do
       echo "Extracting from: $wheel"
       ${stdenv.shell} -c "unzip -o -j '$wheel' '*.data/data/lib/*.so*' -d $out/lib/ 2>/dev/null || true"
     done
