@@ -123,7 +123,8 @@ class TestDistributedGeneratorEdgeCases:
         model = MagicMock()
         hidden_states = torch.randn(1, 3, 128)
         model.forward.return_value = (hidden_states, [("k", "v")])
-        model.lm_head.weight.shape = [32000]  # vocab_size
+        model.lm_head.weight.shape = [32000]
+        model.model.config.vocab_size = 32000  # vocab_size
 
         # Create logits that will sample to the im_end token (100264)
         # We'll mock sample_token to return the im_end token
@@ -183,6 +184,7 @@ class TestDistributedGeneratorEdgeCases:
         hidden_states = torch.randn(1, 3, 128)
         model.forward.return_value = (hidden_states, [("k", "v")])
         model.lm_head.weight.shape = [32000]
+        model.model.config.vocab_size = 32000
 
         with patch(
             "exo.worker.engines.pytorch_xpu.distributed_generator.send_activation"
@@ -369,6 +371,7 @@ class TestDistributedGeneratorEdgeCases:
         hidden_states = torch.randn(1, 5, 128)
         model.forward.return_value = (hidden_states, [("k", "v")])
         model.lm_head.weight.shape = [32000]
+        model.model.config.vocab_size = 32000
 
         call_count = 0
 
@@ -431,6 +434,7 @@ class TestDistributedGeneratorEdgeCases:
         hidden_states = torch.randn(1, 1, 128)
         model.forward.return_value = (hidden_states, [("k", "v")])
         model.lm_head.weight.shape = [32000]
+        model.model.config.vocab_size = 32000
 
         with patch(
             "exo.worker.engines.pytorch_xpu.distributed_generator.send_activation"

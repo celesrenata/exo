@@ -196,8 +196,8 @@ def distributed_generate(
     start_time: float = time.perf_counter()
     target_device: str = f"{device_type}:{device_id}"
 
-    # Determine vocab_size from model's lm_head (needed for recv shape)
-    vocab_size: int = model.lm_head.weight.shape[0]  # pyright: ignore[reportAny]
+    # Determine vocab_size from model config (lm_head is only on last rank)
+    vocab_size: int = model.model.config.vocab_size  # pyright: ignore[reportAny]
     last_rank: int = world_size - 1
 
     # --- Prefill Phase + Decode Loop wrapped in error handling (task 2.4) ---
@@ -524,8 +524,8 @@ def distributed_worker_loop(
     iteration: int = 0
     target_device: str = f"{device_type}:{device_id}"
 
-    # Determine vocab_size from model's lm_head (needed for logits shape on last rank)
-    vocab_size: int = model.lm_head.weight.shape[0] if is_last_rank else 0  # pyright: ignore[reportAny, reportUnusedVariable]
+    # Determine vocab_size from model config (needed for logits shape on last rank)
+    vocab_size: int = model.model.config.vocab_size if is_last_rank else 0  # pyright: ignore[reportAny, reportUnusedVariable]
 
     # --- Worker loop body (tasks 4.2, 4.3, 4.4) ---
     # Wrap in try/except for RuntimeError from Gloo and model errors (Requirements: 1.6, 5.5, 6.4)

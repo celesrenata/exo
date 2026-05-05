@@ -45,8 +45,9 @@ class MockLmHead:
 class MockConfig:
     """Mock model config."""
 
-    def __init__(self, hidden_size: int) -> None:
+    def __init__(self, hidden_size: int, vocab_size: int = 0) -> None:
         self.hidden_size = hidden_size
+        self.vocab_size = vocab_size
 
 
 class MockTransformerShard:
@@ -62,10 +63,17 @@ class MockTransformerShard:
         self.vocab_size = vocab_size
         self.is_last_rank = is_last_rank
         self.lm_head = MockLmHead(vocab_size)
-        self.config = MockConfig(hidden_size)
+        self.config = MockConfig(hidden_size, vocab_size)
         self.forward_count = 0
         self.error_on_iteration: int | None = None
         self._lock = threading.Lock()
+
+        # Simulate the nested model.model.config structure used by TransformerShard
+        class _InnerModel:
+            def __init__(self, config: MockConfig) -> None:
+                self.config = config
+
+        self.model = _InnerModel(MockConfig(hidden_size, vocab_size))
 
     def forward(
         self, input_data: torch.Tensor, past_key_values: Any = None

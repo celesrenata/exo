@@ -547,6 +547,7 @@ class TestEOSTokenTerminatesWithStop:
         mock_model = MagicMock()
         # model.lm_head.weight.shape[0] returns vocab_size
         mock_model.lm_head.weight.shape = (vocab_size,)
+        mock_model.model.config.vocab_size = vocab_size
         # model.forward() returns (hidden_states, past_key_values)
         # hidden_states shape: (1, 1, hidden_size) — doesn't matter for rank 0 logic
         mock_hidden_states = torch.randn(1, 1, 64)
@@ -642,6 +643,7 @@ class TestEOSTokenTerminatesWithStop:
         # --- Create mock model ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (vocab_size,)
+        mock_model.model.config.vocab_size = vocab_size
         mock_hidden_states = torch.randn(1, 1, 64)
         mock_past_kv: list[tuple[torch.Tensor, torch.Tensor]] = [
             (torch.randn(1, 4, 1, 16), torch.randn(1, 4, 1, 16))
@@ -766,6 +768,7 @@ class TestMaxTokensTerminatesWithLength:
         # --- Create mock model ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (vocab_size,)
+        mock_model.model.config.vocab_size = vocab_size
         mock_hidden_states = torch.randn(1, 1, 64)
         mock_past_kv: list[tuple[torch.Tensor, torch.Tensor]] = [
             (torch.randn(1, 4, 1, 16), torch.randn(1, 4, 1, 16))
@@ -857,6 +860,7 @@ class TestMaxTokensTerminatesWithLength:
         # --- Create mock model ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (vocab_size,)
+        mock_model.model.config.vocab_size = vocab_size
         mock_hidden_states = torch.randn(1, 1, 64)
         mock_past_kv: list[tuple[torch.Tensor, torch.Tensor]] = [
             (torch.randn(1, 4, 1, 16), torch.randn(1, 4, 1, 16))
@@ -957,6 +961,7 @@ class TestGenerationResponseContainsAllRequiredFields:
         # --- Create mock model ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (vocab_size,)
+        mock_model.model.config.vocab_size = vocab_size
         mock_hidden_states = torch.randn(1, 1, 64)
         mock_past_kv: list[tuple[torch.Tensor, torch.Tensor]] = [
             (torch.randn(1, 4, 1, 16), torch.randn(1, 4, 1, 16))
@@ -1081,6 +1086,7 @@ class TestGenerationResponseContainsAllRequiredFields:
         # --- Create mock model ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (vocab_size,)
+        mock_model.model.config.vocab_size = vocab_size
         mock_hidden_states = torch.randn(1, 1, 64)
         mock_past_kv: list[tuple[torch.Tensor, torch.Tensor]] = [
             (torch.randn(1, 4, 1, 16), torch.randn(1, 4, 1, 16))
@@ -1235,6 +1241,7 @@ class TestOnlyRank0ProducesOutput:
         # --- Create mock model ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (hidden_size,)  # vocab_size for last rank
+        mock_model.model.config.vocab_size = hidden_size
         mock_hidden_states = torch.randn(1, 1, hidden_size)
         mock_past_kv: list[tuple[torch.Tensor, torch.Tensor]] = [
             (torch.randn(1, 4, 1, 16), torch.randn(1, 4, 1, 16))
@@ -1350,6 +1357,7 @@ class TestInputTensorShapeReflectsGenerationPhase:
         # --- Create mock model that records input_data shapes ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (vocab_size,)
+        mock_model.model.config.vocab_size = vocab_size
         mock_hidden_states = torch.randn(1, 1, 64)
         mock_past_kv: list[tuple[torch.Tensor, torch.Tensor]] = [
             (torch.randn(1, 4, 1, 16), torch.randn(1, 4, 1, 16))
@@ -1519,6 +1527,7 @@ class TestKVCacheGrowsCorrectlyAcrossPhases:
         # --- Create mock model ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (vocab_size,)
+        mock_model.model.config.vocab_size = vocab_size
         mock_model.forward.side_effect = forward_side_effect
 
         # --- Create mock tokenizer ---
@@ -1657,6 +1666,7 @@ class TestAllRanksExecuteEqualIterations:
         # --- Create mock model that counts forward calls ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (vocab_size,)
+        mock_model.model.config.vocab_size = vocab_size
         mock_hidden_states = torch.randn(1, 1, 64)
         mock_past_kv: list[tuple[torch.Tensor, torch.Tensor]] = [
             (torch.randn(1, 4, 1, 16), torch.randn(1, 4, 1, 16))
@@ -1742,6 +1752,7 @@ class TestAllRanksExecuteEqualIterations:
         # --- Create mock model that counts forward calls ---
         mock_model = MagicMock()
         mock_model.lm_head.weight.shape = (hidden_size,)  # vocab_size for last rank
+        mock_model.model.config.vocab_size = hidden_size
         mock_hidden_states = torch.randn(1, 1, hidden_size)
         mock_past_kv: list[tuple[torch.Tensor, torch.Tensor]] = [
             (torch.randn(1, 4, 1, 16), torch.randn(1, 4, 1, 16))
