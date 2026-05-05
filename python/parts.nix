@@ -160,7 +160,11 @@
                   pillow
                   safetensors
                   tokenizers
-                  transformers
+                  (transformers.overridePythonAttrs (old: {
+                    # Skip runtime deps check — all deps are provided at runtime via propagatedBuildInputs
+                    dontUsePythonRuntimeDepsCheck = true;
+                    pythonRuntimeDepsCheck = false;
+                  }))
                   numpy
                   python-multipart
                   openai-harmony
