@@ -275,6 +275,9 @@ async fn networking_task(
                         }
                     },
                     Behaviour(Discovery(discovery::Event::ConnectionEstablished { peer_id, remote_ip, remote_tcp_port, .. })) => {
+                        // Add peer to gossipsub mesh so messages propagate
+                        swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+
                         // grab IPv4 string
                         let remote_ipv4 = match remote_ip {
                             IpAddr::V4(ip) => ip.to_string(),
@@ -296,6 +299,9 @@ async fn networking_task(
                         }
                     },
                     Behaviour(Discovery(discovery::Event::ConnectionClosed { peer_id, remote_ip, remote_tcp_port, .. })) => {
+                        // Remove peer from gossipsub mesh
+                        swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+
                         // grab IPv4 string
                         let remote_ipv4 = match remote_ip {
                             IpAddr::V4(ip) => ip.to_string(),
