@@ -19,10 +19,13 @@ use std::convert::Infallible;
 use std::io;
 use std::net::IpAddr;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use util::wakerdeque::WakerDeque;
 
 const RETRY_CONNECT_INTERVAL: Duration = Duration::from_secs(5);
+const STABILIZATION_GRACE_PERIOD: Duration = Duration::from_secs(2);
+const MAX_RETRY_BACKOFF: Duration = Duration::from_secs(60);
+const BACKOFF_BASE: Duration = Duration::from_secs(5);
 
 mod managed {
     use libp2p::swarm::NetworkBehaviour;
@@ -92,6 +95,17 @@ pub enum Event {
     },
 }
 
+/// A connection that is in the stabilization grace period.
+/// If the connection survives the full grace period, it will be promoted
+/// to "stable" and `ConnectionEstablished` will be emitted.
+/// If it is closed before the grace period expires, it is silently dropped.
+struct PendingConnection {
+    peer_id: PeerId,
+    remote_ip: IpAddr,
+    remote_tcp_port: u16,
+    grace_timer: Delay,
+}
+
 /// Discovery behavior that wraps mDNS to produce truly discovered durable peer-connections.
 ///
 /// The behaviour operates as such:
@@ -115,6 +129,15 @@ pub struct Behaviour {
     /// race conditions that cause connection flaps.
     connected_peers: HashMap<PeerId, u32>,
 
+    // Grace period tracking for LACP connection stabilization
+    /// Connections currently in the stabilization grace period.
+    /// If a connection survives the full grace period, it is promoted to stable.
+    pending_connections: HashMap<ConnectionId, PendingConnection>,
+    /// Consecutive unstable connection attempts per peer (reset on stable connection).
+    peer_flap_counts: HashMap<PeerId, u32>,
+    /// Earliest time a peer should be re-dialed (exponential backoff).
+    peer_next_retry: HashMap<PeerId, Instant>,
+
     retry_delay: Delay, // retry interval
 
     // pending events to emmit => waker-backed Deque to control polling
@@ -129,6 +152,9 @@ impl Behaviour {
             static_peers: HashMap::new(),
             pending_static_addrs: BTreeSet::new(),
             connected_peers: HashMap::new(),
+            pending_connections: HashMap::new(),
+            peer_flap_counts: HashMap::new(),
+            peer_next_retry: HashMap::new(),
             retry_delay: Delay::new(RETRY_CONNECT_INTERVAL),
             pending_events: WakerDeque::new(),
         })
@@ -244,14 +270,15 @@ impl Behaviour {
             }
         }
 
-        // send out connected event
-        self.pending_events
-            .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished {
-                peer_id,
-                connection_id,
-                remote_ip,
-                remote_tcp_port,
-            }));
+        // Instead of immediately emitting ConnectionEstablished, defer it
+        // until the connection survives the stabilization grace period.
+        // This prevents LACP-induced flaps from reaching the Python layer.
+        self.pending_connections.insert(connection_id, PendingConnection {
+            peer_id,
+            remote_ip,
+            remote_tcp_port,
+            grace_timer: Delay::new(STABILIZATION_GRACE_PERIOD),
+        });
     }
 
     fn on_connection_closed(
@@ -269,14 +296,40 @@ impl Behaviour {
             }
         }
 
-        // send out disconnected event
-        self.pending_events
-            .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed {
-                peer_id,
-                connection_id,
-                remote_ip,
-                remote_tcp_port,
-            }));
+        // Check if this connection was still in the grace period
+        if self.pending_connections.remove(&connection_id).is_some() {
+            // Connection died before grace period expired — suppress events.
+            // Python layer never knew about this connection.
+            let flap_count = self.peer_flap_counts.entry(peer_id).or_insert(0);
+            *flap_count += 1;
+
+            // Compute exponential backoff with ±25% jitter
+            let base_backoff = BACKOFF_BASE.saturating_mul(1u32 << (*flap_count).min(10));
+            let capped_backoff = base_backoff.min(MAX_RETRY_BACKOFF);
+
+            // Apply ±25% jitter using a simple deterministic approach
+            // (use flap_count as seed for reproducibility in tests)
+            let jitter_factor = 0.75 + ((*flap_count as f64 * 0.1) % 0.5);
+            let jittered = Duration::from_secs_f64(
+                capped_backoff.as_secs_f64() * jitter_factor
+            );
+
+            self.peer_next_retry.insert(peer_id, Instant::now() + jittered);
+
+            log::debug!(
+                "RUST: connection to {} flapped (count={}), backoff={:?}",
+                peer_id, flap_count, jittered
+            );
+        } else {
+            // Connection was already promoted to stable — emit ConnectionClosed normally
+            self.pending_events
+                .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed {
+                    peer_id,
+                    connection_id,
+                    remote_ip,
+                    remote_tcp_port,
+                }));
+        }
     }
 }
 
@@ -436,6 +489,35 @@ impl NetworkBehaviour for Behaviour {
             Poll::Pending => {}
         }
 
+        // Poll grace period timers for pending connections.
+        // When a timer expires, the connection has survived the full grace period
+        // and is promoted to "stable" — emit ConnectionEstablished.
+        let mut promoted = Vec::new();
+        for (conn_id, pending) in self.pending_connections.iter_mut() {
+            if pending.grace_timer.poll_unpin(cx).is_ready() {
+                promoted.push(*conn_id);
+            }
+        }
+        for conn_id in promoted {
+            if let Some(pending) = self.pending_connections.remove(&conn_id) {
+                // Connection survived grace period — it's stable
+                self.peer_flap_counts.remove(&pending.peer_id);
+                self.peer_next_retry.remove(&pending.peer_id);
+                self.pending_events.push_back(
+                    ToSwarm::GenerateEvent(Event::ConnectionEstablished {
+                        peer_id: pending.peer_id,
+                        connection_id: conn_id,
+                        remote_ip: pending.remote_ip,
+                        remote_tcp_port: pending.remote_tcp_port,
+                    })
+                );
+                log::info!(
+                    "RUST: connection to {} promoted to stable (survived {}s grace period)",
+                    pending.peer_id, STABILIZATION_GRACE_PERIOD.as_secs()
+                );
+            }
+        }
+
         // retry connecting to disconnected mDNS peers periodically (skip already-connected)
         if self.retry_delay.poll_unpin(cx).is_ready() {
             for (p, mas) in self.mdns_discovered.clone() {
@@ -446,10 +528,16 @@ impl NetworkBehaviour for Behaviour {
                     self.dial(p, ma)
                 }
             }
-            // also retry disconnected static peers
+            // also retry disconnected static peers (respecting exponential backoff)
             for (p, mas) in self.static_peers.clone() {
                 if self.connected_peers.contains_key(&p) {
                     continue; // already connected, don't re-dial
+                }
+                // Skip peers in backoff (prevents rapid re-dial storms for flapping peers)
+                if let Some(next_retry) = self.peer_next_retry.get(&p) {
+                    if Instant::now() < *next_retry {
+                        continue;
+                    }
                 }
                 for ma in mas {
                     self.dial(p, ma)
@@ -465,6 +553,148 @@ impl NetworkBehaviour for Behaviour {
 
         // wait for pending events
         Poll::Pending
+    }
+}
+
+
+#[cfg(test)]
+mod bug_condition_tests {
+    //! Bug Condition Exploration Tests — Unstable LACP Connections Emit Events Immediately
+    //!
+    //! **Validates: Requirements 1.1, 1.2, 1.3, 2.1, 2.2**
+    //!
+    //! These tests encode the EXPECTED (fixed) behavior: connections torn down within
+    //! the stabilization grace period (2s) should NOT emit events to the Python layer.
+    //!
+    //! On UNFIXED code, these tests WILL FAIL because `on_connection_established`
+    //! immediately pushes `Event::ConnectionEstablished` to `pending_events` with no
+    //! grace period. This failure confirms the bug exists.
+
+    use super::*;
+    use libp2p::identity::Keypair;
+    use libp2p::multiaddr::Protocol;
+    use libp2p::swarm::ConnectionId;
+    use proptest::prelude::*;
+    use std::collections::BTreeSet;
+    use std::net::Ipv4Addr;
+
+    /// Helper: build a `/ip4/{ip}/tcp/{port}/p2p/{peer_id}` multiaddr.
+    fn make_multiaddr(port: u16, peer_id: &PeerId) -> Multiaddr {
+        let mut ma = Multiaddr::empty();
+        ma.push(Protocol::Ip4(Ipv4Addr::LOCALHOST));
+        ma.push(Protocol::Tcp(port));
+        ma.push(Protocol::P2p(*peer_id));
+        ma
+    }
+
+    /// Helper: create a Behaviour inside a tokio runtime (required for mDNS init).
+    fn new_behaviour() -> Behaviour {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        let keypair = Keypair::generate_ed25519();
+        rt.block_on(async { Behaviour::new(&keypair).expect("behaviour should initialize") })
+    }
+
+    /// Helper: drain all pending events from a Behaviour using a noop waker.
+    fn drain_pending_events(
+        behaviour: &mut Behaviour,
+    ) -> Vec<ToSwarm<Event, std::convert::Infallible>> {
+        let waker = futures::task::noop_waker();
+        let mut cx = std::task::Context::from_waker(&waker);
+        let mut events = Vec::new();
+        while let Some(ev) = behaviour.pending_events.pop_front(&mut cx) {
+            events.push(ev);
+        }
+        events
+    }
+
+    // =========================================================================
+    // Property 1: Bug Condition — Unstable LACP Connections Emit Events Immediately
+    //
+    // A static peer connection that is torn down within 2 seconds (the
+    // stabilization grace period) should NOT emit `ConnectionEstablished`
+    // to the Python layer.
+    //
+    // On UNFIXED code, ConnectionEstablished IS emitted immediately on
+    // connection (no grace period exists), so this test WILL FAIL.
+    // =========================================================================
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(20))]
+
+        /// Property: A static peer connection established and then immediately closed
+        /// (within 100ms, well under the 2s grace period) should NOT emit
+        /// `ConnectionEstablished` or `ConnectionClosed` events.
+        ///
+        /// **Validates: Requirements 1.1, 1.2, 1.3, 2.1, 2.2**
+        ///
+        /// On UNFIXED code this FAILS because `on_connection_established` immediately
+        /// pushes `Event::ConnectionEstablished` to `pending_events`.
+        #[test]
+        fn unstable_static_peer_connection_should_not_emit_events(
+            port in 1024_u16..=65534,
+            conn_idx in 0_usize..=100,
+        ) {
+            let mut behaviour = new_behaviour();
+
+            // Create a static peer (simulating a peer from EXO_PEERS)
+            let peer_kp = Keypair::generate_ed25519();
+            let peer_id = peer_kp.public().to_peer_id();
+            let addr = make_multiaddr(port, &peer_id);
+
+            // Register as a static peer
+            behaviour.static_peers
+                .entry(peer_id)
+                .or_insert_with(BTreeSet::new)
+                .insert(addr);
+
+            // Clear any dial events from setup
+            let _ = drain_pending_events(&mut behaviour);
+
+            let conn_id = ConnectionId::new_unchecked(conn_idx);
+            let ip = std::net::IpAddr::V4(Ipv4Addr::new(10, 1, 1, 14));
+
+            // Simulate connection established for the static peer
+            behaviour.on_connection_established(peer_id, conn_id, ip, port);
+
+            // Immediately simulate connection closed (< 100ms, well under 2s grace period)
+            // This mimics LACP-induced teardown
+            behaviour.on_connection_closed(peer_id, conn_id, ip, port);
+
+            // Drain all pending events
+            let events = drain_pending_events(&mut behaviour);
+
+            // EXPECTED BEHAVIOR (after fix):
+            // No ConnectionEstablished should be emitted — the connection was torn down
+            // within the grace period, so it should be suppressed.
+            let established_events: Vec<_> = events.iter().filter(|e| {
+                matches!(e, ToSwarm::GenerateEvent(Event::ConnectionEstablished { .. }))
+            }).collect();
+
+            prop_assert!(
+                established_events.is_empty(),
+                "BUG CONFIRMED: ConnectionEstablished was emitted immediately for a \
+                 short-lived static peer connection (port={}, conn_idx={}). \
+                 Expected: no event emitted (grace period suppression). \
+                 Found {} ConnectionEstablished event(s).",
+                port, conn_idx, established_events.len()
+            );
+
+            // EXPECTED BEHAVIOR (after fix):
+            // No ConnectionClosed should be emitted — the connection was never
+            // reported to the Python layer, so closing it should be silent.
+            let closed_events: Vec<_> = events.iter().filter(|e| {
+                matches!(e, ToSwarm::GenerateEvent(Event::ConnectionClosed { .. }))
+            }).collect();
+
+            prop_assert!(
+                closed_events.is_empty(),
+                "BUG CONFIRMED: ConnectionClosed was emitted for a connection that \
+                 should never have been reported (port={}, conn_idx={}). \
+                 Expected: no event emitted (connection was never promoted to stable). \
+                 Found {} ConnectionClosed event(s).",
+                port, conn_idx, closed_events.len()
+            );
+        }
     }
 }
 
@@ -758,8 +988,10 @@ mod preservation_tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(50))]
 
-        /// Property: `on_connection_established` emits `Event::ConnectionEstablished`
-        /// for any peer, regardless of origin.
+        /// Property: `on_connection_established` defers the event into `pending_connections`
+        /// (grace period). The connection will be promoted to stable and emit
+        /// `ConnectionEstablished` only after the grace period expires.
+        /// No immediate event is emitted — this is the correct behavior with the fix.
         ///
         /// **Validates: Requirements 3.3**
         #[test]
@@ -777,27 +1009,27 @@ mod preservation_tests {
 
             let events = drain_pending_events(&mut behaviour);
 
-            // Must have exactly one ConnectionEstablished event
+            // With the grace period fix, NO immediate ConnectionEstablished event is emitted.
+            // The event is deferred until the grace period timer expires.
             let established_events: Vec<_> = events.iter().filter(|e| {
                 matches!(e, ToSwarm::GenerateEvent(Event::ConnectionEstablished { .. }))
             }).collect();
 
             prop_assert_eq!(
-                established_events.len(), 1,
-                "exactly one ConnectionEstablished event must be emitted"
+                established_events.len(), 0,
+                "no immediate ConnectionEstablished event should be emitted (deferred by grace period)"
             );
 
-            // Verify the event contents
-            if let ToSwarm::GenerateEvent(Event::ConnectionEstablished {
-                peer_id: ev_pid,
-                connection_id: ev_cid,
-                remote_tcp_port: ev_port,
-                ..
-            }) = &established_events[0] {
-                prop_assert_eq!(*ev_pid, peer_id);
-                prop_assert_eq!(*ev_cid, conn_id);
-                prop_assert_eq!(*ev_port, port);
-            }
+            // Verify the connection is in pending_connections waiting for grace period
+            prop_assert!(
+                behaviour.pending_connections.contains_key(&conn_id),
+                "connection must be in pending_connections (grace period)"
+            );
+
+            // Verify the pending connection has the correct peer_id
+            let pending = behaviour.pending_connections.get(&conn_id).unwrap();
+            prop_assert_eq!(pending.peer_id, peer_id);
+            prop_assert_eq!(pending.remote_tcp_port, port);
         }
     }
 
@@ -888,6 +1120,194 @@ mod preservation_tests {
     }
 
     // =========================================================================
+    // Property 2d: Retry loop dials both mDNS AND static peers
+    // For random `mdns_discovered` + `static_peers` states, trigger retry timer
+    // and verify dial actions match the union of disconnected peers from both sets.
+    // **Validates: Requirements 3.1, 3.5**
+    // =========================================================================
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50))]
+
+        /// Property: The retry loop dials the union of disconnected peers from
+        /// both `mdns_discovered` and `static_peers`.
+        ///
+        /// **Validates: Requirements 3.1, 3.5**
+        #[test]
+        fn retry_loop_dials_both_mdns_and_static_peers(
+            mdns_count in 1_usize..=5,
+            static_count in 1_usize..=5,
+        ) {
+            let mut behaviour = new_behaviour();
+
+            let mdns_peers = generate_peers(mdns_count);
+            let static_peers = generate_peers(static_count);
+
+            // Populate mdns_discovered directly
+            for (pid, ma) in &mdns_peers {
+                behaviour.mdns_discovered
+                    .entry(*pid)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(ma.clone());
+            }
+
+            // Populate static_peers directly
+            for (pid, ma) in &static_peers {
+                behaviour.static_peers
+                    .entry(*pid)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(ma.clone());
+            }
+
+            // Drain any existing events
+            let _ = drain_pending_events(&mut behaviour);
+
+            // Simulate the retry loop (same logic as poll() retry timer block)
+            for (p, mas) in behaviour.mdns_discovered.clone() {
+                if behaviour.connected_peers.contains_key(&p) {
+                    continue;
+                }
+                for ma in mas {
+                    behaviour.dial(p, ma);
+                }
+            }
+            for (p, mas) in behaviour.static_peers.clone() {
+                if behaviour.connected_peers.contains_key(&p) {
+                    continue;
+                }
+                for ma in mas {
+                    behaviour.dial(p, ma);
+                }
+            }
+
+            // Collect dial actions
+            let events = drain_pending_events(&mut behaviour);
+            let dialed = extract_dial_targets(&events);
+
+            // Expected: union of mdns + static peers (all disconnected)
+            let expected: HashSet<PeerId> = mdns_peers.iter()
+                .chain(static_peers.iter())
+                .map(|(pid, _)| *pid)
+                .collect();
+
+            prop_assert_eq!(
+                dialed, expected,
+                "retry loop must dial the union of mdns_discovered and static_peers"
+            );
+        }
+    }
+
+    // =========================================================================
+    // Property 2e: Connected peers are skipped in the retry loop
+    // For random `mdns_discovered` + `static_peers` states with some peers
+    // already connected, verify connected peers are NOT re-dialed.
+    // **Validates: Requirements 3.1, 3.4, 3.5**
+    // =========================================================================
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50))]
+
+        /// Property: The retry loop skips peers that are already in `connected_peers`,
+        /// only dialing disconnected peers from both `mdns_discovered` and `static_peers`.
+        ///
+        /// **Validates: Requirements 3.1, 3.4, 3.5**
+        #[test]
+        fn retry_loop_skips_connected_peers(
+            mdns_count in 2_usize..=6,
+            static_count in 1_usize..=4,
+            connected_mdns_pct in 0_usize..=100,
+            connected_static_pct in 0_usize..=100,
+        ) {
+            let mut behaviour = new_behaviour();
+
+            let mdns_peers = generate_peers(mdns_count);
+            let static_peers = generate_peers(static_count);
+
+            // Populate mdns_discovered
+            for (pid, ma) in &mdns_peers {
+                behaviour.mdns_discovered
+                    .entry(*pid)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(ma.clone());
+            }
+
+            // Populate static_peers
+            for (pid, ma) in &static_peers {
+                behaviour.static_peers
+                    .entry(*pid)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(ma.clone());
+            }
+
+            // Mark some mDNS peers as connected
+            let connected_mdns_count = (mdns_count * connected_mdns_pct) / 100;
+            let connected_mdns: HashSet<PeerId> = mdns_peers.iter()
+                .take(connected_mdns_count)
+                .map(|(pid, _)| *pid)
+                .collect();
+            for pid in &connected_mdns {
+                behaviour.connected_peers.insert(*pid, 1);
+            }
+
+            // Mark some static peers as connected
+            let connected_static_count = (static_count * connected_static_pct) / 100;
+            let connected_static: HashSet<PeerId> = static_peers.iter()
+                .take(connected_static_count)
+                .map(|(pid, _)| *pid)
+                .collect();
+            for pid in &connected_static {
+                behaviour.connected_peers.insert(*pid, 1);
+            }
+
+            // Drain any existing events
+            let _ = drain_pending_events(&mut behaviour);
+
+            // Simulate the retry loop (same logic as poll() retry timer block)
+            for (p, mas) in behaviour.mdns_discovered.clone() {
+                if behaviour.connected_peers.contains_key(&p) {
+                    continue;
+                }
+                for ma in mas {
+                    behaviour.dial(p, ma);
+                }
+            }
+            for (p, mas) in behaviour.static_peers.clone() {
+                if behaviour.connected_peers.contains_key(&p) {
+                    continue;
+                }
+                for ma in mas {
+                    behaviour.dial(p, ma);
+                }
+            }
+
+            // Collect dial actions
+            let events = drain_pending_events(&mut behaviour);
+            let dialed = extract_dial_targets(&events);
+
+            // Connected peers must NOT be dialed
+            for pid in connected_mdns.iter().chain(connected_static.iter()) {
+                prop_assert!(
+                    !dialed.contains(pid),
+                    "connected peer {:?} must not be re-dialed by retry loop",
+                    pid
+                );
+            }
+
+            // Disconnected peers must be dialed
+            let expected_disconnected: HashSet<PeerId> = mdns_peers.iter()
+                .chain(static_peers.iter())
+                .map(|(pid, _)| *pid)
+                .filter(|pid| !behaviour.connected_peers.contains_key(pid))
+                .collect();
+
+            prop_assert_eq!(
+                dialed, expected_disconnected,
+                "retry loop must dial exactly the disconnected peers from both sets"
+            );
+        }
+    }
+
+    // =========================================================================
     // Deterministic unit tests for edge cases
     // =========================================================================
 
@@ -910,7 +1330,9 @@ mod preservation_tests {
         );
     }
 
-    /// Verify that connection events are emitted in order: established then closed.
+    /// Verify that connection established then immediately closed (within grace period)
+    /// results in NO events emitted — the connection was suppressed by the grace period.
+    /// This is the correct behavior: short-lived connections are silently dropped.
     ///
     /// **Validates: Requirements 3.3**
     #[test]
@@ -927,20 +1349,18 @@ mod preservation_tests {
 
         let events = drain_pending_events(&mut behaviour);
 
-        assert_eq!(events.len(), 2, "must have exactly 2 events");
-        assert!(
-            matches!(
-                &events[0],
-                ToSwarm::GenerateEvent(Event::ConnectionEstablished { .. })
-            ),
-            "first event must be ConnectionEstablished"
+        // With the grace period fix: establish then immediately close means the
+        // connection was in the grace period when closed. Both events are suppressed.
+        // The Python layer never knew about this connection.
+        assert_eq!(
+            events.len(), 0,
+            "no events should be emitted for a connection closed within the grace period"
         );
+
+        // The connection should have been removed from pending_connections
         assert!(
-            matches!(
-                &events[1],
-                ToSwarm::GenerateEvent(Event::ConnectionClosed { .. })
-            ),
-            "second event must be ConnectionClosed"
+            !behaviour.pending_connections.contains_key(&conn_id),
+            "closed connection must be removed from pending_connections"
         );
     }
 

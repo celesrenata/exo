@@ -1,0 +1,154 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** — Unstable LACP Connections Emit Events Immediately
+  - **CRITICAL**: This test MUST FAIL on unfixed code — failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior — it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists (no grace period suppression)
+  - **Scoped PBT Approach**: Scope the property to the concrete failing case — a static peer connection that is torn down within 2 seconds (the stabilization grace period) should NOT emit `ConnectionEstablished` to the Python layer
+  - **Test location**: `rust/networking/src/discovery.rs` (inline `#[cfg(test)]` module)
+  - **What to test**:
+    - Create a `Behaviour` instance
+    - Simulate `on_connection_established` for a static peer (inject `FromSwarm::ConnectionEstablished` event)
+    - Immediately simulate `on_connection_closed` (within 100ms, well under the 2s grace period)
+    - Poll the behaviour and collect emitted events
+    - Assert that `Event::ConnectionEstablished` is NOT in the emitted events (grace period suppression)
+    - Assert that `Event::ConnectionClosed` is NOT in the emitted events (connection was never reported)
+  - **Bug Condition from design**: `isBugCondition(input)` where `input.peer_id IN static_peers AND input.connection_lifetime < STABILIZATION_GRACE_PERIOD (2s) AND input.consecutive_unstable_attempts > 0`
+  - **Expected Behavior from design**: Connections torn down within the grace period are suppressed — no events emitted to Python layer, flap count incremented, backoff applied
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS — on unfixed code, `ConnectionEstablished` is emitted immediately on connection (no grace period exists), so the assertion that it should NOT be emitted will fail. This proves the bug exists.
+  - Document counterexamples found to understand root cause
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** — Stable Connection Events and mDNS Lifecycle Unchanged
+  - **IMPORTANT**: Follow observation-first methodology
+  - **Test location**: `rust/networking/src/discovery.rs` (inline `#[cfg(test)]` module)
+  - **Observe on UNFIXED code**:
+    - Observe: `on_connection_established` emits `Event::ConnectionEstablished` for any peer (mDNS or static)
+    - Observe: `on_connection_closed` emits `Event::ConnectionClosed` for any previously-established connection
+    - Observe: `handle_mdns_discovered` inserts into `mdns_discovered` and emits `ToSwarm::Dial`
+    - Observe: `handle_mdns_expired` removes from `mdns_discovered`
+    - Observe: `poll()` retry timer dials all disconnected peers in `mdns_discovered` and `static_peers`
+    - Observe: ping failure triggers `CloseConnection` for the specific peer
+  - **Write property-based tests** (use `proptest` crate or manual randomized sequences):
+    - For connections that survive beyond 2 seconds (non-bug-condition), verify `Event::ConnectionEstablished` is emitted exactly once per connection
+    - For connections that are closed after being reported stable, verify `Event::ConnectionClosed` is emitted exactly once
+    - For random mDNS discover/expire sequences, verify `mdns_discovered` state is consistent
+    - For random `mdns_discovered` + `static_peers` states, trigger retry timer and verify dial actions match the union of disconnected peers from both sets
+  - **Preservation Requirements from design**: mDNS lifecycle unchanged; `ConnectionEstablished`/`ConnectionClosed` fire for stable connections (those surviving grace period); ping disconnection unchanged; gossipsub routing unchanged; retry loop dials both mDNS and static peers
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (confirms baseline behavior to preserve — on unfixed code, all connections are "stable" since there's no grace period, so events always fire)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [x] 3. Implement the LACP connection stabilization fix
+
+  - [x] 3.1 Add grace period constants and `PendingConnection` struct
+    - In `rust/networking/src/discovery.rs`, add constants:
+      - `const STABILIZATION_GRACE_PERIOD: Duration = Duration::from_secs(2);`
+      - `const MAX_RETRY_BACKOFF: Duration = Duration::from_secs(60);`
+      - `const BACKOFF_BASE: Duration = Duration::from_secs(5);`
+    - Add `PendingConnection` struct with fields: `peer_id: PeerId`, `remote_ip: IpAddr`, `remote_tcp_port: u16`, `grace_timer: Delay`
+    - _Bug_Condition: No grace period exists — connections emit events immediately regardless of lifetime_
+    - _Expected_Behavior: Grace period timer defers event emission until connection proves durable_
+    - _Requirements: 2.1_
+
+  - [x] 3.2 Add `pending_connections`, `peer_flap_counts`, and `peer_next_retry` fields to `Behaviour`
+    - Add `pending_connections: HashMap<ConnectionId, PendingConnection>` — connections in grace period
+    - Add `peer_flap_counts: HashMap<PeerId, u32>` — consecutive unstable attempts per peer
+    - Add `peer_next_retry: HashMap<PeerId, Instant>` — earliest retry time per peer (backoff)
+    - Initialize all as `HashMap::new()` in `Behaviour::new()`
+    - Import `std::time::Instant` and `tokio::time::Instant` (or `futures_timer` equivalent)
+    - _Bug_Condition: No tracking of connection stability or flap history_
+    - _Expected_Behavior: Track pending connections, flap counts, and backoff timers_
+    - _Preservation: Existing fields (mdns_discovered, static_peers, connected_peers) unchanged_
+    - _Requirements: 2.1, 2.2, 2.3_
+
+  - [x] 3.3 Modify `on_connection_established` to defer event emission
+    - Instead of immediately pushing `Event::ConnectionEstablished` to `pending_events`:
+      - Insert the connection into `pending_connections` with a `Delay::new(STABILIZATION_GRACE_PERIOD)` grace timer
+      - Still increment `connected_peers` count (prevents duplicate dials during grace period)
+    - The event will be emitted later when the grace timer expires in `poll()`
+    - _Bug_Condition: ConnectionEstablished emitted immediately — Python sees flap pairs_
+    - _Expected_Behavior: Event deferred until connection survives grace period_
+    - _Preservation: connected_peers still incremented immediately (dial suppression preserved)_
+    - _Requirements: 2.1, 2.2_
+
+  - [x] 3.4 Modify `on_connection_closed` to suppress events for pending connections
+    - Check if the closed connection is in `pending_connections`:
+      - If YES: remove from `pending_connections` WITHOUT emitting `ConnectionClosed` (Python never knew about it). Increment `peer_flap_counts[peer_id]`. Compute next retry time: `min(BACKOFF_BASE * 2^flap_count, MAX_RETRY_BACKOFF)` with ±25% jitter. Store in `peer_next_retry[peer_id]`.
+      - If NO (connection was already promoted to stable): emit `Event::ConnectionClosed` as before
+    - Still decrement `connected_peers` count in both cases
+    - _Bug_Condition: ConnectionClosed emitted for every connection regardless of lifetime — Python sees flap pairs_
+    - _Expected_Behavior: Suppress events for connections that never survived grace period; track flaps and apply backoff_
+    - _Preservation: Stable connections (promoted past grace period) still emit ConnectionClosed normally_
+    - _Requirements: 2.2, 2.3, 2.4, 3.3_
+
+  - [x] 3.5 Add grace period polling in `poll()` method
+    - Before the retry timer check, add a loop that polls all `pending_connections` grace timers
+    - When a grace timer expires (connection survived the full grace period):
+      - Remove entry from `pending_connections`
+      - Reset `peer_flap_counts[peer_id]` to 0
+      - Clear `peer_next_retry[peer_id]`
+      - Push `Event::ConnectionEstablished` to `pending_events` (now safe to report)
+    - Use `poll_unpin(cx)` on each `Delay` to check readiness
+    - _Bug_Condition: No grace period polling — events emitted immediately_
+    - _Expected_Behavior: Grace timers polled each cycle; expired timers promote connections to stable_
+    - _Preservation: Existing poll() logic (retry timer, mDNS, ping) unchanged_
+    - _Requirements: 2.1, 3.3_
+
+  - [x] 3.6 Modify retry loop to respect exponential backoff
+    - In the retry timer block, before dialing a static peer, check `peer_next_retry`:
+      - If `Instant::now() < peer_next_retry[peer_id]`, skip that peer for this cycle
+    - This prevents rapid re-dial storms for peers that repeatedly flap
+    - mDNS peers are NOT subject to backoff (they have different lifecycle semantics)
+    - _Bug_Condition: Retry loop fires every 5s regardless of flap history — deterministic pattern hits same LACP timing window_
+    - _Expected_Behavior: Backed-off peers skipped until their next_retry time passes_
+    - _Preservation: mDNS retry behavior unchanged; non-flapping static peers dialed normally_
+    - _Requirements: 2.3, 2.4, 3.1_
+
+  - [x] 3.7 Enable TCP keepalive and port reuse in `swarm.rs`
+    - In `rust/networking/src/swarm.rs`, modify `tcp_transport()`:
+      - Add `.port_reuse(true)` to `Config::default()` — reuses listening port for outgoing connections, producing consistent LACP hash
+      - This is the most impactful single change for LACP stability (same source port → same hash → same slave)
+    - Note: libp2p's TCP `Config` may not directly expose keepalive. If available, set `TCP_KEEPIDLE=10s`, `TCP_KEEPINTVL=5s`, `TCP_KEEPCNT=3`. If not available via config API, document as a follow-up.
+    - _Bug_Condition: Each dial uses new ephemeral port → different LACP hash → different slave → instability_
+    - _Expected_Behavior: Port reuse produces consistent hash; keepalive maintains connections through brief slave transitions_
+    - _Preservation: TCP_NODELAY still enabled; noise+yamux negotiation unchanged_
+    - _Requirements: 2.1, 3.3_
+
+  - [x] 3.8 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** — Unstable Connections Are Suppressed
+    - **IMPORTANT**: Re-run the SAME test from task 1 — do NOT write a new test
+    - The test from task 1 encodes the expected behavior (grace period suppression)
+    - When this test passes, it confirms:
+      - Connections torn down within 2s do NOT emit `ConnectionEstablished`
+      - Connections torn down within 2s do NOT emit `ConnectionClosed`
+      - Flap count is incremented
+      - Backoff is applied to subsequent retry attempts
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+  - [x] 3.9 Verify preservation tests still pass
+    - **Property 2: Preservation** — Stable Connection Events and mDNS Lifecycle Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 — do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm:
+      - Connections surviving > 2s still emit `ConnectionEstablished` (after grace period)
+      - `ConnectionClosed` still emitted for stable connections
+      - mDNS discover/expire lifecycle unchanged
+      - Retry loop still dials all disconnected peers (mDNS + non-backed-off static peers)
+
+- [x] 4. Checkpoint — Ensure all tests pass
+  - Run the full Rust test suite: `cargo test` in `rust/` directory
+  - Run the PyO3 bindings tests: `cargo test -p exo_pyo3_bindings`
+  - Run Python tests: `LD_LIBRARY_PATH="/nix/store/cf1a53iqg6ncnygl698c4v0l8qam5a2q-gcc-14.3.0-lib/lib:$LD_LIBRARY_PATH" uv run pytest`
+  - Verify type checking passes: `uv run basedpyright`
+  - Verify linting passes: `uv run ruff check`
+  - Ensure all tests pass, ask the user if questions arise.
