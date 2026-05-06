@@ -270,15 +270,30 @@ impl Behaviour {
             }
         }
 
-        // Instead of immediately emitting ConnectionEstablished, defer it
-        // until the connection survives the stabilization grace period.
-        // This prevents LACP-induced flaps from reaching the Python layer.
-        self.pending_connections.insert(connection_id, PendingConnection {
-            peer_id,
-            remote_ip,
-            remote_tcp_port,
-            grace_timer: Delay::new(STABILIZATION_GRACE_PERIOD),
-        });
+        // If this is the FIRST connection to this peer (count was 0 before increment,
+        // now 1), apply the grace period to filter LACP flaps.
+        // If the peer already has other connections, emit immediately — this is just
+        // a duplicate/additional connection that doesn't need stabilization.
+        let peer_connection_count = *self.connected_peers.get(&peer_id).unwrap_or(&0);
+        if peer_connection_count > 1 {
+            // Peer already has other connections — emit immediately
+            self.pending_events
+                .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished {
+                    peer_id,
+                    connection_id,
+                    remote_ip,
+                    remote_tcp_port,
+                }));
+        } else {
+            // First connection to this peer — defer until grace period expires.
+            // This prevents LACP-induced flaps from reaching the Python layer.
+            self.pending_connections.insert(connection_id, PendingConnection {
+                peer_id,
+                remote_ip,
+                remote_tcp_port,
+                grace_timer: Delay::new(STABILIZATION_GRACE_PERIOD),
+            });
+        }
     }
 
     fn on_connection_closed(
