@@ -110,6 +110,10 @@ pub struct Behaviour {
     /// When a connection is established, we match the remote address
     /// and promote the peer to `static_peers` for retry tracking.
     pending_static_addrs: BTreeSet<Multiaddr>,
+    /// Peers with at least one active connection. Used to skip re-dialing
+    /// already-connected peers in the retry loop, preventing simultaneous-dial
+    /// race conditions that cause connection flaps.
+    connected_peers: HashMap<PeerId, u32>,
 
     retry_delay: Delay, // retry interval
 
@@ -124,6 +128,7 @@ impl Behaviour {
             mdns_discovered: HashMap::new(),
             static_peers: HashMap::new(),
             pending_static_addrs: BTreeSet::new(),
+            connected_peers: HashMap::new(),
             retry_delay: Delay::new(RETRY_CONNECT_INTERVAL),
             pending_events: WakerDeque::new(),
         })
@@ -201,6 +206,9 @@ impl Behaviour {
         remote_ip: IpAddr,
         remote_tcp_port: u16,
     ) {
+        // Track this peer as connected (increment connection count)
+        *self.connected_peers.entry(peer_id).or_insert(0) += 1;
+
         // Check if this connection matches a pending static addr (dialed without peer ID).
         // If so, promote to static_peers for automatic retry on disconnect.
         if !self.pending_static_addrs.is_empty() {
@@ -253,6 +261,14 @@ impl Behaviour {
         remote_ip: IpAddr,
         remote_tcp_port: u16,
     ) {
+        // Decrement connection count; remove peer if no connections remain
+        if let Some(count) = self.connected_peers.get_mut(&peer_id) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                self.connected_peers.remove(&peer_id);
+            }
+        }
+
         // send out disconnected event
         self.pending_events
             .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed {
@@ -420,15 +436,21 @@ impl NetworkBehaviour for Behaviour {
             Poll::Pending => {}
         }
 
-        // retry connecting to all mDNS peers periodically (fails safely if already connected)
+        // retry connecting to disconnected mDNS peers periodically (skip already-connected)
         if self.retry_delay.poll_unpin(cx).is_ready() {
             for (p, mas) in self.mdns_discovered.clone() {
+                if self.connected_peers.contains_key(&p) {
+                    continue; // already connected, don't re-dial
+                }
                 for ma in mas {
                     self.dial(p, ma)
                 }
             }
-            // also retry static peers
+            // also retry disconnected static peers
             for (p, mas) in self.static_peers.clone() {
+                if self.connected_peers.contains_key(&p) {
+                    continue; // already connected, don't re-dial
+                }
                 for ma in mas {
                     self.dial(p, ma)
                 }

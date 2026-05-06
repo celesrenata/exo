@@ -123,11 +123,14 @@ class TestSupportsTensorByArchitecture:
     ]
 
     QWEN_AND_GLM_CARDS = [
-        "Qwen--Qwen3.5-2B.toml",
-        "Qwen--Qwen3.5-4B.toml",
         "Qwen--Qwen3.6-27B.toml",
         "Qwen--Qwen3.6-35B-A3B.toml",
         "zai-org--GLM-4.7-Flash.toml",
+    ]
+
+    QWEN_TENSOR_CARDS = [
+        "Qwen--Qwen3.5-2B.toml",
+        "Qwen--Qwen3.5-4B.toml",
     ]
 
     @pytest.mark.parametrize("filename", LLAMA_CARDS)
@@ -142,6 +145,13 @@ class TestSupportsTensorByArchitecture:
         card = await ModelCard.load_from_path(AnyioPath(str(CARDS_DIR / filename)))
         assert card.supports_tensor is False, (
             f"{filename}: expected supports_tensor=false for Qwen/GLM"
+        )
+
+    @pytest.mark.parametrize("filename", QWEN_TENSOR_CARDS)
+    async def test_qwen35_supports_tensor_true(self, filename: str) -> None:
+        card = await ModelCard.load_from_path(AnyioPath(str(CARDS_DIR / filename)))
+        assert card.supports_tensor is True, (
+            f"{filename}: expected supports_tensor=true for Qwen3.5 (tensor parallelism enabled)"
         )
 
 
