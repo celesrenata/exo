@@ -689,6 +689,9 @@ def main(
                                 send_activation as _send_act,
                                 recv_activation as _recv_act,
                             )
+                            from exo.worker.engines.pytorch_xpu.tensor_parallel_instance import (
+                                TensorParallelInstance as _TensorParallelInstance,
+                            )
 
                             rank = shard_metadata.device_rank
                             world_size = shard_metadata.world_size
@@ -729,8 +732,39 @@ def main(
                                 f"prompt length: {len(prompt)}"
                             )
 
-                            # Dispatch to distributed or single-node generation
-                            if world_size > 1:
+                            # Dispatch to tensor-parallel, pipeline-parallel, or single-node generation
+                            if isinstance(instance, _TensorParallelInstance):
+                                from exo.worker.engines.pytorch_xpu.tensor_parallel_generator import (
+                                    tensor_parallel_generate,
+                                    tensor_parallel_worker_loop,
+                                )
+
+                                if rank == 0:
+                                    # Rank 0: orchestrate tensor-parallel generation
+                                    pytorch_xpu_generator = tensor_parallel_generate(
+                                        model=pytorch_xpu_model,
+                                        tokenizer=pytorch_xpu_tokenizer,
+                                        prompt=prompt,
+                                        device=device_str,
+                                        rank=rank,
+                                        world_size=world_size,
+                                        max_tokens=task_params.max_output_tokens or 100,
+                                        temperature=task_params.temperature or 1.0,
+                                        top_k=task_params.top_k,
+                                        top_p=task_params.top_p,
+                                        model_id=str(shard_metadata.model_card.model_id),
+                                    )
+                                else:
+                                    # Non-rank-0: run tensor-parallel worker loop (blocks until generation ends)
+                                    tensor_parallel_worker_loop(
+                                        model=pytorch_xpu_model,
+                                        device=device_str,
+                                        rank=rank,
+                                        world_size=world_size,
+                                    )
+                                    pytorch_xpu_generator = iter([])  # No responses from non-rank-0
+
+                            elif world_size > 1:
                                 from exo.worker.engines.pytorch_xpu.distributed_generator import (
                                     distributed_generate,
                                     distributed_worker_loop,

@@ -45,6 +45,28 @@ class ProcessGroupConfig:
 
 
 @dataclass(frozen=True)
+class TensorParallelGroupConfig:
+    """Configuration for tensor-parallel process group over TB4.
+
+    Separate from ProcessGroupConfig (used for pipeline parallelism over ethernet).
+    The tensor-parallel group uses Gloo over Thunderbolt 4 network interfaces,
+    which provide 40 Gbps bandwidth for the frequent all-reduce operations
+    that tensor parallelism requires.
+
+    Requirements: 4.1, 9.1, 9.5
+    """
+
+    rank: int
+    world_size: int
+    master_addr: str  # TB4 IP of rank 0
+    master_port: int  # Ephemeral port for TP group
+    tb4_interface_name: str  # Interface name for GLOO_SOCKET_IFNAME
+    backend: Literal["gloo"] = "gloo"
+    init_timeout_seconds: int = 60  # Shorter than ethernet — TB4 is local
+    allreduce_timeout_seconds: int = 30
+
+
+@dataclass(frozen=True)
 class CpuStagedTensor:
     """A tensor that has been staged to CPU for Gloo transport.
 
@@ -232,6 +254,168 @@ def unstage_from_cpu(staged: CpuStagedTensor, target_device: str) -> "torch.Tens
             f"got {tuple(result.shape)}"
         )
     return result
+
+
+# Module-level handle for the tensor-parallel process group.
+# None means no TP group has been initialized yet.
+_tp_process_group: object | None = None
+
+
+def get_tensor_parallel_group() -> object | None:
+    """Return the tensor-parallel process group handle, or None if not initialized."""
+    return _tp_process_group
+
+
+def init_tensor_parallel_group(config: TensorParallelGroupConfig) -> None:
+    """Initialize a Gloo process group for tensor parallelism over TB4.
+
+    Sets GLOO_SOCKET_IFNAME to the TB4 interface so all collective
+    operations route over the high-bandwidth TB4 links.
+
+    If a default process group already exists (e.g., pipeline parallelism
+    over ethernet), this creates a new named group that coexists with it.
+    If no default group exists, this initializes the default group directly.
+
+    After initialization, the process group handle is stored in the module-level
+    _tp_process_group variable, accessible via get_tensor_parallel_group().
+
+    Requirements: 4.1, 4.4, 4.6, 9.1, 9.6
+    """
+    import torch.distributed as dist
+
+    global _tp_process_group  # noqa: PLW0603
+
+    # Set GLOO_SOCKET_IFNAME to the TB4 interface so Gloo binds to the
+    # high-bandwidth Thunderbolt 4 link instead of ethernet.
+    os.environ["GLOO_SOCKET_IFNAME"] = config.tb4_interface_name
+    os.environ["TP_SOCKET_IFNAME"] = config.tb4_interface_name
+
+    # Set env:// rendezvous variables for the TB4 master.
+    os.environ["MASTER_ADDR"] = config.master_addr
+    os.environ["MASTER_PORT"] = str(config.master_port)
+    os.environ["RANK"] = str(config.rank)
+    os.environ["WORLD_SIZE"] = str(config.world_size)
+
+    logger.info(
+        f"Initializing tensor-parallel process group: "
+        f"rank={config.rank}, world_size={config.world_size}, "
+        f"master_addr={config.master_addr}, master_port={config.master_port}, "
+        f"tb4_interface={config.tb4_interface_name}, "
+        f"timeout={config.init_timeout_seconds}s"
+    )
+
+    timeout = timedelta(seconds=config.init_timeout_seconds)
+
+    if dist.is_initialized():
+        # A default process group already exists (pipeline parallelism).
+        # Create a separate group for tensor parallelism that coexists.
+        logger.info(
+            "Default process group already initialized (pipeline parallelism). "
+            "Creating new group for tensor parallelism."
+        )
+        try:
+            ranks = list(range(config.world_size))
+            _tp_process_group = dist.new_group(ranks=ranks, backend="gloo", timeout=timeout)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to create tensor-parallel process group: "
+                f"rank={config.rank}, world_size={config.world_size}, "
+                f"master_addr={config.master_addr}, "
+                f"tb4_interface={config.tb4_interface_name}: {exc}"
+            ) from exc
+    else:
+        # No default group exists. Initialize as the default process group.
+        try:
+            dist.init_process_group(
+                backend="gloo",
+                rank=config.rank,
+                world_size=config.world_size,
+                init_method="env://",
+                timeout=timeout,
+            )
+            # The default group is the TP group in this case.
+            _tp_process_group = dist.group.WORLD
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to initialize tensor-parallel process group: "
+                f"rank={config.rank}, world_size={config.world_size}, "
+                f"master_addr={config.master_addr}, master_port={config.master_port}, "
+                f"tb4_interface={config.tb4_interface_name}: {exc}"
+            ) from exc
+
+    logger.info(
+        f"Tensor-parallel process group initialized: "
+        f"rank={config.rank}, world_size={config.world_size}, "
+        f"GLOO_SOCKET_IFNAME={config.tb4_interface_name}"
+    )
+
+
+def verify_tensor_parallel_group(world_size: int) -> bool:
+    """Verify TP group connectivity with a test all-reduce.
+
+    Each rank contributes its rank ID. The sum should equal
+    world_size * (world_size - 1) / 2.
+
+    Returns True if verification passes, False otherwise.
+
+    Requirements: 9.3
+    """
+    import torch
+    import torch.distributed as dist
+
+    try:
+        rank = dist.get_rank()
+        tensor = torch.tensor([rank], dtype=torch.int64)
+        dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=get_tensor_parallel_group())
+
+        expected = world_size * (world_size - 1) // 2
+        result = tensor.item()
+        if result == expected:
+            logger.info(
+                f"Tensor-parallel group verification passed: "
+                f"rank={rank}, all_reduce(rank_ids)={result}, expected={expected}"
+            )
+            return True
+        else:
+            logger.error(
+                f"Tensor-parallel group verification FAILED: "
+                f"rank={rank}, all_reduce(rank_ids)={result}, expected={expected}"
+            )
+            return False
+    except Exception as exc:
+        logger.error(
+            f"Tensor-parallel group verification failed with exception: {exc}",
+            exc_info=True,
+        )
+        return False
+
+
+def derive_rank_assignment(node_ips: list[str]) -> dict[str, int]:
+    """Derive consistent rank assignments from a list of node IPs.
+
+    Sorts node IPs lexicographically and assigns rank 0 to the first IP
+    (which becomes MASTER_ADDR). This ensures all nodes derive the same
+    rank assignment regardless of which node performs the derivation.
+
+    Args:
+        node_ips: List of node IP addresses participating in the group.
+
+    Returns:
+        Mapping of node_ip → rank (0-indexed).
+
+    Raises:
+        ValueError: If node_ips is empty or contains duplicates.
+
+    Requirements: 9.2
+    """
+    if not node_ips:
+        raise ValueError("node_ips must not be empty")
+    if len(node_ips) != len(set(node_ips)):
+        raise ValueError(
+            f"node_ips contains duplicates: {node_ips}"
+        )
+    sorted_ips = sorted(node_ips)
+    return {ip: rank for rank, ip in enumerate(sorted_ips)}
 
 
 def send_activation(tensor: "torch.Tensor", dst_rank: int) -> None:
