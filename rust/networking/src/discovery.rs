@@ -508,6 +508,12 @@ impl NetworkBehaviour for Behaviour {
         // Poll grace period timers for pending connections.
         // When a timer expires, the connection has survived the full grace period
         // and is promoted to "stable" — emit ConnectionEstablished.
+        if !self.pending_connections.is_empty() {
+            log::debug!(
+                "RUST: polling {} pending connections for grace period expiry",
+                self.pending_connections.len()
+            );
+        }
         let mut promoted = Vec::new();
         for (conn_id, pending) in self.pending_connections.iter_mut() {
             if pending.grace_timer.poll_unpin(cx).is_ready() {
