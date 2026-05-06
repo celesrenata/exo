@@ -300,26 +300,42 @@ impl Behaviour {
         if self.pending_connections.remove(&connection_id).is_some() {
             // Connection died before grace period expired — suppress events.
             // Python layer never knew about this connection.
-            let flap_count = self.peer_flap_counts.entry(peer_id).or_insert(0);
-            *flap_count += 1;
+            //
+            // Only count as a flap if this peer has NO remaining connections
+            // (neither pending nor already connected). If the peer still has other
+            // connections in pending_connections or connected_peers, this is just
+            // libp2p pruning a duplicate connection, not a real flap.
+            let peer_has_other_pending = self.pending_connections.values()
+                .any(|pc| pc.peer_id == peer_id);
+            let peer_still_connected = self.connected_peers.contains_key(&peer_id);
 
-            // Compute exponential backoff with ±25% jitter
-            let base_backoff = BACKOFF_BASE.saturating_mul(1u32 << (*flap_count).min(10));
-            let capped_backoff = base_backoff.min(MAX_RETRY_BACKOFF);
+            if !peer_has_other_pending && !peer_still_connected {
+                // True flap — peer has no remaining connections
+                let flap_count = self.peer_flap_counts.entry(peer_id).or_insert(0);
+                *flap_count += 1;
 
-            // Apply ±25% jitter using a simple deterministic approach
-            // (use flap_count as seed for reproducibility in tests)
-            let jitter_factor = 0.75 + ((*flap_count as f64 * 0.1) % 0.5);
-            let jittered = Duration::from_secs_f64(
-                capped_backoff.as_secs_f64() * jitter_factor
-            );
+                // Compute exponential backoff with ±25% jitter
+                let base_backoff = BACKOFF_BASE.saturating_mul(1u32 << (*flap_count).min(10));
+                let capped_backoff = base_backoff.min(MAX_RETRY_BACKOFF);
 
-            self.peer_next_retry.insert(peer_id, Instant::now() + jittered);
+                // Apply ±25% jitter using a simple deterministic approach
+                let jitter_factor = 0.75 + ((*flap_count as f64 * 0.1) % 0.5);
+                let jittered = Duration::from_secs_f64(
+                    capped_backoff.as_secs_f64() * jitter_factor
+                );
 
-            log::debug!(
-                "RUST: connection to {} flapped (count={}), backoff={:?}",
-                peer_id, flap_count, jittered
-            );
+                self.peer_next_retry.insert(peer_id, Instant::now() + jittered);
+
+                log::debug!(
+                    "RUST: connection to {} flapped (count={}), backoff={:?}",
+                    peer_id, flap_count, jittered
+                );
+            } else {
+                log::debug!(
+                    "RUST: duplicate connection to {} pruned (peer still has other connections)",
+                    peer_id
+                );
+            }
         } else {
             // Connection was already promoted to stable — emit ConnectionClosed normally
             self.pending_events
