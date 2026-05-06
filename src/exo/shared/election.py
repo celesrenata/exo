@@ -178,33 +178,16 @@ class Election:
                 # Check if this is just a flap (Connected immediately followed by Disconnected or vice versa)
                 # LACP bond failovers cause rapid connect/disconnect cycles that should NOT trigger re-election
                 all_messages = [first] + rest
-
-                # Port-aware flap detection: only consider it a flap if the SAME
-                # connection (same node + same port) both connects and disconnects.
-                # Different ports mean different connections — a node can connect on
-                # a new port while an old connection closes, which is normal.
-                disconnected_connections: set[tuple[str, int]] = set()  # (node_id, port)
-                connected_connections: set[tuple[str, int]] = set()  # (node_id, port)
+                disconnected_nodes = set()
+                connected_nodes = set()
                 for msg in all_messages:
-                    key = (msg.node_id, msg.remote_tcp_port)
                     if msg.connection_type.value == 1:  # Disconnected
-                        disconnected_connections.add(key)
+                        disconnected_nodes.add(msg.node_id)
                     else:  # Connected
-                        connected_connections.add(key)
+                        connected_nodes.add(msg.node_id)
 
-                # A connection is a flap only if the SAME (node, port) both connected and disconnected
-                flapping_connections = disconnected_connections & connected_connections
-
-                # Determine net state per node: connected if ANY non-flapping connection exists
-                connected_nodes: set[str] = set()
-                disconnected_nodes: set[str] = set()
-                for node_id, port in connected_connections - flapping_connections:
-                    connected_nodes.add(node_id)
-                for node_id, port in disconnected_connections - flapping_connections:
-                    disconnected_nodes.add(node_id)
-
-                # A node that has both a real connect and a real disconnect (on different ports)
-                # is still connected — the connect wins
+                # If a node both connected and disconnected in the same batch, it's a flap — ignore it
+                flapping_nodes = disconnected_nodes & connected_nodes
                 actually_disconnected = disconnected_nodes - connected_nodes
                 actually_connected = connected_nodes - disconnected_nodes
 

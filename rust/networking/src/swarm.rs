@@ -81,15 +81,6 @@ mod transport {
         };
 
         // `TCP_NODELAY` enabled => avoid latency
-        //
-        // NOTE: port_reuse(true) was attempted for LACP hash consistency but is deprecated
-        // in libp2p-tcp ≥0.42 and causes handshake failures ("Stream closed. Confirmation
-        // from remote for optimistic protocol negotiation still pending"). Port reuse in
-        // modern libp2p is controlled per-connection via DialOpts/PortUse::Reuse.
-        //
-        // TCP keepalive (TCP_KEEPIDLE=10s, TCP_KEEPINTVL=5s, TCP_KEEPCNT=3) is not exposed
-        // by libp2p's TCP Config API. Follow-up: set keepalive via raw socket options on
-        // the underlying transport, or contribute upstream support.
         let tcp_config = Config::default().nodelay(true);
 
         // V1 + lazy flushing => 0-RTT negotiation
