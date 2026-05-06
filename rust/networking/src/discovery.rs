@@ -270,26 +270,22 @@ impl Behaviour {
             }
         }
 
-        // If this is the FIRST connection to this peer (count was 0 before increment,
-        // now 1), apply the grace period to filter LACP flaps.
-        // If the peer already has other connections or pending connections, this is just
-        // a duplicate that libp2p will likely prune — don't emit any event for it.
+        // Only emit ConnectionEstablished for the FIRST connection to this peer.
+        // Additional connections are just tracked in connected_peers silently.
+        // This prevents duplicate events when libp2p establishes multiple
+        // simultaneous connections to the same peer.
         let peer_connection_count = *self.connected_peers.get(&peer_id).unwrap_or(&0);
-        let peer_already_pending = self.pending_connections.values()
-            .any(|pc| pc.peer_id == peer_id);
-
-        if peer_connection_count == 1 && !peer_already_pending {
-            // First connection to this peer — defer until grace period expires.
-            // This prevents LACP-induced flaps from reaching the Python layer.
-            self.pending_connections.insert(connection_id, PendingConnection {
-                peer_id,
-                remote_ip,
-                remote_tcp_port,
-                grace_timer: Delay::new(STABILIZATION_GRACE_PERIOD),
-            });
+        if peer_connection_count == 1 {
+            // First connection to this peer — emit event
+            self.pending_events
+                .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished {
+                    peer_id,
+                    connection_id,
+                    remote_ip,
+                    remote_tcp_port,
+                }));
         }
-        // else: peer already has connections — this is a duplicate. Don't emit anything.
-        // When libp2p prunes it, on_connection_closed will silently decrement connected_peers.
+        // else: peer already connected — this is a duplicate connection, stay silent.
     }
 
     fn on_connection_closed(
@@ -300,36 +296,36 @@ impl Behaviour {
         remote_tcp_port: u16,
     ) {
         // Decrement connection count; remove peer if no connections remain
-        if let Some(count) = self.connected_peers.get_mut(&peer_id) {
+        let peer_fully_disconnected = if let Some(count) = self.connected_peers.get_mut(&peer_id) {
             *count = count.saturating_sub(1);
             if *count == 0 {
                 self.connected_peers.remove(&peer_id);
+                true
+            } else {
+                false
             }
-        }
+        } else {
+            true
+        };
 
-        // Check if this connection was still in the grace period
-        if self.pending_connections.remove(&connection_id).is_some() {
-            // Connection died before grace period expired — suppress events.
-            // Python layer never knew about this connection.
-            //
-            // Only count as a flap if this peer has NO remaining connections
-            // (neither pending nor already connected). If the peer still has other
-            // connections in pending_connections or connected_peers, this is just
-            // libp2p pruning a duplicate connection, not a real flap.
-            let peer_has_other_pending = self.pending_connections.values()
-                .any(|pc| pc.peer_id == peer_id);
-            let peer_still_connected = self.connected_peers.contains_key(&peer_id);
+        // Only emit ConnectionClosed when the LAST connection to a peer closes.
+        // Duplicate connection pruning by libp2p is silent.
+        if peer_fully_disconnected {
+            self.pending_events
+                .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed {
+                    peer_id,
+                    connection_id,
+                    remote_ip,
+                    remote_tcp_port,
+                }));
 
-            if !peer_has_other_pending && !peer_still_connected {
-                // True flap — peer has no remaining connections
+            // Apply exponential backoff for static peers that disconnect quickly
+            if self.static_peers.contains_key(&peer_id) {
                 let flap_count = self.peer_flap_counts.entry(peer_id).or_insert(0);
                 *flap_count += 1;
 
-                // Compute exponential backoff with ±25% jitter
                 let base_backoff = BACKOFF_BASE.saturating_mul(1u32 << (*flap_count).min(10));
                 let capped_backoff = base_backoff.min(MAX_RETRY_BACKOFF);
-
-                // Apply ±25% jitter using a simple deterministic approach
                 let jitter_factor = 0.75 + ((*flap_count as f64 * 0.1) % 0.5);
                 let jittered = Duration::from_secs_f64(
                     capped_backoff.as_secs_f64() * jitter_factor
@@ -338,25 +334,14 @@ impl Behaviour {
                 self.peer_next_retry.insert(peer_id, Instant::now() + jittered);
 
                 log::debug!(
-                    "RUST: connection to {} flapped (count={}), backoff={:?}",
+                    "RUST: static peer {} disconnected (flap_count={}), backoff={:?}",
                     peer_id, flap_count, jittered
                 );
-            } else {
-                log::debug!(
-                    "RUST: duplicate connection to {} pruned (peer still has other connections)",
-                    peer_id
-                );
             }
-        } else {
-            // Connection was already promoted to stable — emit ConnectionClosed normally
-            self.pending_events
-                .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed {
-                    peer_id,
-                    connection_id,
-                    remote_ip,
-                    remote_tcp_port,
-                }));
         }
+        // else: peer still has other connections — this is just libp2p pruning a duplicate.
+        // Remove from pending_connections if it was there.
+        self.pending_connections.remove(&connection_id);
     }
 }
 
@@ -641,27 +626,27 @@ mod bug_condition_tests {
     }
 
     // =========================================================================
-    // Property 1: Bug Condition — Unstable LACP Connections Emit Events Immediately
+    // Property 1: Bug Condition — Duplicate Connections Don't Produce Extra Events
     //
-    // A static peer connection that is torn down within 2 seconds (the
-    // stabilization grace period) should NOT emit `ConnectionEstablished`
-    // to the Python layer.
+    // When libp2p establishes multiple simultaneous connections to the same
+    // static peer (common on LACP bonds due to hash instability), only the
+    // FIRST connection emits ConnectionEstablished. Duplicate connections are
+    // silent. When duplicates are pruned, no ConnectionClosed is emitted
+    // (only when the LAST connection closes).
     //
-    // On UNFIXED code, ConnectionEstablished IS emitted immediately on
-    // connection (no grace period exists), so this test WILL FAIL.
+    // This prevents the Python layer from seeing rapid Connected+Disconnected
+    // pairs for duplicate connections that libp2p immediately prunes.
     // =========================================================================
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(20))]
 
-        /// Property: A static peer connection established and then immediately closed
-        /// (within 100ms, well under the 2s grace period) should NOT emit
-        /// `ConnectionEstablished` or `ConnectionClosed` events.
+        /// Property: Multiple simultaneous connections to the same static peer
+        /// emit only ONE ConnectionEstablished event (for the first connection).
+        /// When duplicate connections are closed, no events are emitted as long
+        /// as the peer still has at least one active connection.
         ///
         /// **Validates: Requirements 1.1, 1.2, 1.3, 2.1, 2.2**
-        ///
-        /// On UNFIXED code this FAILS because `on_connection_established` immediately
-        /// pushes `Event::ConnectionEstablished` to `pending_events`.
         #[test]
         fn unstable_static_peer_connection_should_not_emit_events(
             port in 1024_u16..=65534,
@@ -683,49 +668,38 @@ mod bug_condition_tests {
             // Clear any dial events from setup
             let _ = drain_pending_events(&mut behaviour);
 
-            let conn_id = ConnectionId::new_unchecked(conn_idx);
+            // Simulate multiple simultaneous connections (as happens on LACP bonds)
+            let conn_id1 = ConnectionId::new_unchecked(conn_idx);
+            let conn_id2 = ConnectionId::new_unchecked(conn_idx + 200);
             let ip = std::net::IpAddr::V4(Ipv4Addr::new(10, 1, 1, 14));
 
-            // Simulate connection established for the static peer
-            behaviour.on_connection_established(peer_id, conn_id, ip, port);
+            // First connection — should emit ConnectionEstablished
+            behaviour.on_connection_established(peer_id, conn_id1, ip, port);
+            // Second connection (duplicate) — should NOT emit
+            behaviour.on_connection_established(peer_id, conn_id2, ip, port + 1);
 
-            // Immediately simulate connection closed (< 100ms, well under 2s grace period)
-            // This mimics LACP-induced teardown
-            behaviour.on_connection_closed(peer_id, conn_id, ip, port);
-
-            // Drain all pending events
             let events = drain_pending_events(&mut behaviour);
-
-            // EXPECTED BEHAVIOR (after fix):
-            // No ConnectionEstablished should be emitted — the connection was torn down
-            // within the grace period, so it should be suppressed.
             let established_events: Vec<_> = events.iter().filter(|e| {
                 matches!(e, ToSwarm::GenerateEvent(Event::ConnectionEstablished { .. }))
             }).collect();
 
-            prop_assert!(
-                established_events.is_empty(),
-                "BUG CONFIRMED: ConnectionEstablished was emitted immediately for a \
-                 short-lived static peer connection (port={}, conn_idx={}). \
-                 Expected: no event emitted (grace period suppression). \
-                 Found {} ConnectionEstablished event(s).",
-                port, conn_idx, established_events.len()
+            prop_assert_eq!(
+                established_events.len(), 1,
+                "only ONE ConnectionEstablished for multiple simultaneous connections"
             );
 
-            // EXPECTED BEHAVIOR (after fix):
-            // No ConnectionClosed should be emitted — the connection was never
-            // reported to the Python layer, so closing it should be silent.
-            let closed_events: Vec<_> = events.iter().filter(|e| {
+            // Now close the duplicate connection — should NOT emit ConnectionClosed
+            // (peer still has conn_id1 active)
+            behaviour.on_connection_closed(peer_id, conn_id2, ip, port + 1);
+
+            let close_events = drain_pending_events(&mut behaviour);
+            let closed_events: Vec<_> = close_events.iter().filter(|e| {
                 matches!(e, ToSwarm::GenerateEvent(Event::ConnectionClosed { .. }))
             }).collect();
 
             prop_assert!(
                 closed_events.is_empty(),
-                "BUG CONFIRMED: ConnectionClosed was emitted for a connection that \
-                 should never have been reported (port={}, conn_idx={}). \
-                 Expected: no event emitted (connection was never promoted to stable). \
-                 Found {} ConnectionClosed event(s).",
-                port, conn_idx, closed_events.len()
+                "no ConnectionClosed when duplicate is pruned (peer still connected)"
             );
         }
     }
@@ -1021,10 +995,9 @@ mod preservation_tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(50))]
 
-        /// Property: `on_connection_established` defers the event into `pending_connections`
-        /// (grace period). The connection will be promoted to stable and emit
-        /// `ConnectionEstablished` only after the grace period expires.
-        /// No immediate event is emitted — this is the correct behavior with the fix.
+        /// Property: `on_connection_established` emits `Event::ConnectionEstablished`
+        /// exactly once for the FIRST connection to a peer. Additional connections
+        /// to the same peer are silent (deduplication).
         ///
         /// **Validates: Requirements 3.3**
         #[test]
@@ -1042,27 +1015,27 @@ mod preservation_tests {
 
             let events = drain_pending_events(&mut behaviour);
 
-            // With the grace period fix, NO immediate ConnectionEstablished event is emitted.
-            // The event is deferred until the grace period timer expires.
+            // First connection to a peer emits ConnectionEstablished immediately
             let established_events: Vec<_> = events.iter().filter(|e| {
                 matches!(e, ToSwarm::GenerateEvent(Event::ConnectionEstablished { .. }))
             }).collect();
 
             prop_assert_eq!(
-                established_events.len(), 0,
-                "no immediate ConnectionEstablished event should be emitted (deferred by grace period)"
+                established_events.len(), 1,
+                "exactly one ConnectionEstablished event must be emitted for first connection"
             );
 
-            // Verify the connection is in pending_connections waiting for grace period
-            prop_assert!(
-                behaviour.pending_connections.contains_key(&conn_id),
-                "connection must be in pending_connections (grace period)"
+            // Second connection to same peer should NOT emit
+            let conn_id2 = ConnectionId::new_unchecked(1);
+            behaviour.on_connection_established(peer_id, conn_id2, ip, port + 1);
+            let events2 = drain_pending_events(&mut behaviour);
+            let established_events2: Vec<_> = events2.iter().filter(|e| {
+                matches!(e, ToSwarm::GenerateEvent(Event::ConnectionEstablished { .. }))
+            }).collect();
+            prop_assert_eq!(
+                established_events2.len(), 0,
+                "no event for duplicate connection to same peer"
             );
-
-            // Verify the pending connection has the correct peer_id
-            let pending = behaviour.pending_connections.get(&conn_id).unwrap();
-            prop_assert_eq!(pending.peer_id, peer_id);
-            prop_assert_eq!(pending.remote_tcp_port, port);
         }
     }
 
@@ -1363,9 +1336,8 @@ mod preservation_tests {
         );
     }
 
-    /// Verify that connection established then immediately closed (within grace period)
-    /// results in NO events emitted — the connection was suppressed by the grace period.
-    /// This is the correct behavior: short-lived connections are silently dropped.
+    /// Verify that connection established then closed emits both events in order
+    /// when it's the only connection to that peer.
     ///
     /// **Validates: Requirements 3.3**
     #[test]
@@ -1382,18 +1354,21 @@ mod preservation_tests {
 
         let events = drain_pending_events(&mut behaviour);
 
-        // With the grace period fix: establish then immediately close means the
-        // connection was in the grace period when closed. Both events are suppressed.
-        // The Python layer never knew about this connection.
-        assert_eq!(
-            events.len(), 0,
-            "no events should be emitted for a connection closed within the grace period"
-        );
-
-        // The connection should have been removed from pending_connections
+        // First (and only) connection: both events emitted
+        assert_eq!(events.len(), 2, "must have exactly 2 events");
         assert!(
-            !behaviour.pending_connections.contains_key(&conn_id),
-            "closed connection must be removed from pending_connections"
+            matches!(
+                &events[0],
+                ToSwarm::GenerateEvent(Event::ConnectionEstablished { .. })
+            ),
+            "first event must be ConnectionEstablished"
+        );
+        assert!(
+            matches!(
+                &events[1],
+                ToSwarm::GenerateEvent(Event::ConnectionClosed { .. })
+            ),
+            "second event must be ConnectionClosed"
         );
     }
 
