@@ -272,19 +272,13 @@ impl Behaviour {
 
         // If this is the FIRST connection to this peer (count was 0 before increment,
         // now 1), apply the grace period to filter LACP flaps.
-        // If the peer already has other connections, emit immediately — this is just
-        // a duplicate/additional connection that doesn't need stabilization.
+        // If the peer already has other connections or pending connections, this is just
+        // a duplicate that libp2p will likely prune — don't emit any event for it.
         let peer_connection_count = *self.connected_peers.get(&peer_id).unwrap_or(&0);
-        if peer_connection_count > 1 {
-            // Peer already has other connections — emit immediately
-            self.pending_events
-                .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished {
-                    peer_id,
-                    connection_id,
-                    remote_ip,
-                    remote_tcp_port,
-                }));
-        } else {
+        let peer_already_pending = self.pending_connections.values()
+            .any(|pc| pc.peer_id == peer_id);
+
+        if peer_connection_count == 1 && !peer_already_pending {
             // First connection to this peer — defer until grace period expires.
             // This prevents LACP-induced flaps from reaching the Python layer.
             self.pending_connections.insert(connection_id, PendingConnection {
@@ -294,6 +288,8 @@ impl Behaviour {
                 grace_timer: Delay::new(STABILIZATION_GRACE_PERIOD),
             });
         }
+        // else: peer already has connections — this is a duplicate. Don't emit anything.
+        // When libp2p prunes it, on_connection_closed will silently decrement connected_peers.
     }
 
     fn on_connection_closed(
