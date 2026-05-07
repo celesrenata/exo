@@ -1,7 +1,7 @@
 model_id = "Qwen/Qwen3.6-27B"
 n_layers = 64
 hidden_size = 5120
-supports_tensor = false
+supports_tensor = true
 tasks = ["TextGeneration"]
 family = "qwen"
 quantization = ""
