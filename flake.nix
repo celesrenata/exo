@@ -281,7 +281,7 @@
 
               serviceConfig = {
                 Type = "simple";
-                ExecStart = "${pkgs.python312}/bin/python -m exo.worker.engines.npu.service --port ${toString config.services.exo.intel.npu.servicePort}";
+                ExecStart = "${pkgs.python313}/bin/python -m exo.worker.engines.npu.service --port ${toString config.services.exo.intel.npu.servicePort}";
                 Restart = "on-failure";
                 RestartSec = "5s";
                 User = "exo";
@@ -369,10 +369,10 @@
                   doInstallCheck = false;
                 });
                 
-                # Use standard python312 for PyTorch XPU compatibility
-                # Python 3.13 is not yet supported by Intel's PyTorch XPU wheels
-                python312 = prev.python312.override {
-                  self = final.python312;
+                # Use python313 for PyTorch XPU compatibility
+                # PyTorch 2.11+xpu has cp313 wheels available
+                python313 = prev.python313.override {
+                  self = final.python313;
                   packageOverrides = pself: psuper: {
                     # Override mkDerivation to add LOCALE_ARCHIVE for all Python package builds
                     mkDerivation = args: psuper.mkDerivation (args // {
@@ -399,6 +399,16 @@
                     pycparser = psuper.pycparser.overridePythonAttrs (old: {
                       doCheck = false;
                       doInstallCheck = false;
+                    });
+
+                    # aiohttp check deps (re-assert) fail on Python 3.13
+                    aiohttp = psuper.aiohttp.overridePythonAttrs (old: {
+                      doCheck = false;
+                    });
+
+                    # loguru's check dep (pytest-mypy-plugins) fails due to regex circular import on 3.13
+                    loguru = psuper.loguru.overridePythonAttrs (old: {
+                      doCheck = false;
                     });
                     
                     # sqlalchemy has a failing test
@@ -562,7 +572,7 @@
                 });
                 
                 # Fix locale for Python builds
-                python312 = prev.python312.override {
+                python313 = prev.python313.override {
                   packageOverrides = pself: psuper: {
                     mkDerivation = args: psuper.mkDerivation (args // {
                       LOCALE_ARCHIVE = "${final.glibcLocales}/lib/locale/locale-archive";
@@ -617,7 +627,7 @@
             }
           ) // lib.optionalAttrs pkgs.stdenv.isLinux {
             # PyTorch with Intel XPU support (Linux only)
-            pytorch-xpu = pkgsExo.python312.pkgs.torch;
+            pytorch-xpu = pkgsExo.python313.pkgs.torch;
             # Intel oneAPI runtime libraries (libsycl.so.8, libpti_view.so.0, etc.)
             # Needed by PyTorch XPU at runtime
             intel-oneapi-runtime = pkgs.callPackage (inputs.self + /nix/intel-oneapi-runtime.nix) { };
@@ -636,12 +646,12 @@
               # Create a Python environment with PyTorch XPU (no IPEX — discontinued)
               # On Linux, use PyTorch XPU package (Python 3.12)
               pythonWithPackages = if pkgs.stdenv.isLinux then
-                pkgsExo.python312.withPackages (ps: [
+                pkgsExo.python313.withPackages (ps: [
                   self'.packages.pytorch-xpu
                 ])
               else
                 # On macOS, use standard Python (no XPU support needed)
-                pkgsExo.python312;
+                pkgsExo.python313;
             in
             pkgs.mkShell {
             inputsFrom = [ self'.checks.cargo-build ];

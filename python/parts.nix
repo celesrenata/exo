@@ -25,19 +25,21 @@
         };
       };
 
-      python = pkgs.python312;
+      python = pkgs.python313;
 
       # Overlay to provide build systems and custom packages
       buildSystemsOverlay = final: prev: {
+        # Disable checks on packages that fail on Python 3.13 in nixpkgs
+        aiohttp = prev.aiohttp.overridePythonAttrs { doCheck = false; };
         # Stub out MLX on Linux (not available)
       } // lib.optionalAttrs pkgs.stdenv.isLinux {
         mlx = pkgs.runCommand "mlx-stub" { } ''
-          mkdir -p $out/lib/python3.12/site-packages
-          touch $out/lib/python3.12/site-packages/mlx.py
+          mkdir -p $out/lib/python3.13/site-packages
+          touch $out/lib/python3.13/site-packages/mlx.py
         '';
         mlx-lm = pkgs.runCommand "mlx-lm-stub" { } ''
-          mkdir -p $out/lib/python3.12/site-packages
-          touch $out/lib/python3.12/site-packages/mlx_lm.py
+          mkdir -p $out/lib/python3.13/site-packages
+          touch $out/lib/python3.13/site-packages/mlx_lm.py
         '';
       } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
         # Use our pure Nix-built MLX with Metal support (macOS only)
@@ -91,7 +93,7 @@
 
       mkSimplePythonScript = name: path: pkgs.writeShellApplication {
         inherit name;
-        runtimeInputs = [ pkgs.python312 ];
+        runtimeInputs = [ pkgs.python313 ];
         text = ''exec python ${path} "$@"'';
       };
 
@@ -117,7 +119,7 @@
           if pkgs.stdenv.isLinux then
           # On Linux: use buildPythonApplication with explicit deps (like main branch)
           # Use pkgsExo which has anyio pinned to 4.11.0
-            pkgsExo.python312.pkgs.buildPythonApplication
+            pkgsExo.python313.pkgs.buildPythonApplication
               {
                 pname = "exo";
                 version = "0.3.0";
@@ -134,7 +136,7 @@
                   sed -i 's/build-backend = "uv_build"/build-backend = "setuptools.build_meta"/' pyproject.toml
                 '';
 
-                nativeBuildInputs = [ pkgsExo.python312.pkgs.setuptools pkgsExo.python312.pkgs.wheel pkgsExo.python312.pkgs.pip pkgs.makeWrapper pkgs.glibcLocales ];
+                nativeBuildInputs = [ pkgsExo.python313.pkgs.setuptools pkgsExo.python313.pkgs.wheel pkgsExo.python313.pkgs.pip pkgs.makeWrapper pkgs.glibcLocales ];
 
                 # Add Intel GPU runtime libraries for torch.xpu
                 buildInputs = lib.optionals pkgs.stdenv.isLinux [
@@ -142,9 +144,9 @@
                   pkgsExo.level-zero
                 ];
 
-                propagatedBuildInputs = with pkgsExo.python312.pkgs; [
+                propagatedBuildInputs = with pkgsExo.python313.pkgs; [
                   aiofiles
-                  aiohttp
+                  (aiohttp.overridePythonAttrs { doCheck = false; })
                   pydantic
                   fastapi
                   filelock
@@ -166,6 +168,8 @@
                   numpy
                   python-multipart
                   openai-harmony
+                  zstandard
+                  msgspec
                 ] ++ lib.optionals pkgs.stdenv.isLinux [
                   # PyTorch 2.11+ with native XPU support for Intel iGPUs
                   self'.packages.pytorch-xpu
@@ -178,7 +182,7 @@
                   for wheel in ${self'.packages.exo_pyo3_bindings}/*.whl; do
                     if [ -f "$wheel" ]; then
                       echo "Extracting wheel: $wheel"
-                      ${python.pkgs.pip}/bin/pip install --no-deps --no-build-isolation --target $out/lib/python3.12/site-packages "$wheel"
+                      ${python.pkgs.pip}/bin/pip install --no-deps --no-build-isolation --target $out/lib/python3.13/site-packages "$wheel"
                       break
                     fi
                   done

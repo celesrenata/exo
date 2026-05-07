@@ -48,6 +48,10 @@ dev = [
 
 [project.optional-dependencies]
 build = ["nanobind"]
+xpu = [
+  "torch>=2.11.0; sys_platform == 'linux'",
+  "triton-xpu>=3.7.0; sys_platform == 'linux'",
+]
 cpu = [
   "mlx==0.31.1; sys_platform == 'linux'",
   "mlx-cpu==0.31.1; sys_platform == 'linux'",

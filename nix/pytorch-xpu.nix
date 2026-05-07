@@ -32,8 +32,8 @@ buildPythonPackage rec {
   format = "wheel";
 
   src = fetchurl {
-    url = "https://download.pytorch.org/whl/xpu/torch-2.11.0%2Bxpu-cp312-cp312-linux_x86_64.whl";
-    hash = "sha256-WQyeVKmeRdgOrv/nC1OCa0m3GmV44S6bqiJ+ibYceuI=";
+    url = "https://download.pytorch.org/whl/xpu/torch-2.11.0%2Bxpu-cp313-cp313-linux_x86_64.whl";
+    hash = "sha256-x8KZcJJCc3w3ZGctcQTWwmq36Qbvbr1NhAvUVjl5EvQ=";
   };
 
   LOCALE_ARCHIVE = "${glibcLocales}/lib/locale/locale-archive";
