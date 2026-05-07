@@ -199,9 +199,12 @@ def tensor_parallel_generate(
         # --- Prefill Phase ---
         # Broadcast input token IDs to all ranks so they all process the same prompt
         # (Requirement 6.1: ALL ranks process the full tokenized prompt simultaneously)
-        token_count_tensor = torch.tensor([prompt_tokens], dtype=torch.long, device=device)
+        # NOTE: Gloo backend only supports CPU tensors for collective operations.
+        # All tensors passed to dist.broadcast() must be on CPU.
+        token_count_tensor = torch.tensor([prompt_tokens], dtype=torch.long, device="cpu")
         dist.broadcast(token_count_tensor, src=0)
-        dist.broadcast(input_tensor, src=0)
+        input_tensor_cpu = input_tensor.cpu()
+        dist.broadcast(input_tensor_cpu, src=0)
 
         # Forward full prompt through all layers (all-reduce happens internally)
         prefill_start = time.perf_counter()
@@ -220,7 +223,7 @@ def tensor_parallel_generate(
         )
 
         # Broadcast sampled token to all ranks (Requirement 6.3)
-        token_tensor = torch.tensor([first_token_id], dtype=torch.long, device=device)
+        token_tensor = torch.tensor([first_token_id], dtype=torch.long, device="cpu")
         dist.broadcast(token_tensor, src=0)
 
         # Calculate prefill stats
@@ -230,7 +233,7 @@ def tensor_parallel_generate(
         if first_token_id in eos_token_ids:
             logger.debug(f"First token is EOS ({first_token_id}), terminating")
             # Broadcast TERMINATION_SENTINEL to signal all ranks to exit
-            sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device=device)
+            sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device="cpu")
             dist.broadcast(sentinel, src=0)
 
             yield GenerationResponse(
@@ -257,7 +260,7 @@ def tensor_parallel_generate(
         # Check max_tokens == 1
         if max_tokens <= 1:
             logger.debug("max_tokens reached (max_tokens=1)")
-            sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device=device)
+            sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device="cpu")
             dist.broadcast(sentinel, src=0)
 
             first_token_text: str = tokenizer.decode([first_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
@@ -346,7 +349,7 @@ def tensor_parallel_generate(
             # Check EOS termination (Requirement 6.6)
             if next_token_id in eos_token_ids:
                 logger.debug(f"EOS token {next_token_id} at step {completion_tokens}, terminating")
-                sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device=device)
+                sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device="cpu")
                 dist.broadcast(sentinel, src=0)
 
                 yield GenerationResponse(
@@ -373,7 +376,7 @@ def tensor_parallel_generate(
             # Check max_tokens termination (Requirement 6.6)
             if completion_tokens >= max_tokens:
                 logger.debug(f"max_tokens ({max_tokens}) reached, terminating")
-                sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device=device)
+                sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device="cpu")
                 dist.broadcast(sentinel, src=0)
 
                 token_text: str = tokenizer.decode([next_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
@@ -399,7 +402,7 @@ def tensor_parallel_generate(
                 return
 
             # Not terminated: broadcast token to all ranks (Requirement 6.3)
-            token_tensor = torch.tensor([next_token_id], dtype=torch.long, device=device)
+            token_tensor = torch.tensor([next_token_id], dtype=torch.long, device="cpu")
             dist.broadcast(token_tensor, src=0)
 
             # Decode token text and yield response
@@ -437,7 +440,7 @@ def tensor_parallel_generate(
 
         # Best-effort broadcast TERMINATION_SENTINEL to all ranks
         try:
-            sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device=device)
+            sentinel = torch.tensor([TERMINATION_SENTINEL], dtype=torch.long, device="cpu")
             dist.broadcast(sentinel, src=0)
         except Exception as sentinel_exc:
             logger.warning(
@@ -500,13 +503,16 @@ def tensor_parallel_worker_loop(
     try:
         # --- Prefill Phase ---
         # Receive prompt token count and input_ids from rank 0
-        token_count_tensor = torch.tensor([0], dtype=torch.long, device=device)
+        # NOTE: Gloo backend only supports CPU tensors for collective operations.
+        # All tensors passed to dist.broadcast() must be on CPU, then moved to device.
+        token_count_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
         dist.broadcast(token_count_tensor, src=0)
         prompt_tokens: int = int(token_count_tensor[0].item())
 
-        # Receive the full input tensor
-        input_tensor = torch.zeros(1, prompt_tokens, dtype=torch.long, device=device)
+        # Receive the full input tensor (broadcast on CPU, then move to device for forward)
+        input_tensor = torch.zeros(1, prompt_tokens, dtype=torch.long, device="cpu")
         dist.broadcast(input_tensor, src=0)
+        input_tensor = input_tensor.to(device)
 
         # Forward full prompt (all-reduce happens internally in model.forward())
         _logits, past_key_values = model.forward(
@@ -515,7 +521,7 @@ def tensor_parallel_worker_loop(
         )
 
         # Receive first sampled token from rank 0
-        token_tensor = torch.tensor([0], dtype=torch.long, device=device)
+        token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
         dist.broadcast(token_tensor, src=0)
         token_id: int = int(token_tensor[0].item())
 
@@ -535,7 +541,7 @@ def tensor_parallel_worker_loop(
             )
 
             # Receive next token from rank 0
-            token_tensor = torch.tensor([0], dtype=torch.long, device=device)
+            token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
             dist.broadcast(token_tensor, src=0)
             token_id = int(token_tensor[0].item())
 
