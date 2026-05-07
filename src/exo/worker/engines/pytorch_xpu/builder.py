@@ -44,76 +44,23 @@ def _resolve_master_addr(bound_instance: BoundInstance) -> str:
     if rank0_node is None:
         rank0_node = next(iter(hosts_by_node))
 
-    # Get rank 0's IP for Gloo TCPStore.
-    # All gremlin nodes have bond0 with 10.1.1.{12,13,14,15}.
-    # Rank 0 needs to advertise its bond0 IP so others can connect.
-    # We resolve this by getting the local bond0 IP (if we're rank 0)
-    # or by finding rank 0's IP from the hosts_by_node data.
+    # Use MASTER_ADDR from environment (set by NixOS distributed-inference module)
+    # This is the authoritative source for the Gloo master address.
+    import os
+    master_addr_env = os.environ.get("MASTER_ADDR")
+    if master_addr_env:
+        return master_addr_env
+
+    # Fallback: resolve from bond0 interface
     import socket
-
-    our_shard = bound_instance.bound_shard
-
-    def _get_bond0_ip() -> str:
-        """Get the local machine's bond0 IP (10.1.1.x)."""
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("10.1.1.1", 1))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            return "0.0.0.0"
-
-    if our_shard.device_rank == 0:
-        # We ARE rank 0 — use our bond0 IP so others can connect to us
-        ip = _get_bond0_ip()
-        logger.info(f"Rank 0: using bond0 IP {ip} as master_addr")
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.1.1.1", 1))
+        ip = s.getsockname()[0]
+        s.close()
         return ip
-
-    # We are NOT rank 0 — find rank 0's bond0 IP from hosts_by_node
-    # Look for any 10.1.1.x IP in rank 0's host list
-    hosts = hosts_by_node[rank0_node]
-    for host in hosts:
-        if host.ip.startswith("10.1.1."):
-            return host.ip
-
-    # If not found in rank 0's list, scan all nodes for 10.1.1.x IPs
-    # and try to identify rank 0's
-    all_ips = set()
-    for _node_id, node_hosts in hosts_by_node.items():
-        for host in node_hosts:
-            if host.ip.startswith("10.1.1."):
-                all_ips.add(host.ip)
-
-    # Remove our own IP
-    our_ip = _get_bond0_ip()
-    all_ips.discard(our_ip)
-
-    # If there's only one candidate, use it
-    if len(all_ips) == 1:
-        ip = all_ips.pop()
-        logger.info(f"Non-rank-0: resolved rank 0 IP as {ip}")
-        return ip
-
-    # Multiple candidates or none — fall back to probing
-    ephemeral_port = bound_instance.instance.ephemeral_port  # type: ignore[union-attr]
-    # Try all known gremlin IPs except our own
-    for ip in ["10.1.1.12", "10.1.1.13", "10.1.1.14", "10.1.1.15"]:
-        if ip == our_ip:
-            continue
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(10)
-            result = sock.connect_ex((ip, ephemeral_port))
-            sock.close()
-            if result == 0:
-                logger.info(f"Found rank 0 Gloo store at {ip}:{ephemeral_port}")
-                return ip
-        except Exception:
-            pass
-
-    logger.warning("Could not resolve rank 0 IP, using 0.0.0.0")
-    return "0.0.0.0"
+    except Exception:
+        return "0.0.0.0"
 
 
 @dataclass
