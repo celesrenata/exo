@@ -200,6 +200,24 @@ class Election:
                 master_disconnected = self.current_session.master_node_id in actually_disconnected
 
                 if not master_disconnected:
+                    # If new peers connected and we are our own master (self-elected),
+                    # trigger a re-election so the cluster can converge on a single master.
+                    # This handles the case where each node self-elects before gossipsub
+                    # mesh forms, then needs to re-elect once peers are visible.
+                    if actually_connected and self.current_session.master_node_id == self.node_id:
+                        logger.info(
+                            f"New peer(s) connected while self-elected: {actually_connected}. "
+                            f"Triggering re-election to converge cluster."
+                        )
+                        self.clock += 1
+                        assert self._tg is not None
+                        candidates: list[ElectionMessage] = []
+                        self._candidates = candidates
+                        self._tg.start_soon(
+                            self._campaign, candidates, DEFAULT_ELECTION_TIMEOUT
+                        )
+                        continue
+
                     logger.debug(
                         f"Non-master connection change (master={self.current_session.master_node_id}), "
                         f"disconnected={actually_disconnected}, connected={actually_connected}. "
