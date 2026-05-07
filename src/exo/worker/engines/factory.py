@@ -67,6 +67,21 @@ def get_inference_backend(
                 "pytorch_xpu", f"PyTorch XPU backend not available: {e}"
             ) from e
 
+    elif backend_name == "pytorch":
+        try:
+            from exo.worker.engines.pytorch.device_detector import select_primary_device
+            from exo.worker.engines.pytorch.engine import UnifiedPyTorchEngine
+
+            device = select_primary_device()
+            return UnifiedPyTorchEngine(
+                device_type=device.device_type,
+                device_index=device.device_index,
+            )
+        except ImportError as e:
+            raise BackendNotAvailableError(
+                "pytorch", f"Unified PyTorch backend not available: {e}"
+            ) from e
+
     elif backend_name == "dummy":
         try:
             from exo.worker.engines.dummy import DummyBackend
@@ -84,6 +99,7 @@ def get_inference_backend(
 # Registry of available backends
 BACKEND_REGISTRY = {
     "mlx": "MLXBackend",
+    "pytorch": "UnifiedPyTorchEngine",
     "pytorch_xpu": "PyTorchXPUBackend",
     "dummy": "DummyBackend",
 }

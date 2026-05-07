@@ -147,7 +147,8 @@ extend-select = ["I", "N", "B", "A", "PIE", "SIM"]
 pythonpath = "."
 asyncio_mode = "auto"
 markers = [
-    "slow: marks tests as slow (deselected by default)"
+    "slow: marks tests as slow (deselected by default)",
+    "e2e: marks end-to-end tests requiring the full gremlin cluster"
 ]
 env = [
   "EXO_TESTS=1"
