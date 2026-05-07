@@ -81,26 +81,16 @@ class CpuStagedTensor:
 
 
 def init_process_group(config: ProcessGroupConfig) -> None:
-    """Initialize torch.distributed with Gloo backend via env:// rendezvous.
+    """Initialize torch.distributed with Gloo backend using TCPStore.
 
-    Sets MASTER_ADDR and MASTER_PORT environment variables, then calls
-    torch.distributed.init_process_group with the Gloo backend. The env://
-    init_method uses these environment variables for rendezvous through the
-    aggregation switch.
+    Creates a TCPStore directly (not env:// rendezvous) so that rank 0
+    can bind on 0.0.0.0 while other ranks connect to master_addr.
 
     Requirements: 1.1, 1.3, 1.6
     """
     import torch.distributed as dist
 
-    os.environ["MASTER_ADDR"] = config.master_addr
-    os.environ["MASTER_PORT"] = str(config.master_port)
-
     # Tell Gloo which network interface to use for mesh connections.
-    # Without this, Gloo resolves the hostname which may point to a loopback
-    # address (e.g., 127.0.0.2 in /etc/hosts on NixOS), causing connection failures.
-    # We use stdlib socket/fcntl to find the network interface on the same subnet.
-    # Both GLOO_SOCKET_IFNAME and TP_SOCKET_IFNAME must be set — the former
-    # controls rendezvous, the latter controls the actual data transport.
     if "GLOO_SOCKET_IFNAME" not in os.environ:
         try:
             import fcntl
@@ -108,9 +98,8 @@ def init_process_group(config: ProcessGroupConfig) -> None:
             import struct
             detected_ifname: str | None = None
 
-            # Get all network interfaces using /proc/net/dev (Linux-specific, stdlib only)
             with open("/proc/net/dev") as f:
-                lines = f.readlines()[2:]  # Skip header lines
+                lines = f.readlines()[2:]
 
             master_prefix = ".".join(config.master_addr.split(".")[:3])
 
@@ -118,69 +107,68 @@ def init_process_group(config: ProcessGroupConfig) -> None:
                 ifname = line.split(":")[0].strip()
                 if ifname == "lo" or ifname.startswith("veth") or ifname.startswith("docker") or ifname.startswith("cni") or ifname.startswith("flannel"):
                     continue
-                # Get IPv4 address for this interface using ioctl
                 try:
                     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                     ip_bytes = fcntl.ioctl(
                         sock.fileno(),
-                        0x8915,  # SIOCGIFADDR
+                        0x8915,
                         struct.pack("256s", ifname.encode("utf-8")[:15])
                     )[20:24]
                     ip_addr = socket.inet_ntoa(ip_bytes)
                     sock.close()
-                except (OSError, IOError):
-                    continue
 
-                if ip_addr.startswith("127."):
+                    if ip_addr.startswith(master_prefix):
+                        detected_ifname = ifname
+                        break
+                except (OSError, struct.error):
                     continue
-
-                # Prefer interface on same /24 as MASTER_ADDR
-                local_prefix = ".".join(ip_addr.split(".")[:3])
-                if local_prefix == master_prefix:
-                    detected_ifname = ifname
-                    break
-                # Keep first non-loopback as fallback
-                if detected_ifname is None:
-                    detected_ifname = ifname
 
             if detected_ifname:
                 os.environ["GLOO_SOCKET_IFNAME"] = detected_ifname
                 os.environ["TP_SOCKET_IFNAME"] = detected_ifname
                 logger.info(f"Set GLOO_SOCKET_IFNAME={detected_ifname}")
-            else:
-                logger.warning("Could not detect network interface for Gloo")
         except Exception as e:
-            logger.warning(f"Failed to detect network interface for Gloo: {e}")
+            logger.warning(f"Failed to detect network interface: {e}")
 
-    # Force Gloo to use ports in the firewall-allowed range (49152-65535)
-    # This is set before init_process_group so Gloo's TCPStore and mesh
-    # connections bind to ports that pass through the NixOS firewall.
-    if "GLOO_PORT_RANGE" not in os.environ:
-        os.environ["GLOO_PORT_RANGE"] = "49152,65535"
-    if "TP_PORT_RANGE" not in os.environ:
-        os.environ["TP_PORT_RANGE"] = "49152,65535"
+    # Use TCPStore directly — the node at master_addr runs the store
+    # Determine if WE are the store master (our IP matches master_addr)
+    import socket as _socket
+    try:
+        _s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+        _s.connect(("10.1.1.1", 1))
+        _our_ip = _s.getsockname()[0]
+        _s.close()
+    except Exception:
+        _our_ip = ""
+
+    is_master = (_our_ip == config.master_addr)
+    store_host = "0.0.0.0" if is_master else config.master_addr
 
     logger.info(
-        f"Gloo env: MASTER_ADDR={os.environ.get('MASTER_ADDR')}, "
-        f"MASTER_PORT={os.environ.get('MASTER_PORT')}, "
-        f"GLOO_SOCKET_IFNAME={os.environ.get('GLOO_SOCKET_IFNAME', 'NOT SET')}, "
-        f"TP_SOCKET_IFNAME={os.environ.get('TP_SOCKET_IFNAME', 'NOT SET')}"
+        f"TCPStore: host={store_host}, port={config.master_port}, "
+        f"is_master={is_master}, our_ip={_our_ip}, master_addr={config.master_addr}"
     )
 
-    try:
-        dist.init_process_group(
-            backend="gloo",
-            rank=config.rank,
-            world_size=config.world_size,
-            init_method="env://",
-            timeout=timedelta(seconds=config.init_timeout_seconds),
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to initialize process group: rank={config.rank}, "
-            f"world_size={config.world_size}, backend=gloo, "
-            f"master_addr={config.master_addr}, master_port={config.master_port}: {exc}"
-        ) from exc
+    store = dist.TCPStore(
+        host_name=store_host,
+        port=config.master_port,
+        world_size=config.world_size,
+        is_master=is_master,
+        timeout=timedelta(seconds=config.init_timeout_seconds),
+    )
+
+    dist.init_process_group(
+        backend=config.backend,
+        store=store,
+        rank=config.rank,
+        world_size=config.world_size,
+        timeout=timedelta(seconds=config.init_timeout_seconds),
+    )
+
+    logger.info(
+        f"Process group initialized: rank={config.rank}/{config.world_size}, "
+        f"backend={config.backend}, master={config.master_addr}:{config.master_port}, "
+        f"is_master={is_master}"
 
 
 def destroy_process_group(timeout_seconds: float = 5.0) -> None:
