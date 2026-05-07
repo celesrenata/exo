@@ -45,9 +45,20 @@ def _resolve_master_addr(bound_instance: BoundInstance) -> str:
         # Fallback: use first node in hosts_by_node
         rank0_node = next(iter(hosts_by_node))
 
+    # Filter for routable IPs — exclude 0.0.0.0, k8s pod CIDRs (10.42.x.x),
+    # documentation IPs (198.51.100.x), and loopback
+    def _is_routable(ip: str) -> bool:
+        if ip == "0.0.0.0" or ip.startswith("127."):
+            return False
+        if ip.startswith("10.42."):  # k8s pod/service CIDR
+            return False
+        if ip.startswith("198.51.100."):  # TEST-NET-2 (documentation)
+            return False
+        return True
+
     hosts = hosts_by_node[rank0_node]
     for host in hosts:
-        if host.ip != "0.0.0.0":
+        if _is_routable(host.ip):
             return host.ip
 
     # Last resort: return first host IP regardless
