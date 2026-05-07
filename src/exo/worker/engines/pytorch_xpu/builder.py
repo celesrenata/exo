@@ -42,17 +42,25 @@ def _resolve_master_addr(bound_instance: BoundInstance) -> str:
             break
 
     if rank0_node is None:
-        # Fallback: use first node in hosts_by_node
         rank0_node = next(iter(hosts_by_node))
 
-    # Filter for routable IPs — exclude 0.0.0.0, k8s pod CIDRs (10.42.x.x),
-    # documentation IPs (198.51.100.x), and loopback
+    # Determine if WE are rank 0
+    our_shard = bound_instance.bound_shard
+    if our_shard.device_rank == 0:
+        # We ARE rank 0 — bind on all interfaces
+        return "0.0.0.0"
+
+    # We are NOT rank 0 — find rank 0's routable IP from our perspective
+    # Look at ALL nodes' host lists to find rank 0's real IP
+    # (rank 0's own entry has 0.0.0.0 for itself, but other entries have its real IP)
     def _is_routable(ip: str) -> bool:
         if ip == "0.0.0.0" or ip.startswith("127."):
             return False
         if ip.startswith("10.42."):  # k8s pod/service CIDR
             return False
         if ip.startswith("198.51.100."):  # TEST-NET-2 (documentation)
+            return False
+        if ip.startswith("10.43."):  # k8s service CIDR
             return False
         return True
 
