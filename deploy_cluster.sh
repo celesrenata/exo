@@ -1,12 +1,11 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Deploy exo to the gremlin cluster.
 #
 # Workflow:
 #   1. Push current branch to GitHub
-#   2. Deploy to gremlin-1 (rebuild NixOS, restart exo)
-#   3. Deploy to gremlin-2, gremlin-3, gremlin-4 in parallel
+#   2. Deploy to each node sequentially (update flake, rebuild, restart, verify)
 #
 # Usage:
 #   bash deploy_cluster.sh              # deploy to all 4 nodes
@@ -14,7 +13,8 @@ set -e
 #   bash deploy_cluster.sh gremlin-2 gremlin-3  # deploy to specific nodes
 
 BRANCH=$(git branch --show-current)
-COMMIT=$(git log --oneline -1 | awk '{print $1}')
+COMMIT=$(git rev-parse HEAD)
+SHORT_COMMIT=$(git rev-parse --short HEAD)
 
 declare -A HOSTS=(
   [gremlin-1]="root@10.1.1.12"
@@ -32,19 +32,22 @@ fi
 
 echo "=== Deploying exo cluster ==="
 echo "Branch: $BRANCH"
-echo "Commit: $COMMIT"
+echo "Commit: $SHORT_COMMIT ($COMMIT)"
 echo "Targets: ${TARGETS[*]}"
 echo ""
 
 # Step 1: Push to GitHub
 echo ">>> Pushing $BRANCH to origin..."
-git push origin "$BRANCH" 2>&1 | tail -5
+if ! git push origin "$BRANCH" 2>&1; then
+  echo "ERROR: git push failed"
+  exit 1
+fi
 echo ""
 
 # Wait for GitHub to process
 sleep 3
 
-# Step 2: Deploy function
+# Deploy function — sequential, verbose, with verification
 deploy_node() {
   local NODE=$1
   local HOST=${HOSTS[$NODE]}
@@ -54,66 +57,83 @@ deploy_node() {
     return 1
   fi
 
-  echo "[$NODE] Updating flake input to commit $COMMIT..."
-  ssh "$HOST" "cd /etc/nixos && nix flake lock --update-input exo --override-input exo github:celesrenata/exo/$COMMIT" 2>&1 | tail -3
+  # Step A: Update flake input
+  echo "[$NODE] Updating flake input to $SHORT_COMMIT..."
+  if ! ssh -o ConnectTimeout=10 "$HOST" "cd /etc/nixos && nix flake update exo --override-input exo github:celesrenata/exo/$COMMIT 2>&1"; then
+    echo "[$NODE] ERROR: flake update failed"
+    return 1
+  fi
 
-  echo "[$NODE] Rebuilding NixOS..."
-  ssh "$HOST" "cd /etc/nixos && nixos-rebuild switch --flake .#$NODE" 2>&1 | grep -E "building|activating|Done|switching" | tail -5
+  # Step B: Verify the lock file has the correct commit
+  local LOCK_REV
+  LOCK_REV=$(ssh -o ConnectTimeout=10 "$HOST" "grep -A10 'celesrenata' /etc/nixos/flake.lock | grep rev | head -1 | grep -o '[0-9a-f]\{40\}'")
+  if [ "$LOCK_REV" != "$COMMIT" ]; then
+    echo "[$NODE] ERROR: flake.lock has $LOCK_REV, expected $COMMIT"
+    echo "[$NODE] Retrying flake update..."
+    ssh -o ConnectTimeout=10 "$HOST" "cd /etc/nixos && nix flake update exo --override-input exo github:celesrenata/exo/$COMMIT 2>&1"
+    LOCK_REV=$(ssh -o ConnectTimeout=10 "$HOST" "grep -A10 'celesrenata' /etc/nixos/flake.lock | grep rev | head -1 | grep -o '[0-9a-f]\{40\}'")
+    if [ "$LOCK_REV" != "$COMMIT" ]; then
+      echo "[$NODE] ERROR: flake.lock still wrong after retry ($LOCK_REV)"
+      return 1
+    fi
+  fi
+  echo "[$NODE] ✓ flake.lock verified: $SHORT_COMMIT"
 
+  # Step C: Rebuild NixOS
+  echo "[$NODE] Rebuilding NixOS (this takes a while on first build)..."
+  if ! ssh -o ConnectTimeout=10 -o ServerAliveInterval=30 "$HOST" "cd /etc/nixos && nixos-rebuild switch --flake .#$NODE 2>&1 | tee /tmp/nixos-rebuild.log | tail -10"; then
+    echo "[$NODE] ERROR: nixos-rebuild failed. Last 20 lines:"
+    ssh -o ConnectTimeout=10 "$HOST" "tail -20 /tmp/nixos-rebuild.log" 2>/dev/null
+    return 1
+  fi
+  echo "[$NODE] ✓ NixOS rebuilt"
+
+  # Step D: Restart exo service
   echo "[$NODE] Restarting exo service..."
-  ssh "$HOST" "systemctl restart exo"
-
-  echo "[$NODE] Waiting for startup..."
+  ssh -o ConnectTimeout=10 "$HOST" "systemctl restart exo"
   sleep 5
 
-  echo "[$NODE] Checking status..."
+  # Step E: Verify service is running
   local STATUS
-  STATUS=$(ssh "$HOST" "systemctl is-active exo" 2>/dev/null || echo "failed")
+  STATUS=$(ssh -o ConnectTimeout=10 "$HOST" "systemctl is-active exo" 2>/dev/null || echo "failed")
   if [ "$STATUS" = "active" ]; then
     echo "[$NODE] ✓ exo is running"
   else
-    echo "[$NODE] ✗ exo failed to start!"
-    ssh "$HOST" "journalctl -u exo -n 10 --no-pager" 2>/dev/null | tail -5
+    echo "[$NODE] ✗ exo failed to start! Logs:"
+    ssh -o ConnectTimeout=10 "$HOST" "journalctl -u exo -n 15 --no-pager" 2>/dev/null
     return 1
   fi
   echo ""
 }
 
-# Step 3: Deploy gremlin-1 first (it's the master)
-if printf '%s\n' "${TARGETS[@]}" | grep -q "^gremlin-1$"; then
-  deploy_node "gremlin-1"
-  # Remove gremlin-1 from remaining targets
-  REMAINING=()
-  for t in "${TARGETS[@]}"; do
-    [ "$t" != "gremlin-1" ] && REMAINING+=("$t")
-  done
-else
-  REMAINING=("${TARGETS[@]}")
-fi
+# Deploy nodes sequentially — gremlin-1 first, then the rest
+FAILED_NODES=()
 
-# Step 4: Deploy remaining nodes in parallel
-if [ ${#REMAINING[@]} -gt 0 ]; then
-  echo ">>> Deploying ${REMAINING[*]} in parallel..."
-  PIDS=()
-  for NODE in "${REMAINING[@]}"; do
-    deploy_node "$NODE" &
-    PIDS+=($!)
-  done
-
-  # Wait for all parallel deployments
-  FAILED=0
-  for PID in "${PIDS[@]}"; do
-    if ! wait "$PID"; then
-      FAILED=$((FAILED + 1))
-    fi
-  done
-
-  if [ $FAILED -gt 0 ]; then
-    echo "WARNING: $FAILED node(s) failed to deploy"
+for NODE in "${TARGETS[@]}"; do
+  if ! deploy_node "$NODE"; then
+    FAILED_NODES+=("$NODE")
+    echo ">>> $NODE FAILED — continuing with remaining nodes"
+    echo ""
   fi
-fi
+done
 
-echo "=== Deployment complete ==="
+# Summary
+echo "=== Deployment Summary ==="
+echo "Commit: $SHORT_COMMIT"
+SUCCEEDED=$((${#TARGETS[@]} - ${#FAILED_NODES[@]}))
+echo "Succeeded: $SUCCEEDED/${#TARGETS[@]}"
+if [ ${#FAILED_NODES[@]} -gt 0 ]; then
+  echo "Failed: ${FAILED_NODES[*]}"
+fi
 echo ""
 echo "Dashboard: http://10.1.1.12:52415"
-echo "Check cluster: curl -s http://10.1.1.12:52415/state | python3 -c \"import sys,json; d=json.load(sys.stdin); print(f'Nodes: {len(d.get(\\\"topology\\\",{}).get(\\\"nodes\\\",{}))}')\" 2>/dev/null || echo 'API not ready yet'"
+echo ""
+
+# Final cluster check
+echo ">>> Checking cluster state..."
+sleep 10
+ssh -o ConnectTimeout=5 root@10.1.1.12 "nix-shell -p jq --run 'curl -s http://localhost:52415/state | jq \"{nodes: (.topology.nodes | length), instances: (.instances | length), runners: (.runners | length)}\"'" 2>/dev/null || echo "API not responding"
+
+if [ ${#FAILED_NODES[@]} -gt 0 ]; then
+  exit 1
+fi
