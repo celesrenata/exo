@@ -828,7 +828,7 @@ mod preservation_tests {
         #![proptest_config(ProptestConfig::with_cases(50))]
 
         /// Property: `on_connection_closed` emits `Event::ConnectionClosed`
-        /// for any peer, regardless of origin.
+        /// for any peer, regardless of origin (when it's the last connection).
         ///
         /// **Validates: Requirements 3.3**
         #[test]
@@ -841,6 +841,14 @@ mod preservation_tests {
             let peer_id = peer_kp.public().to_peer_id();
             let conn_id = ConnectionId::new_unchecked(0);
             let ip = std::net::IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+
+            // First establish the connection so the peer is tracked in connected_peers.
+            // on_connection_closed only emits an event when the peer's connection count
+            // drops to 0 (i.e., the peer was previously established).
+            behaviour.on_connection_established(peer_id, conn_id, ip, port);
+
+            // Drain the ConnectionEstablished event so we only check for ConnectionClosed
+            let _ = drain_pending_events(&mut behaviour);
 
             behaviour.on_connection_closed(peer_id, conn_id, ip, port);
 
