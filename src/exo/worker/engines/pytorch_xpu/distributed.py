@@ -169,6 +169,7 @@ def init_process_group(config: ProcessGroupConfig) -> None:
         f"Process group initialized: rank={config.rank}/{config.world_size}, "
         f"backend={config.backend}, master={config.master_addr}:{config.master_port}, "
         f"is_master={is_master}"
+    )
 
 
 def destroy_process_group(timeout_seconds: float = 5.0) -> None:
