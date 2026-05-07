@@ -412,11 +412,17 @@
                     });
 
                     # regex C extension has circular import in pythonImportsCheck on 3.13
-                    regex = psuper.regex.overridePythonAttrs (old: {
+                    # Also need version 2025.11.3 (nixpkgs has 2025.9.18 which is broken on 3.13)
+                    regex = pself.buildPythonPackage {
+                      pname = "regex";
+                      version = "2025.11.3";
+                      format = "wheel";
+                      src = final.fetchurl {
+                        url = "https://files.pythonhosted.org/packages/62/11/9bcef2d1445665b180ac7f230406ad80671f0fc2a6ffb93493b5dd8cd64c/regex-2025.11.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl";
+                        hash = "sha256-Suy29GExat+fHw9qSho9eeBF+bcex2BVp5Gv+jsoWFA=";
+                      };
                       doCheck = false;
-                      doInstallCheck = false;
-                      pythonImportsCheck = [];
-                    });
+                    };
                     
                     # sqlalchemy has a failing test
                     sqlalchemy = psuper.sqlalchemy.overridePythonAttrs (old: {
