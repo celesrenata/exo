@@ -53,18 +53,27 @@ def entrypoint(
                 event_sender=event_sender, cancel_receiver=cancel_receiver
             )
         else:
-            from exo.worker.engines.mlx.patches import apply_mlx_patches
+            # Try MLX first; if unavailable (Linux without MLX), fall back to PyTorchXPU
+            try:
+                from exo.worker.engines.mlx.patches import apply_mlx_patches
 
-            apply_mlx_patches()
+                apply_mlx_patches()
 
-            from exo.worker.engines.mlx.builder import MlxBuilder
+                from exo.worker.engines.mlx.builder import MlxBuilder
 
-            # evil sharing of the event sender
-            builder = MlxBuilder(
-                model_id=bound_instance.bound_shard.model_card.model_id,
-                event_sender=event_sender,
-                cancel_receiver=cancel_receiver,
-            )
+                # evil sharing of the event sender
+                builder = MlxBuilder(
+                    model_id=bound_instance.bound_shard.model_card.model_id,
+                    event_sender=event_sender,
+                    cancel_receiver=cancel_receiver,
+                )
+            except (ImportError, ModuleNotFoundError):
+                logger.info("MLX not available, falling back to PyTorchXPU builder")
+                from exo.worker.engines.pytorch_xpu.builder import PyTorchXPUBuilder
+
+                builder = PyTorchXPUBuilder(
+                    event_sender=event_sender, cancel_receiver=cancel_receiver
+                )
 
         runner = Runner(bound_instance, builder, event_sender, task_receiver)
         runner.main()
