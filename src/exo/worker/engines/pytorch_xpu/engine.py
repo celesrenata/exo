@@ -183,7 +183,7 @@ class PyTorchXPUEngine(Engine):
             except Exception:
                 pass  # Fall back to raw prompt
 
-        max_tokens = task.task_params.max_tokens or 100
+        max_tokens = task.task_params.max_output_tokens or 100
         temperature = task.task_params.temperature or 1.0
         top_k = getattr(task.task_params, "top_k", None)
         top_p = task.task_params.top_p
