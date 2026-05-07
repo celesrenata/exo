@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Deploy to Gremlin Cluster",
+  "description": "After the agent stops, if code was pushed to GitHub, deploy to all 4 gremlin nodes by running the deploy_cluster.sh script. Deploys gremlin-1 first (master), then gremlin-2/3/4 in parallel.",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "bash deploy_cluster.sh",
+    "timeout": 300
+  }
+}

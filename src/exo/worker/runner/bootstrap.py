@@ -5,7 +5,7 @@ import loguru
 
 from exo.shared.types.events import Event, RunnerStatusUpdated
 from exo.shared.types.tasks import Task, TaskId
-from exo.shared.types.worker.instances import BoundInstance
+from exo.shared.types.worker.instances import BoundInstance, PyTorchXPURingInstance
 from exo.shared.types.worker.runners import RunnerFailed
 from exo.utils.channels import ClosedResourceError, MpReceiver, MpSender
 from exo.worker.engines.base import Builder
@@ -45,6 +45,12 @@ def entrypoint(
 
             builder = MfluxBuilder(
                 event_sender, cancel_receiver, bound_instance.bound_shard
+            )
+        elif isinstance(bound_instance.instance, PyTorchXPURingInstance):
+            from exo.worker.engines.pytorch_xpu.builder import PyTorchXPUBuilder
+
+            builder = PyTorchXPUBuilder(
+                event_sender=event_sender, cancel_receiver=cancel_receiver
             )
         else:
             from exo.worker.engines.mlx.patches import apply_mlx_patches

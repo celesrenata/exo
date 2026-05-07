@@ -15,6 +15,7 @@ class InstanceId(Id):
 class InstanceMeta(str, Enum):
     MlxRing = "MlxRing"
     MlxJaccl = "MlxJaccl"
+    PyTorchXPURing = "PyTorchXPURing"
 
 
 class BaseInstance(TaggedModel):
@@ -35,8 +36,13 @@ class MlxJacclInstance(BaseInstance):
     jaccl_coordinators: dict[NodeId, str]
 
 
+class PyTorchXPURingInstance(BaseInstance):
+    hosts_by_node: dict[NodeId, list[Host]]
+    ephemeral_port: int
+
+
 # TODO: Single node instance
-Instance = MlxRingInstance | MlxJacclInstance
+Instance = MlxRingInstance | MlxJacclInstance | PyTorchXPURingInstance
 
 
 class BoundInstance(FrozenModel):
