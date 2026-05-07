@@ -83,8 +83,8 @@ mod transport {
         // `TCP_NODELAY` enabled => avoid latency
         let tcp_config = Config::default().nodelay(true);
 
-        // V1 + lazy flushing => 0-RTT negotiation
-        let upgrade_version = Version::V1Lazy;
+        // V1 => wait for protocol confirmation before sending data (reliable negotiation)
+        let upgrade_version = Version::V1;
 
         // Noise is faster than TLS + we don't care much for security
         let noise_config = noise::Config::new(keypair)?;
