@@ -22,7 +22,18 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use util::wakerdeque::WakerDeque;
 
-const RETRY_CONNECT_INTERVAL: Duration = Duration::from_secs(5);
+const RETRY_CONNECT_INTERVAL: Duration = Duration::from_secs(15);
+/// Maximum random jitter added to the retry interval to prevent simultaneous dialing
+const RETRY_JITTER_MAX_MS: u64 = 3000;
+
+/// Simple jitter using system time to avoid adding rand dependency
+fn jitter_duration() -> Duration {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    Duration::from_millis(u64::from(nanos) % RETRY_JITTER_MAX_MS)
+}
 
 mod managed {
     use libp2p::swarm::NetworkBehaviour;
@@ -123,13 +134,14 @@ pub struct Behaviour {
 
 impl Behaviour {
     pub fn new(keypair: &identity::Keypair) -> io::Result<Self> {
+        // Add random jitter to initial retry delay to desynchronize nodes
         Ok(Self {
             managed: managed::Behaviour::new(keypair)?,
             mdns_discovered: HashMap::new(),
             static_peers: HashMap::new(),
             pending_static_addrs: BTreeSet::new(),
             connected_peers: HashMap::new(),
-            retry_delay: Delay::new(RETRY_CONNECT_INTERVAL),
+            retry_delay: Delay::new(RETRY_CONNECT_INTERVAL + jitter_duration()),
             pending_events: WakerDeque::new(),
         })
     }
@@ -166,7 +178,10 @@ impl Behaviour {
 
     fn handle_mdns_discovered(&mut self, peers: Vec<(PeerId, Multiaddr)>) {
         for (p, ma) in peers {
-            self.dial(p, ma.clone()); // always connect
+            // Only dial if not already connected (prevents duplicate connections)
+            if !self.connected_peers.contains_key(&p) {
+                self.dial(p, ma.clone());
+            }
 
             // get peer's multi-addresses or insert if missing
             let Some(mas) = self.mdns_discovered.get_mut(&p) else {
@@ -455,7 +470,8 @@ impl NetworkBehaviour for Behaviour {
                     self.dial(p, ma)
                 }
             }
-            self.retry_delay.reset(RETRY_CONNECT_INTERVAL) // reset timeout
+            // Add random jitter to prevent all nodes from dialing simultaneously
+            self.retry_delay.reset(RETRY_CONNECT_INTERVAL + jitter_duration());
         }
 
         // send out any pending events from our own service
