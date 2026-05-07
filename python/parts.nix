@@ -156,6 +156,7 @@
                   loguru
                   anyio # Pinned to 4.11.0 via global overlay in flake.nix
                   tiktoken
+                  (regex.overridePythonAttrs { doCheck = false; doInstallCheck = false; pythonImportsCheck = []; })
                   hypercorn
                   httpx
                   tomlkit
