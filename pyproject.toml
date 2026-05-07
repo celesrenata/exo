@@ -18,7 +18,6 @@ dependencies = [
     "exo_pyo3_bindings", # rust bindings
     "anyio==4.11.0",
     "mlx==0.30.5; sys_platform == 'darwin'",
-    "mlx[cpu]==0.30.5; sys_platform == 'linux'",
     "mlx-lm==0.30.6; sys_platform == 'darwin'",
     "tiktoken>=0.12.0", # required for kimi k2 tokenizer
     "hypercorn>=0.18.0",
@@ -52,6 +51,9 @@ dev = [
 
 # mlx[cuda] requires a newer version of mlx. the ideal on linux is: default to mlx[cpu] unless[cuda] specified.
 [project.optional-dependencies]
+mlx-cpu = [
+    "mlx[cpu]==0.30.5",
+]
 tinygrad-opencl = [
     "pyopencl>=2024.1",
 ]
