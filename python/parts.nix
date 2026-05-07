@@ -156,7 +156,16 @@
                   loguru
                   anyio # Pinned to 4.11.0 via global overlay in flake.nix
                   tiktoken
-                  (regex.overridePythonAttrs { doCheck = false; doInstallCheck = false; pythonImportsCheck = []; })
+                  (pkgsExo.python313.pkgs.buildPythonPackage {
+                    pname = "regex";
+                    version = "2025.11.3";
+                    format = "wheel";
+                    src = pkgs.fetchurl {
+                      url = "https://files.pythonhosted.org/packages/62/11/9bcef2d1445665b180ac7f230406ad80671f0fc2a6ffb93493b5dd8cd64c/regex-2025.11.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl";
+                      hash = "sha256-Suy29GExat+fHw9qSho9eeBF+bcex2BVp5Gv+jsoWFA=";
+                    };
+                    doCheck = false;
+                  })
                   hypercorn
                   httpx
                   tomlkit
