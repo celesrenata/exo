@@ -16,7 +16,7 @@ from typing import Any
 
 from exo.shared.types.events import Event
 from exo.shared.types.tasks import TaskId
-from exo.shared.types.worker.instances import BoundInstance, PyTorchXPURingInstance
+from exo.shared.types.worker.instances import BoundInstance, MlxRingInstance, PyTorchXPURingInstance
 from exo.shared.types.worker.runner_response import ModelLoadingResponse
 from exo.utils.channels import MpReceiver, MpSender
 from exo.worker.engines.base import Builder, Engine
@@ -28,8 +28,9 @@ def _resolve_master_addr(bound_instance: BoundInstance) -> str:
 
     Rank 0's first non-0.0.0.0 IP is used as the master address.
     """
-    assert isinstance(bound_instance.instance, PyTorchXPURingInstance)
-    hosts_by_node = bound_instance.instance.hosts_by_node
+    instance = bound_instance.instance
+    # Works with both MlxRingInstance and PyTorchXPURingInstance (both have hosts_by_node)
+    hosts_by_node = instance.hosts_by_node  # type: ignore[union-attr]
 
     # Find rank 0's node — it's the node whose runner has device_rank == 0
     shard_assignments = bound_instance.instance.shard_assignments
@@ -77,7 +78,7 @@ class PyTorchXPUBuilder(Builder):
             logger.info("Single-node XPU instance, skipping process group init")
             return
 
-        assert isinstance(bound_instance.instance, PyTorchXPURingInstance)
+        assert isinstance(bound_instance.instance, (PyTorchXPURingInstance, MlxRingInstance))
         master_addr = _resolve_master_addr(bound_instance)
         master_port = bound_instance.instance.ephemeral_port
 
