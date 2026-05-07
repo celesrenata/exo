@@ -410,6 +410,13 @@
                     loguru = psuper.loguru.overridePythonAttrs (old: {
                       doCheck = false;
                     });
+
+                    # regex C extension has circular import in pythonImportsCheck on 3.13
+                    regex = psuper.regex.overridePythonAttrs (old: {
+                      doCheck = false;
+                      doInstallCheck = false;
+                      pythonImportsCheck = [];
+                    });
                     
                     # sqlalchemy has a failing test
                     sqlalchemy = psuper.sqlalchemy.overridePythonAttrs (old: {
