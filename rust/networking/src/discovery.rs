@@ -222,7 +222,9 @@ impl Behaviour {
         remote_tcp_port: u16,
     ) {
         // Track this peer as connected (increment connection count)
-        *self.connected_peers.entry(peer_id).or_insert(0) += 1;
+        let count = self.connected_peers.entry(peer_id).or_insert(0);
+        *count += 1;
+        let is_first_connection = *count == 1;
 
         // Check if this connection matches a pending static addr (dialed without peer ID).
         // If so, promote to static_peers for automatic retry on disconnect.
@@ -259,14 +261,18 @@ impl Behaviour {
             }
         }
 
-        // send out connected event
-        self.pending_events
-            .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished {
-                peer_id,
-                connection_id,
-                remote_ip,
-                remote_tcp_port,
-            }));
+        // Only emit ConnectionEstablished for the FIRST connection to a peer.
+        // Duplicate connections (from simultaneous dialing) should not generate
+        // additional events that could confuse the election code.
+        if is_first_connection {
+            self.pending_events
+                .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished {
+                    peer_id,
+                    connection_id,
+                    remote_ip,
+                    remote_tcp_port,
+                }));
+        }
     }
 
     fn on_connection_closed(
@@ -281,17 +287,18 @@ impl Behaviour {
             *count = count.saturating_sub(1);
             if *count == 0 {
                 self.connected_peers.remove(&peer_id);
+                // Only emit ConnectionClosed when ALL connections to this peer are gone.
+                // This prevents spurious disconnect events when duplicate connections
+                // are pruned (which would trigger flap detection in the election code).
+                self.pending_events
+                    .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed {
+                        peer_id,
+                        connection_id,
+                        remote_ip,
+                        remote_tcp_port,
+                    }));
             }
         }
-
-        // send out disconnected event
-        self.pending_events
-            .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed {
-                peer_id,
-                connection_id,
-                remote_ip,
-                remote_tcp_port,
-            }));
     }
 }
 
