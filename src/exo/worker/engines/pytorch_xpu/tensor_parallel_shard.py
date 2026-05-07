@@ -662,42 +662,46 @@ class TensorParallelShard:
         return logits, new_kv_cache
 
     def _all_reduce(self, tensor: Any, layer_index: int = -1) -> Any:
-        """In-place all-reduce (sum) over the tensor-parallel process group.
+        """All-reduce (sum) over the tensor-parallel process group with CPU staging.
 
-        Uses torch.distributed.all_reduce with the TP process group obtained
-        from get_tensor_parallel_group(). The operation is synchronous
-        (async_op=False) — TB4 bandwidth is sufficient for decode-phase tensors.
+        Gloo backend does not support XPU tensors for collective operations.
+        Tensors are staged to CPU before all_reduce, then moved back to the
+        original device. On Intel iGPUs with shared memory, the CPU↔XPU copy
+        is near-zero cost.
 
         Args:
-            tensor: Tensor to all-reduce in place.
+            tensor: Tensor to all-reduce (on any device).
             layer_index: Transformer layer index for error context on timeout.
 
         Returns:
-            The same tensor after in-place all-reduce.
+            The tensor after all-reduce, on the original device.
 
         Raises:
-            RuntimeError: If the all-reduce times out or fails, with context
-                including layer_index, tensor shape, timeout value, and rank.
+            RuntimeError: If the all-reduce times out or fails.
 
         Requirements: 4.2, 4.3, 4.5, 11.1
         """
         tp_group = get_tensor_parallel_group()
+        original_device = tensor.device
 
         try:
+            # Stage to CPU for Gloo all_reduce
+            cpu_tensor = tensor.to("cpu")
             dist.all_reduce(
-                tensor,
+                cpu_tensor,
                 op=dist.ReduceOp.SUM,
                 group=tp_group,
                 async_op=False,
             )
+            # Move back to original device
+            tensor.copy_(cpu_tensor.to(original_device))
         except Exception as exc:
             rank = self.config.rank
-            timeout = self.config.allreduce_timeout_seconds
             raise RuntimeError(
                 f"Tensor-parallel all-reduce failed: "
                 f"layer_index={layer_index}, "
                 f"tensor_shape={tuple(tensor.shape)}, "
-                f"timeout={timeout}s, "
+                f"device={original_device}, "
                 f"rank={rank}"
             ) from exc
 
