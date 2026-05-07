@@ -197,12 +197,17 @@ class ModelLoader:
             logger.debug("Model placed on device (native PyTorch XPU, no IPEX optimization)")
 
             # Handle model sharding if needed
+            # Always create a TransformerShard when running in distributed mode
+            # (world_size > 1) because the distributed generator expects the
+            # TransformerShard.forward(input_data=...) interface, not the raw
+            # HuggingFace model.forward(input_ids=...) interface.
             if not (
                 shard_metadata.start_layer == 0
                 and shard_metadata.end_layer == shard_metadata.n_layers
-            ):
+            ) or shard_metadata.world_size > 1:
                 logger.debug(
                     f"Creating shard [{shard_metadata.start_layer}, {shard_metadata.end_layer})"
+                    f" (world_size={shard_metadata.world_size})"
                 )
                 model = self._create_model_shard(model, shard_metadata)
 
