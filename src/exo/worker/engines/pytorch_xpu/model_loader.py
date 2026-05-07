@@ -229,8 +229,10 @@ class ModelLoader:
                 )
                 model = self._create_model_shard(model, shard_metadata)
 
-            # Set model to eval mode
-            model.eval()
+            # Set model to eval mode (TensorParallelShard doesn't need this —
+            # it's not an nn.Module and has no training mode)
+            if hasattr(model, "eval"):
+                model.eval()
 
             return model, tokenizer
 
