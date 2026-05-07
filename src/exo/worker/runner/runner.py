@@ -689,9 +689,7 @@ def main(
                                 send_activation as _send_act,
                                 recv_activation as _recv_act,
                             )
-                            from exo.worker.engines.pytorch_xpu.tensor_parallel_instance import (
-                                TensorParallelInstance as _TensorParallelInstance,
-                            )
+                            del _send_act, _recv_act  # unused here, imported for side-effect check
 
                             rank = shard_metadata.device_rank
                             world_size = shard_metadata.world_size
@@ -733,7 +731,15 @@ def main(
                             )
 
                             # Dispatch to tensor-parallel, pipeline-parallel, or single-node generation
-                            if isinstance(instance, _TensorParallelInstance):
+                            # Detect tensor parallelism from shard metadata:
+                            # all nodes have start_layer=0, end_layer=n_layers (all layers)
+                            is_tensor_parallel = (
+                                world_size > 1
+                                and shard_metadata.start_layer == 0
+                                and shard_metadata.end_layer == shard_metadata.n_layers
+                            )
+
+                            if is_tensor_parallel:
                                 from exo.worker.engines.pytorch_xpu.tensor_parallel_generator import (
                                     tensor_parallel_generate,
                                     tensor_parallel_worker_loop,

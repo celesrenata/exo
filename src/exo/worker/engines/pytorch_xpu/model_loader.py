@@ -24,6 +24,10 @@ else:
         np = None  # type: ignore
 
 from exo.shared.types.worker.shards import ShardMetadata
+from exo.worker.engines.pytorch_xpu.tensor_parallel_shard import (
+    TensorParallelShard,
+    TPShardConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -197,16 +201,30 @@ class ModelLoader:
             logger.debug("Model placed on device (native PyTorch XPU, no IPEX optimization)")
 
             # Handle model sharding if needed
-            # Always create a TransformerShard when running in distributed mode
-            # (world_size > 1) because the distributed generator expects the
-            # TransformerShard.forward(input_data=...) interface, not the raw
-            # HuggingFace model.forward(input_ids=...) interface.
-            if not (
+            # Detect tensor-parallel configuration BEFORE pipeline-parallel:
+            # Tensor-parallel: all layers on every node (start_layer=0, end_layer=n_layers, world_size>1)
+            # Pipeline-parallel: different layer ranges per node
+            is_tensor_parallel = (
+                shard_metadata.start_layer == 0
+                and shard_metadata.end_layer == shard_metadata.n_layers
+                and shard_metadata.world_size > 1
+            )
+
+            if is_tensor_parallel:
+                logger.debug(
+                    f"Creating TensorParallelShard (all layers, world_size={shard_metadata.world_size},"
+                    f" rank={shard_metadata.device_rank})"
+                )
+                model = self._create_tensor_parallel_shard(model, shard_metadata, device)
+            elif not (
                 shard_metadata.start_layer == 0
                 and shard_metadata.end_layer == shard_metadata.n_layers
             ) or shard_metadata.world_size > 1:
+                # Pipeline-parallel or partial layer range: create TransformerShard
+                # The distributed generator expects the TransformerShard.forward(input_data=...)
+                # interface, not the raw HuggingFace model.forward(input_ids=...) interface.
                 logger.debug(
-                    f"Creating shard [{shard_metadata.start_layer}, {shard_metadata.end_layer})"
+                    f"Creating TransformerShard [{shard_metadata.start_layer}, {shard_metadata.end_layer})"
                     f" (world_size={shard_metadata.world_size})"
                 )
                 model = self._create_model_shard(model, shard_metadata)
@@ -316,6 +334,68 @@ class ModelLoader:
             f"layers [{shard_metadata.start_layer}, {shard_metadata.end_layer}), "
             f"first={shard_metadata.is_first_layer}, "
             f"last={shard_metadata.is_last_layer}"
+        )
+
+        return shard
+
+    def _create_tensor_parallel_shard(
+        self, model: Any, shard_metadata: ShardMetadata, device: Any
+    ) -> TensorParallelShard:
+        """
+        Create a TensorParallelShard for tensor-parallel distributed inference.
+
+        This wraps the model in a TensorParallelShard that holds ALL layers
+        but with sharded weights within each layer. Each rank holds 1/world_size
+        of the attention heads and MLP intermediate dimension, with all-reduce
+        synchronization after row-parallel layers.
+
+        Args:
+            model: Full model instance (on device)
+            shard_metadata: Metadata describing the shard (must have world_size > 1,
+                start_layer=0, end_layer=n_layers)
+            device: Torch device object
+
+        Returns:
+            TensorParallelShard instance with sharded weights
+
+        Requirements: 1.5, 2.4, 3.1
+        """
+        # Extract model config from HuggingFace model
+        config = model.config
+        hidden_size = config.hidden_size
+        num_attention_heads = config.num_attention_heads
+        intermediate_size = config.intermediate_size
+        num_key_value_heads = getattr(
+            config, "num_key_value_heads", num_attention_heads
+        )
+        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
+
+        # Construct TPShardConfig
+        tp_config = TPShardConfig(
+            rank=shard_metadata.device_rank,
+            world_size=shard_metadata.world_size,
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+            head_dim=head_dim,
+            intermediate_size=intermediate_size,
+            num_key_value_heads=num_key_value_heads,
+        )
+
+        logger.info(
+            f"Creating TensorParallelShard: "
+            f"rank={shard_metadata.device_rank}/{shard_metadata.world_size}, "
+            f"hidden_size={hidden_size}, "
+            f"num_attention_heads={num_attention_heads}, "
+            f"head_dim={head_dim}, "
+            f"intermediate_size={intermediate_size}, "
+            f"num_key_value_heads={num_key_value_heads}"
+        )
+
+        # Create TensorParallelShard — it shards weights and moves them to device
+        shard = TensorParallelShard(
+            model=model,
+            config=tp_config,
+            device=str(device),
         )
 
         return shard
