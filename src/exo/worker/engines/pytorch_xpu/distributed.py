@@ -130,16 +130,24 @@ def init_process_group(config: ProcessGroupConfig) -> None:
         except Exception as e:
             logger.warning(f"Failed to detect network interface: {e}")
 
-    # Use TCPStore directly — rank 0 hosts the store, other ranks connect.
-    # Determine is_master from rank (rank 0 = master), not IP comparison.
-    # IP comparison fails when hosts_by_node contains flannel IPs that don't
-    # match the bond0 IP detected via UDP socket.
-    is_master = (config.rank == 0)
+    # Use TCPStore directly — the node whose bond0 IP matches master_addr
+    # hosts the store. Determine is_master by comparing our bond0 IP to master_addr.
+    import socket as _socket
+    try:
+        _s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+        _s.connect(("10.1.1.1", 1))
+        _our_ip = _s.getsockname()[0]
+        _s.close()
+    except Exception:
+        _our_ip = ""
+
+    is_master = (_our_ip == config.master_addr)
     store_host = "0.0.0.0" if is_master else config.master_addr
 
     logger.info(
         f"TCPStore: host={store_host}, port={config.master_port}, "
-        f"is_master={is_master}, rank={config.rank}, master_addr={config.master_addr}"
+        f"is_master={is_master}, our_ip={_our_ip}, rank={config.rank}, "
+        f"master_addr={config.master_addr}"
     )
 
     store = dist.TCPStore(

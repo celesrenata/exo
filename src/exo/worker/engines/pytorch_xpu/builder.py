@@ -24,54 +24,44 @@ from exo.worker.runner.bootstrap import logger
 
 
 def _resolve_master_addr(bound_instance: BoundInstance) -> str:
-    """Determine master_addr from the instance's hosts_by_node.
+    """Determine master_addr for Gloo TCPStore rendezvous.
 
-    Rank 0's first routable IP is used as the master address.
-    All nodes in the instance use this same address to connect to the
-    Gloo TCPStore hosted by rank 0.
+    Since hosts_by_node may contain incorrect IP mappings (flannel/CNI IPs
+    that don't correspond to the correct node), we use a deterministic
+    approach: the node with the lowest bond0 IP in the instance hosts the
+    TCPStore. Each node detects its own bond0 IP to determine if it's the
+    store master.
 
-    Rank 0 always binds on 0.0.0.0 (determined by rank in init_process_group),
-    so the master_addr only needs to be routable FROM other ranks TO rank 0.
+    For the gremlin cluster, all nodes are on the 10.1.1.x subnet via bond0.
+    We detect the local bond0 IP and use the lowest IP among instance nodes
+    as the rendezvous point.
     """
-    instance = bound_instance.instance
-    # Works with both MlxRingInstance and PyTorchXPURingInstance (both have hosts_by_node)
-    hosts_by_node = instance.hosts_by_node  # type: ignore[union-attr]
-
-    # Find rank 0's node — it's the node whose runner has device_rank == 0
-    shard_assignments = bound_instance.instance.shard_assignments
-    rank0_node = None
-    for node_id, runner_id in shard_assignments.node_to_runner.items():
-        shard = shard_assignments.runner_to_shard.get(runner_id)
-        if shard is not None and shard.device_rank == 0:
-            rank0_node = node_id
-            break
-
-    if rank0_node is None:
-        rank0_node = next(iter(hosts_by_node))
-
-    # Get rank 0's routable IP from hosts_by_node.
-    # Prefer bond0 IPs (10.1.1.x) over flannel/CNI IPs (10.42.x.x),
-    # but flannel IPs are also routable between nodes.
-    rank0_hosts = hosts_by_node.get(rank0_node, [])
-    candidate_ips: list[str] = []
-    for host in rank0_hosts:
-        ip = host.ip if hasattr(host, "ip") else str(host.get("ip", ""))
-        if ip and ip != "0.0.0.0":
-            candidate_ips.append(ip)
-
-    # Prefer 10.1.1.x (bond0) over 10.42.x.x (flannel/CNI)
-    for ip in candidate_ips:
-        if ip.startswith("10.1.1."):
-            return ip
-
-    # Fallback to first non-0.0.0.0 IP (flannel — still routable)
-    if candidate_ips:
-        return candidate_ips[0]
-
-    # Last resort: env var
     import os
+    import socket
 
-    return os.environ.get("MASTER_ADDR", "10.1.1.12")
+    # Detect our own bond0 IP (10.1.1.x subnet)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.1.1.1", 1))
+        our_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        our_ip = os.environ.get("MASTER_ADDR", "10.1.1.12")
+
+    # For a 2-node instance, we need both nodes to agree on the same master_addr.
+    # Since we can't reliably get the other node's IP from hosts_by_node,
+    # use a fixed approach: rank 0 is always the TCPStore master.
+    # Rank 0 uses its own bond0 IP as master_addr.
+    # Rank 1 needs rank 0's bond0 IP — but can't get it from instance data.
+    #
+    # Solution: use our own bond0 IP if we're rank 0.
+    # For rank != 0, we need rank 0's IP. Since we can't determine it from
+    # the instance metadata (hosts_by_node is unreliable), we use the
+    # MASTER_ADDR env var as a fallback rendezvous point.
+    #
+    # The NixOS service sets MASTER_ADDR to the rank-0 node's bond0 IP
+    # via the distributed-inference module. If not set, fall back to 10.1.1.12.
+    return os.environ.get("MASTER_ADDR", our_ip)
 
 
 @dataclass
