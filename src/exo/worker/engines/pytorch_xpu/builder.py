@@ -26,42 +26,61 @@ from exo.worker.runner.bootstrap import logger
 def _resolve_master_addr(bound_instance: BoundInstance) -> str:
     """Determine master_addr for Gloo TCPStore rendezvous.
 
-    Since hosts_by_node may contain incorrect IP mappings (flannel/CNI IPs
-    that don't correspond to the correct node), we use a deterministic
-    approach: the node with the lowest bond0 IP in the instance hosts the
-    TCPStore. Each node detects its own bond0 IP to determine if it's the
-    store master.
+    Rank 0 binds the TCPStore on 0.0.0.0 (all interfaces). Other ranks
+    need rank 0's routable bond0 IP to connect. Since hosts_by_node may
+    contain incorrect IP mappings, we detect rank 0's bond0 IP directly.
 
-    For the gremlin cluster, all nodes are on the 10.1.1.x subnet via bond0.
-    We detect the local bond0 IP and use the lowest IP among instance nodes
-    as the rendezvous point.
+    For rank 0: returns own bond0 IP (for logging; actual bind is 0.0.0.0).
+    For other ranks: probes the gremlin subnet to find rank 0's TCPStore,
+    falling back to a deterministic guess if the store isn't up yet.
     """
-    import os
     import socket
 
-    # Detect our own bond0 IP (10.1.1.x subnet)
+    # Detect our own bond0 IP
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("10.1.1.1", 1))
         our_ip = s.getsockname()[0]
         s.close()
     except Exception:
-        our_ip = os.environ.get("MASTER_ADDR", "10.1.1.12")
+        our_ip = "10.1.1.12"
 
-    # For a 2-node instance, we need both nodes to agree on the same master_addr.
-    # Since we can't reliably get the other node's IP from hosts_by_node,
-    # use a fixed approach: rank 0 is always the TCPStore master.
-    # Rank 0 uses its own bond0 IP as master_addr.
-    # Rank 1 needs rank 0's bond0 IP — but can't get it from instance data.
-    #
-    # Solution: use our own bond0 IP if we're rank 0.
-    # For rank != 0, we need rank 0's IP. Since we can't determine it from
-    # the instance metadata (hosts_by_node is unreliable), we use the
-    # MASTER_ADDR env var as a fallback rendezvous point.
-    #
-    # The NixOS service sets MASTER_ADDR to the rank-0 node's bond0 IP
-    # via the distributed-inference module. If not set, fall back to 10.1.1.12.
-    return os.environ.get("MASTER_ADDR", our_ip)
+    shard = bound_instance.bound_shard
+    if shard.device_rank == 0:
+        # We ARE rank 0 — return our own bond0 IP
+        return our_ip
+
+    # We are NOT rank 0. We need rank 0's bond0 IP.
+    # Since hosts_by_node is unreliable, probe the known gremlin subnet.
+    # Rank 0 will bind TCPStore on 0.0.0.0:ephemeral_port.
+    # We try each gremlin IP on the ephemeral port to find rank 0.
+    instance = bound_instance.instance
+    port = instance.ephemeral_port  # type: ignore[union-attr]
+
+    gremlin_ips = ["10.1.1.12", "10.1.1.13", "10.1.1.14", "10.1.1.15"]
+    # Remove our own IP — we're not rank 0
+    candidate_ips = [ip for ip in gremlin_ips if ip != our_ip]
+
+    for ip in candidate_ips:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2.0)
+            result = sock.connect_ex((ip, port))
+            sock.close()
+            if result == 0:
+                # Found rank 0's TCPStore
+                logger.info(f"_resolve_master_addr: probed rank 0 at {ip}:{port}")
+                return ip
+        except Exception:
+            continue
+
+    # Fallback: if no probe succeeds (rank 0 hasn't started yet),
+    # return the first candidate. The TCPStore init has a 120s timeout
+    # so it will retry internally.
+    logger.info(
+        f"_resolve_master_addr: no probe succeeded, using first candidate {candidate_ips[0]}"
+    )
+    return candidate_ips[0] if candidate_ips else our_ip
 
 
 @dataclass
