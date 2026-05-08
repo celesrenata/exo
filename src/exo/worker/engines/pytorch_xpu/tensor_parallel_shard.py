@@ -116,6 +116,10 @@ _REDUNDANT_PATTERNS = (
     "post_attention_layernorm.bias",
 )
 
+# Linear attention (Gated DeltaNet) weights are kept redundant on all ranks.
+# They don't use tensor parallelism — only the MLP layers are sharded.
+_LINEAR_ATTN_PATTERN = "linear_attn."
+
 
 class TensorParallelShard:
     """Tensor-parallel model wrapper with sharded weights.
@@ -175,6 +179,12 @@ class TensorParallelShard:
 
         # Detect the layer key prefix (e.g., "model.layers" or "model.language_model.layers")
         self._layer_prefix = self._detect_layer_prefix()
+
+        # Detect layer types (linear_attention vs full_attention) for hybrid models
+        self._layer_types = self._detect_layer_types()
+
+        # Recurrent state for linear attention (Gated DeltaNet) layers
+        self._linear_attn_states: dict[str, torch.Tensor] = {}
 
         logger.info(
             f"TensorParallelShard initialized: rank={config.rank}/{config.world_size}, "
@@ -436,6 +446,9 @@ class TensorParallelShard:
         for pattern in _REDUNDANT_PATTERNS:
             if param_name.endswith(pattern) or param_name == pattern:
                 return True
+        # Linear attention (Gated DeltaNet) weights are redundant on all ranks
+        if _LINEAR_ATTN_PATTERN in param_name:
+            return True
         return False
 
     @staticmethod
@@ -596,12 +609,56 @@ class TensorParallelShard:
         - "model.language_model" for keys like "model.language_model.layers.0.self_attn.q_proj.weight"
         """
         for key in self.sharded_state_dict:
-            if ".layers." in key and "self_attn" in key:
+            if ".layers." in key and ("self_attn" in key or "linear_attn" in key):
                 # Extract everything before ".layers."
                 idx = key.index(".layers.")
                 return key[:idx]
         # Fallback
         return "model"
+
+    def _detect_layer_types(self) -> list[str]:
+        """Detect whether each layer uses linear_attention or full_attention.
+
+        Qwen3.5/3.6 hybrid models use ~75% linear attention (Gated DeltaNet)
+        and ~25% full attention (standard transformer). This method inspects
+        the sharded_state_dict keys to determine each layer's type.
+
+        A layer has linear_attn if keys like
+        '{prefix}.layers.{idx}.linear_attn.in_proj_qkv.weight' exist.
+        A layer has self_attn if keys like
+        '{prefix}.layers.{idx}.self_attn.q_proj.weight' exist.
+
+        Returns:
+            List of layer type strings, one per layer. Each is either
+            "linear_attention" or "full_attention".
+        """
+        num_layers = self._detect_num_layers()
+        layer_types: list[str] = []
+
+        for idx in range(num_layers):
+            linear_key = f"{self._layer_prefix}.layers.{idx}.linear_attn.in_proj_qkv.weight"
+            full_key = f"{self._layer_prefix}.layers.{idx}.self_attn.q_proj.weight"
+
+            if linear_key in self.sharded_state_dict:
+                layer_types.append("linear_attention")
+            elif full_key in self.sharded_state_dict:
+                layer_types.append("full_attention")
+            else:
+                # Default to full_attention for unknown layer structures
+                logger.warning(
+                    f"Layer {idx}: could not detect type from keys, "
+                    f"defaulting to full_attention"
+                )
+                layer_types.append("full_attention")
+
+        linear_count = sum(1 for t in layer_types if t == "linear_attention")
+        full_count = sum(1 for t in layer_types if t == "full_attention")
+        logger.info(
+            f"Layer type detection: {linear_count} linear_attention, "
+            f"{full_count} full_attention out of {num_layers} total layers"
+        )
+
+        return layer_types
 
     def _get_weight(self, key: str) -> torch.Tensor:
         """Get a weight tensor from the sharded state dict.
@@ -711,22 +768,183 @@ class TensorParallelShard:
         x2 = x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
+    def _forward_linear_attn_layer(
+        self, hidden_states: torch.Tensor, layer_idx: int
+    ) -> torch.Tensor:
+        """Forward pass for a linear attention (Gated DeltaNet) layer.
+
+        Implements the recurrent step for single-token decode. For prefill
+        (seq_len > 1), iterates over tokens sequentially.
+
+        The linear attention layer uses:
+        - Depthwise causal conv1d (kernel=4) on concatenated Q, K, V
+        - L2-normalized Q and K
+        - Gated decay: g = exp(-exp(A_log) * softplus(α + dt_bias))
+        - Delta rule update with sigmoid β as update rate
+        - Gated RMSNorm output with SiLU gate
+
+        Args:
+            hidden_states: Input tensor of shape (batch, seq_len, hidden_size).
+            layer_idx: Index of the current transformer layer.
+
+        Returns:
+            Output tensor of shape (batch, seq_len, hidden_size).
+        """
+        from exo.worker.engines.pytorch_xpu.gated_deltanet import gated_deltanet_recurrent_step
+
+        batch_size, seq_len, _hidden_size = hidden_states.shape
+        prefix = f"{self._layer_prefix}.layers.{layer_idx}.linear_attn"
+
+        # 1. Get weights
+        in_proj_qkv = self._get_weight(f"{prefix}.in_proj_qkv.weight")
+        in_proj_a = self._get_weight(f"{prefix}.in_proj_a.weight")
+        in_proj_b = self._get_weight(f"{prefix}.in_proj_b.weight")
+        in_proj_z = self._get_weight(f"{prefix}.in_proj_z.weight")
+        conv_weight = self._get_weight(f"{prefix}.conv1d.weight")
+        a_log = self._get_weight(f"{prefix}.A_log")
+        dt_bias = self._get_weight(f"{prefix}.dt_bias")
+        norm_weight = self._get_weight(f"{prefix}.norm.weight")
+        out_proj = self._get_weight(f"{prefix}.out_proj.weight")
+
+        # 2. Infer dimensions from weight shapes
+        total_qkv_dim = in_proj_qkv.shape[0]
+        v_dim = in_proj_z.shape[0]  # z gate has same dim as v output
+        k_dim = (total_qkv_dim - v_dim) // 2
+        q_dim = k_dim
+        conv_dim = q_dim + k_dim + v_dim
+
+        # Infer head structure from A_log shape
+        num_v_heads = a_log.shape[0]
+        value_head_dim = v_dim // num_v_heads
+        # Key heads may differ from value heads
+        key_head_dim = q_dim // num_v_heads if q_dim % num_v_heads == 0 else q_dim // (num_v_heads // 2)
+        num_k_heads = q_dim // key_head_dim
+
+        # Prepare conv weight for depthwise operation
+        if conv_weight.dim() == 3:
+            # Shape: (conv_dim, 1, kernel_size) -> (conv_dim, kernel_size)
+            w_conv = conv_weight.squeeze(1)
+        else:
+            w_conv = conv_weight
+        kernel_size = w_conv.shape[-1]
+
+        # Get or initialize conv state
+        conv_state_key = f"conv_{layer_idx}"
+        conv_state = self._linear_attn_states.get(conv_state_key)
+        if conv_state is None:
+            conv_state = torch.zeros(
+                batch_size, conv_dim, kernel_size,
+                device=hidden_states.device, dtype=hidden_states.dtype,
+            )
+
+        # Get or initialize recurrent state
+        rec_state_key = f"state_{layer_idx}"
+        rec_state = self._linear_attn_states.get(rec_state_key)
+        if rec_state is None:
+            rec_state = torch.zeros(
+                batch_size, num_v_heads, key_head_dim, value_head_dim,
+                device=hidden_states.device, dtype=hidden_states.dtype,
+            )
+
+        outputs = []
+
+        for t in range(seq_len):
+            h_t = hidden_states[:, t:t+1, :]  # (B, 1, hidden_size)
+
+            # 3. Project input
+            qkv = F.linear(h_t, in_proj_qkv)   # (B, 1, q_dim + k_dim + v_dim)
+            a_raw = F.linear(h_t, in_proj_a)    # (B, 1, num_v_heads)
+            b_raw = F.linear(h_t, in_proj_b)    # (B, 1, num_v_heads)
+            z = F.linear(h_t, in_proj_z)        # (B, 1, v_dim)
+
+            # 4. Split QKV
+            q = qkv[..., :q_dim]
+            k = qkv[..., q_dim:q_dim + k_dim]
+            v = qkv[..., q_dim + k_dim:]
+
+            # 5. Apply causal conv1d
+            conv_input = torch.cat([q, k, v], dim=-1).squeeze(1)  # (B, conv_dim)
+
+            # Update conv state: shift left, append new
+            conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
+            conv_state[:, :, -1] = conv_input
+
+            # Compute conv output
+            conv_out = (conv_state * w_conv.unsqueeze(0)).sum(dim=-1)  # (B, conv_dim)
+            conv_out = F.silu(conv_out)
+
+            # Split back to q, k, v after conv
+            q_t = conv_out[:, :q_dim]
+            k_t = conv_out[:, q_dim:q_dim + k_dim]
+            v_t = conv_out[:, q_dim + k_dim:]
+
+            # 6. Reshape to heads
+            if num_k_heads != num_v_heads:
+                q_t = q_t.view(batch_size, num_k_heads, key_head_dim)
+                k_t = k_t.view(batch_size, num_k_heads, key_head_dim)
+                repeat_factor = num_v_heads // num_k_heads
+                q_t = q_t.repeat_interleave(repeat_factor, dim=1)
+                k_t = k_t.repeat_interleave(repeat_factor, dim=1)
+            else:
+                q_t = q_t.view(batch_size, num_v_heads, key_head_dim)
+                k_t = k_t.view(batch_size, num_v_heads, key_head_dim)
+
+            v_t = v_t.view(batch_size, num_v_heads, value_head_dim)
+
+            # 7. L2 normalize Q and K
+            q_t = F.normalize(q_t, p=2, dim=-1)
+            k_t = F.normalize(k_t, p=2, dim=-1)
+
+            # 8. Compute gates
+            a = a_raw.squeeze(1)  # (B, num_v_heads)
+            # gate in log-space: log(g) = -exp(A_log) * softplus(a + dt_bias)
+            alpha = -a_log.exp() * F.softplus(a + dt_bias)  # (B, num_v_heads)
+            beta = torch.sigmoid(b_raw.squeeze(1))  # (B, num_v_heads)
+
+            # 9. Gated DeltaNet recurrent step
+            output_t, rec_state = gated_deltanet_recurrent_step(
+                q_t, k_t, v_t, alpha, beta, rec_state
+            )
+
+            # 10. Reshape output: (B, num_v_heads, value_head_dim) -> (B, v_dim)
+            output_t = output_t.reshape(batch_size, v_dim)
+
+            # 11. Gated RMSNorm: rms_norm(output) * silu(z)
+            z_t = z.squeeze(1)  # (B, v_dim)
+            # RMSNorm
+            rms = output_t.pow(2).mean(dim=-1, keepdim=True).add(1e-6).rsqrt()
+            output_t = output_t * rms * norm_weight
+            # Gate with silu(z)
+            output_t = output_t * F.silu(z_t)
+
+            # 12. Output projection
+            output_t = F.linear(output_t, out_proj)  # (B, hidden_size)
+
+            outputs.append(output_t.unsqueeze(1))
+
+        # Store updated states
+        self._linear_attn_states[conv_state_key] = conv_state
+        self._linear_attn_states[rec_state_key] = rec_state
+
+        return torch.cat(outputs, dim=1)  # (B, seq_len, hidden_size)
+
     def forward(
         self,
         input_data: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
-    ) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
+        past_key_values: list[tuple[torch.Tensor, torch.Tensor] | None] | None = None,
+    ) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor] | None]]:
         """Tensor-parallel forward pass through all layers.
 
         For each layer:
         1. LayerNorm (redundant, all ranks compute same result)
-        2. QKV projection with column-parallel weights → local attention
-        3. Output projection with row-parallel weights → all_reduce
-        4. Residual + LayerNorm (redundant)
-        5. MLP gate/up with column-parallel weights → activation
-        6. MLP down with row-parallel weights → all_reduce
-        7. Residual
+        2. Dispatch to either:
+           - Full attention: QKV → RoPE → SDPA → output projection (row-parallel)
+           - Linear attention: Gated DeltaNet recurrent step (redundant)
+        3. Residual + LayerNorm (redundant)
+        4. MLP gate/up with column-parallel weights → activation
+        5. MLP down with row-parallel weights → all_reduce
+        6. Residual
 
         Args:
             input_data: Token IDs of shape [batch, seq_len] (long tensor).
@@ -735,11 +953,13 @@ class TensorParallelShard:
                 is applied automatically.
             past_key_values: Optional list of (key, value) tuples per layer,
                 each of shape [batch, kv_heads_per_rank, past_seq_len, head_dim].
+                Entries are None for linear attention layers.
 
         Returns:
             Tuple of (logits, new_kv_cache) where:
             - logits: shape [batch, seq_len, vocab_size]
-            - new_kv_cache: list of (key, value) tuples per layer
+            - new_kv_cache: list of (key, value) tuples per layer (None for
+              linear attention layers which use internal recurrent state)
 
         Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 6.5
         """
@@ -755,7 +975,7 @@ class TensorParallelShard:
         if past_key_values is None:
             past_key_values = [None] * num_layers  # type: ignore[list-item]
 
-        new_kv_cache: list[tuple[torch.Tensor, torch.Tensor]] = []
+        new_kv_cache: list[tuple[torch.Tensor, torch.Tensor] | None] = []
 
         # --- Embedding lookup (redundant on all ranks) ---
         embed_weight = self._get_weight(f"{self._layer_prefix}.embed_tokens.weight")
@@ -765,8 +985,11 @@ class TensorParallelShard:
 
         # Compute position IDs based on past KV cache length
         past_seq_len = 0
-        if past_key_values[0] is not None:
-            past_seq_len = past_key_values[0][0].shape[2]
+        if past_key_values is not None:
+            for pv in past_key_values:
+                if pv is not None:
+                    past_seq_len = pv[0].shape[2]
+                    break
         position_ids = torch.arange(
             past_seq_len, past_seq_len + seq_len, device=hidden_states.device
         ).unsqueeze(0).expand(batch_size, -1)
@@ -784,89 +1007,96 @@ class TensorParallelShard:
             )
             hidden_states = self._apply_norm(hidden_states, ln_weight, ln_bias)
 
-            # 2. QKV projections (column-parallel)
-            q_weight = self._get_weight(
-                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.q_proj.weight"
-            )
-            k_weight = self._get_weight(
-                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.k_proj.weight"
-            )
-            v_weight = self._get_weight(
-                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.v_proj.weight"
-            )
-
-            q_bias = self._get_weight_optional(
-                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.q_proj.bias"
-            )
-            k_bias = self._get_weight_optional(
-                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.k_proj.bias"
-            )
-            v_bias = self._get_weight_optional(
-                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.v_proj.bias"
-            )
-
-            # Column-parallel QKV: each rank computes its assigned heads
-            q = self._column_parallel_linear(hidden_states, q_weight, q_bias)
-            k = self._column_parallel_linear(hidden_states, k_weight, k_bias)
-            v = self._column_parallel_linear(hidden_states, v_weight, v_bias)
-
-            # Reshape for multi-head attention
-            # q: [batch, seq_len, heads_per_rank * head_dim] -> [batch, heads_per_rank, seq_len, head_dim]
-            q = q.view(batch_size, seq_len, heads_per_rank, head_dim).transpose(1, 2)
-            # k, v: [batch, seq_len, kv_heads_per_rank * head_dim] -> [batch, kv_heads_per_rank, seq_len, head_dim]
-            k = k.view(batch_size, seq_len, kv_heads_per_rank, head_dim).transpose(1, 2)
-            v = v.view(batch_size, seq_len, kv_heads_per_rank, head_dim).transpose(1, 2)
-
-            # Apply rotary positional embeddings
-            q, k = self._apply_rotary_pos_emb(q, k, position_ids)
-
-            # KV cache: append new K, V to past cache (head-parallel)
-            layer_past = past_key_values[layer_idx]
-            if layer_past is not None:
-                past_k, past_v = layer_past
-                k = torch.cat([past_k, k], dim=2)
-                v = torch.cat([past_v, v], dim=2)
-
-            # Store updated KV cache for this layer
-            new_kv_cache.append((k, v))
-
-            # GQA: expand K, V to match Q head count if needed
-            if gqa_groups > 1:
-                # k: [batch, kv_heads_per_rank, total_seq, head_dim]
-                # -> [batch, heads_per_rank, total_seq, head_dim]
-                k_expanded = k.unsqueeze(2).expand(
-                    batch_size, kv_heads_per_rank, gqa_groups, k.shape[2], head_dim
-                ).reshape(batch_size, heads_per_rank, k.shape[2], head_dim)
-                v_expanded = v.unsqueeze(2).expand(
-                    batch_size, kv_heads_per_rank, gqa_groups, v.shape[2], head_dim
-                ).reshape(batch_size, heads_per_rank, v.shape[2], head_dim)
+            # Dispatch based on layer type (linear_attention vs full_attention)
+            if self._layer_types[layer_idx] == "linear_attention":
+                # Linear attention (Gated DeltaNet) — no KV cache needed
+                attn_output = self._forward_linear_attn_layer(hidden_states, layer_idx)
+                new_kv_cache.append(None)  # type: ignore[arg-type]
             else:
-                k_expanded = k
-                v_expanded = v
+                # Full attention (standard transformer with KV cache)
+                # 2. QKV projections (column-parallel)
+                q_weight = self._get_weight(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.q_proj.weight"
+                )
+                k_weight = self._get_weight(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.k_proj.weight"
+                )
+                v_weight = self._get_weight(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.v_proj.weight"
+                )
 
-            # Scaled dot-product attention (local — only this rank's heads)
-            attn_output = F.scaled_dot_product_attention(
-                q, k_expanded, v_expanded,
-                attn_mask=attention_mask,
-                is_causal=(attention_mask is None and seq_len > 1),
-            )
+                q_bias = self._get_weight_optional(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.q_proj.bias"
+                )
+                k_bias = self._get_weight_optional(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.k_proj.bias"
+                )
+                v_bias = self._get_weight_optional(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.v_proj.bias"
+                )
 
-            # Reshape attention output: [batch, heads_per_rank, seq_len, head_dim]
-            # -> [batch, seq_len, heads_per_rank * head_dim]
-            attn_output = attn_output.transpose(1, 2).contiguous().view(
-                batch_size, seq_len, heads_per_rank * head_dim
-            )
+                # Column-parallel QKV: each rank computes its assigned heads
+                q = self._column_parallel_linear(hidden_states, q_weight, q_bias)
+                k = self._column_parallel_linear(hidden_states, k_weight, k_bias)
+                v = self._column_parallel_linear(hidden_states, v_weight, v_bias)
 
-            # 3. Output projection (row-parallel) → all_reduce
-            o_weight = self._get_weight(
-                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.o_proj.weight"
-            )
-            o_bias = self._get_weight_optional(
-                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.o_proj.bias"
-            )
-            attn_output = self._row_parallel_linear(
-                attn_output, o_weight, o_bias, layer_index=layer_idx
-            )
+                # Reshape for multi-head attention
+                # q: [batch, seq_len, heads_per_rank * head_dim] -> [batch, heads_per_rank, seq_len, head_dim]
+                q = q.view(batch_size, seq_len, heads_per_rank, head_dim).transpose(1, 2)
+                # k, v: [batch, seq_len, kv_heads_per_rank * head_dim] -> [batch, kv_heads_per_rank, seq_len, head_dim]
+                k = k.view(batch_size, seq_len, kv_heads_per_rank, head_dim).transpose(1, 2)
+                v = v.view(batch_size, seq_len, kv_heads_per_rank, head_dim).transpose(1, 2)
+
+                # Apply rotary positional embeddings
+                q, k = self._apply_rotary_pos_emb(q, k, position_ids)
+
+                # KV cache: append new K, V to past cache (head-parallel)
+                layer_past = past_key_values[layer_idx]
+                if layer_past is not None:
+                    past_k, past_v = layer_past
+                    k = torch.cat([past_k, k], dim=2)
+                    v = torch.cat([past_v, v], dim=2)
+
+                # Store updated KV cache for this layer
+                new_kv_cache.append((k, v))
+
+                # GQA: expand K, V to match Q head count if needed
+                if gqa_groups > 1:
+                    # k: [batch, kv_heads_per_rank, total_seq, head_dim]
+                    # -> [batch, heads_per_rank, total_seq, head_dim]
+                    k_expanded = k.unsqueeze(2).expand(
+                        batch_size, kv_heads_per_rank, gqa_groups, k.shape[2], head_dim
+                    ).reshape(batch_size, heads_per_rank, k.shape[2], head_dim)
+                    v_expanded = v.unsqueeze(2).expand(
+                        batch_size, kv_heads_per_rank, gqa_groups, v.shape[2], head_dim
+                    ).reshape(batch_size, heads_per_rank, v.shape[2], head_dim)
+                else:
+                    k_expanded = k
+                    v_expanded = v
+
+                # Scaled dot-product attention (local — only this rank's heads)
+                attn_output = F.scaled_dot_product_attention(
+                    q, k_expanded, v_expanded,
+                    attn_mask=attention_mask,
+                    is_causal=(attention_mask is None and seq_len > 1),
+                )
+
+                # Reshape attention output: [batch, heads_per_rank, seq_len, head_dim]
+                # -> [batch, seq_len, heads_per_rank * head_dim]
+                attn_output = attn_output.transpose(1, 2).contiguous().view(
+                    batch_size, seq_len, heads_per_rank * head_dim
+                )
+
+                # 3. Output projection (row-parallel) → all_reduce
+                o_weight = self._get_weight(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.o_proj.weight"
+                )
+                o_bias = self._get_weight_optional(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.o_proj.bias"
+                )
+                attn_output = self._row_parallel_linear(
+                    attn_output, o_weight, o_bias, layer_index=layer_idx
+                )
 
             # 4. Residual connection
             hidden_states = residual + attn_output
