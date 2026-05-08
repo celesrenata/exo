@@ -126,6 +126,7 @@ class PyTorchXPUBuilder(Builder):
             world_size=self._world_size,
             master_addr=master_addr,
             master_port=master_port,
+            init_timeout_seconds=600,  # 10 min — needed for Qwen3.5/3.6 prefill
         )
         init_process_group(config)
 
