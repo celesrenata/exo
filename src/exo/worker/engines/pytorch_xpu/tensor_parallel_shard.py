@@ -245,6 +245,44 @@ class TensorParallelShard:
 
         print(f"[TPS] Extracted {len(self._native_linear_attn_layers)} native linear_attn layers", file=sys.stderr, flush=True)
 
+    def _create_native_cache(self) -> Any:
+        """Create a HuggingFace Cache object for the native linear attention layers.
+
+        The cache maintains conv_states and recurrent_states across decode steps,
+        which is required for correct autoregressive generation with Gated DeltaNet.
+        """
+        try:
+            from transformers.cache_utils import Cache, LinearAttentionLayer
+        except ImportError:
+            # Older transformers version — try alternative import
+            import sys
+            print("[TPS] Could not import Cache/LinearAttentionLayer from transformers.cache_utils", file=sys.stderr, flush=True)
+            return None
+
+        num_layers = self._detect_num_layers()
+
+        # Create a list of cache layers — LinearAttentionLayer for linear_attn,
+        # None placeholder for full_attn (we handle those with our own KV cache)
+        from transformers.cache_utils import CacheLayerMixin
+
+        # We need to create a Cache with the right layer types
+        # For simplicity, create with LinearAttentionLayer for all layers
+        # (full_attn layers won't use it)
+        cache_layers = []
+        for idx in range(num_layers):
+            if idx in self._native_linear_attn_layers:
+                cache_layers.append(LinearAttentionLayer())
+            else:
+                # Full attention layers — use a dummy LinearAttentionLayer
+                # (won't be accessed since we handle full_attn ourselves)
+                cache_layers.append(LinearAttentionLayer())
+
+        cache = Cache(layers=cache_layers)
+
+        import sys
+        print(f"[TPS] Created native cache with {num_layers} layers", file=sys.stderr, flush=True)
+        return cache
+
     def shard_weights(self, state_dict: dict[str, torch.Tensor]) -> None:
         """Extract this rank's portion of each weight matrix.
 
@@ -835,10 +873,15 @@ class TensorParallelShard:
         # Use native HuggingFace layer if available (guaranteed correct)
         if layer_idx in self._native_linear_attn_layers:
             native_layer = self._native_linear_attn_layers[layer_idx]
+            # Get or create the cache for this layer
+            if not hasattr(self, '_native_cache'):
+                self._native_cache = self._create_native_cache()
             with torch.no_grad():
-                # The native layer's forward signature:
-                # forward(hidden_states, cache_params=None, attention_mask=None)
-                output = native_layer(hidden_states, cache_params=None, attention_mask=None)
+                output = native_layer(
+                    hidden_states,
+                    cache_params=self._native_cache,
+                    attention_mask=None,
+                )
             return output
 
         # Fallback to custom implementation
