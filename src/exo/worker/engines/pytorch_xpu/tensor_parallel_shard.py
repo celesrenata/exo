@@ -104,10 +104,11 @@ _ROW_PARALLEL_ATTN_KEYS = ("o_proj.weight",)
 _ROW_PARALLEL_MLP_KEYS = ("down_proj.weight",)
 
 # Redundant (not sharded) parameter name patterns
+# These use suffix matching to handle both "model.layers." and "model.language_model.layers." prefixes
 _REDUNDANT_PATTERNS = (
-    "model.embed_tokens.weight",
-    "model.norm.weight",
-    "model.norm.bias",
+    "embed_tokens.weight",
+    "norm.weight",
+    "norm.bias",
     "lm_head.weight",
     "input_layernorm.weight",
     "input_layernorm.bias",
@@ -172,10 +173,14 @@ class TensorParallelShard:
         # Detect architecture from stored keys
         self.architecture = self._detect_architecture()
 
+        # Detect the layer key prefix (e.g., "model.layers" or "model.language_model.layers")
+        self._layer_prefix = self._detect_layer_prefix()
+
         logger.info(
             f"TensorParallelShard initialized: rank={config.rank}/{config.world_size}, "
             f"device={device}, "
             f"architecture={self.architecture.value}, "
+            f"layer_prefix={self._layer_prefix}, "
             f"sharded_params={len(self.sharded_state_dict)}, "
             f"heads_per_rank={config.heads_per_rank}, "
             f"kv_heads_per_rank={config.kv_heads_per_rank}, "
@@ -571,8 +576,8 @@ class TensorParallelShard:
         """Detect the number of transformer layers from sharded_state_dict keys."""
         max_layer_idx = -1
         for key in self.sharded_state_dict:
-            if "model.layers." in key:
-                # Extract layer index from "model.layers.{idx}...."
+            if ".layers." in key:
+                # Extract layer index from "...layers.{idx}...."
                 parts = key.split(".")
                 try:
                     layer_idx_pos = parts.index("layers") + 1
@@ -581,6 +586,22 @@ class TensorParallelShard:
                 except (ValueError, IndexError):
                     continue
         return max_layer_idx + 1 if max_layer_idx >= 0 else 0
+
+    def _detect_layer_prefix(self) -> str:
+        """Detect the key prefix for transformer layers.
+
+        Returns the prefix before '.layers.N.' in the state dict keys.
+        Examples:
+        - "model" for keys like "model.layers.0.self_attn.q_proj.weight"
+        - "model.language_model" for keys like "model.language_model.layers.0.self_attn.q_proj.weight"
+        """
+        for key in self.sharded_state_dict:
+            if ".layers." in key and "self_attn" in key:
+                # Extract everything before ".layers."
+                idx = key.index(".layers.")
+                return key[:idx]
+        # Fallback
+        return "model"
 
     def _get_weight(self, key: str) -> torch.Tensor:
         """Get a weight tensor from the sharded state dict.
@@ -737,7 +758,7 @@ class TensorParallelShard:
         new_kv_cache: list[tuple[torch.Tensor, torch.Tensor]] = []
 
         # --- Embedding lookup (redundant on all ranks) ---
-        embed_weight = self._get_weight("model.embed_tokens.weight")
+        embed_weight = self._get_weight(f"{self._layer_prefix}.embed_tokens.weight")
         hidden_states = F.embedding(input_data, embed_weight)
 
         batch_size, seq_len, _ = hidden_states.shape
@@ -756,32 +777,32 @@ class TensorParallelShard:
 
             # 1. Input LayerNorm (redundant — all ranks compute same result)
             ln_weight = self._get_weight(
-                f"model.layers.{layer_idx}.input_layernorm.weight"
+                f"{self._layer_prefix}.layers.{layer_idx}.input_layernorm.weight"
             )
             ln_bias = self._get_weight_optional(
-                f"model.layers.{layer_idx}.input_layernorm.bias"
+                f"{self._layer_prefix}.layers.{layer_idx}.input_layernorm.bias"
             )
             hidden_states = self._apply_norm(hidden_states, ln_weight, ln_bias)
 
             # 2. QKV projections (column-parallel)
             q_weight = self._get_weight(
-                f"model.layers.{layer_idx}.self_attn.q_proj.weight"
+                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.q_proj.weight"
             )
             k_weight = self._get_weight(
-                f"model.layers.{layer_idx}.self_attn.k_proj.weight"
+                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.k_proj.weight"
             )
             v_weight = self._get_weight(
-                f"model.layers.{layer_idx}.self_attn.v_proj.weight"
+                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.v_proj.weight"
             )
 
             q_bias = self._get_weight_optional(
-                f"model.layers.{layer_idx}.self_attn.q_proj.bias"
+                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.q_proj.bias"
             )
             k_bias = self._get_weight_optional(
-                f"model.layers.{layer_idx}.self_attn.k_proj.bias"
+                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.k_proj.bias"
             )
             v_bias = self._get_weight_optional(
-                f"model.layers.{layer_idx}.self_attn.v_proj.bias"
+                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.v_proj.bias"
             )
 
             # Column-parallel QKV: each rank computes its assigned heads
@@ -838,10 +859,10 @@ class TensorParallelShard:
 
             # 3. Output projection (row-parallel) → all_reduce
             o_weight = self._get_weight(
-                f"model.layers.{layer_idx}.self_attn.o_proj.weight"
+                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.o_proj.weight"
             )
             o_bias = self._get_weight_optional(
-                f"model.layers.{layer_idx}.self_attn.o_proj.bias"
+                f"{self._layer_prefix}.layers.{layer_idx}.self_attn.o_proj.bias"
             )
             attn_output = self._row_parallel_linear(
                 attn_output, o_weight, o_bias, layer_index=layer_idx
@@ -855,25 +876,25 @@ class TensorParallelShard:
 
             # Post-attention LayerNorm (redundant)
             post_ln_weight = self._get_weight(
-                f"model.layers.{layer_idx}.post_attention_layernorm.weight"
+                f"{self._layer_prefix}.layers.{layer_idx}.post_attention_layernorm.weight"
             )
             post_ln_bias = self._get_weight_optional(
-                f"model.layers.{layer_idx}.post_attention_layernorm.bias"
+                f"{self._layer_prefix}.layers.{layer_idx}.post_attention_layernorm.bias"
             )
             hidden_states = self._apply_norm(hidden_states, post_ln_weight, post_ln_bias)
 
             # 5. MLP gate/up projections (column-parallel)
             gate_weight = self._get_weight(
-                f"model.layers.{layer_idx}.mlp.gate_proj.weight"
+                f"{self._layer_prefix}.layers.{layer_idx}.mlp.gate_proj.weight"
             )
             up_weight = self._get_weight(
-                f"model.layers.{layer_idx}.mlp.up_proj.weight"
+                f"{self._layer_prefix}.layers.{layer_idx}.mlp.up_proj.weight"
             )
             gate_bias = self._get_weight_optional(
-                f"model.layers.{layer_idx}.mlp.gate_proj.bias"
+                f"{self._layer_prefix}.layers.{layer_idx}.mlp.gate_proj.bias"
             )
             up_bias = self._get_weight_optional(
-                f"model.layers.{layer_idx}.mlp.up_proj.bias"
+                f"{self._layer_prefix}.layers.{layer_idx}.mlp.up_proj.bias"
             )
 
             gate = self._column_parallel_linear(hidden_states, gate_weight, gate_bias)
@@ -884,10 +905,10 @@ class TensorParallelShard:
 
             # 6. MLP down projection (row-parallel) → all_reduce
             down_weight = self._get_weight(
-                f"model.layers.{layer_idx}.mlp.down_proj.weight"
+                f"{self._layer_prefix}.layers.{layer_idx}.mlp.down_proj.weight"
             )
             down_bias = self._get_weight_optional(
-                f"model.layers.{layer_idx}.mlp.down_proj.bias"
+                f"{self._layer_prefix}.layers.{layer_idx}.mlp.down_proj.bias"
             )
             mlp_output = self._row_parallel_linear(
                 mlp_hidden, down_weight, down_bias, layer_index=layer_idx
@@ -897,12 +918,16 @@ class TensorParallelShard:
             hidden_states = residual + mlp_output
 
         # --- Final LayerNorm (redundant on all ranks) ---
-        final_ln_weight = self._get_weight("model.norm.weight")
-        final_ln_bias = self._get_weight_optional("model.norm.bias")
+        final_ln_weight = self._get_weight(f"{self._layer_prefix}.norm.weight")
+        final_ln_bias = self._get_weight_optional(f"{self._layer_prefix}.norm.bias")
         hidden_states = self._apply_norm(hidden_states, final_ln_weight, final_ln_bias)
 
         # --- lm_head projection (redundant on all ranks) ---
-        lm_head_weight = self._get_weight("lm_head.weight")
+        # Some models tie lm_head weights with embed_tokens
+        lm_head_weight = self._get_weight_optional("lm_head.weight")
+        if lm_head_weight is None:
+            # Tied embeddings — reuse embed_tokens weight
+            lm_head_weight = self._get_weight(f"{self._layer_prefix}.embed_tokens.weight")
         logits = F.linear(hidden_states, lm_head_weight)
 
         return logits, new_kv_cache
