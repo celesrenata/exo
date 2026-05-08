@@ -160,11 +160,18 @@ class TensorParallelShard:
         self.config = config
         self.device = device
         self.sharded_state_dict: dict[str, torch.Tensor] = {}
+        self._native_linear_attn_layers: dict[int, Any] = {}
+        self._native_model_ref: Any = None  # Keep model alive for native layers
 
         # Extract state dict from model if it's a module
         if isinstance(model, dict):
             state_dict = model
         elif hasattr(model, "state_dict"):
+            # Before extracting state dict, save references to native linear_attn layers
+            # for hybrid models (Qwen3.5/3.6) that use Gated DeltaNet
+            self._extract_native_linear_attn_layers(model)
+            if self._native_linear_attn_layers:
+                self._native_model_ref = model  # Keep model alive
             state_dict = model.state_dict()
         else:
             raise TypeError(
@@ -196,6 +203,40 @@ class TensorParallelShard:
             f"kv_heads_per_rank={config.kv_heads_per_rank}, "
             f"intermediate_per_rank={config.intermediate_per_rank}"
         )
+
+    def _extract_native_linear_attn_layers(self, model: Any) -> None:
+        """Extract native linear attention layer modules from the HuggingFace model.
+
+        For hybrid models (Qwen3.5/3.6), keeps references to the native
+        GatedDeltaNet layer modules so we can delegate to them during forward.
+        This ensures correct computation without reimplementing the complex
+        Gated DeltaNet algorithm.
+
+        The layers are identified by having a 'linear_attn' attribute.
+        """
+        # Try to find the transformer layers in the model
+        layers = None
+
+        # Qwen3.5/3.6: model.language_model.layers or model.model.layers
+        if hasattr(model, 'language_model') and hasattr(model.language_model, 'layers'):
+            layers = model.language_model.layers
+        elif hasattr(model, 'model') and hasattr(model.model, 'layers'):
+            layers = model.model.layers
+
+        if layers is None:
+            return
+
+        for idx, layer in enumerate(layers):
+            if hasattr(layer, 'linear_attn') and layer.linear_attn is not None:
+                # Keep the native linear_attn module
+                self._native_linear_attn_layers[idx] = layer.linear_attn
+                logger.debug(f"Extracted native linear_attn layer {idx}: {type(layer.linear_attn).__name__}")
+
+        if self._native_linear_attn_layers:
+            logger.info(
+                f"Extracted {len(self._native_linear_attn_layers)} native linear attention layers "
+                f"for hybrid model forward pass"
+            )
 
     def shard_weights(self, state_dict: dict[str, torch.Tensor]) -> None:
         """Extract this rank's portion of each weight matrix.
@@ -773,9 +814,9 @@ class TensorParallelShard:
     ) -> torch.Tensor:
         """Forward pass for a linear attention (Gated DeltaNet) layer.
 
-        For single-token decode (seq_len=1): uses recurrent step.
-        For prefill (seq_len>1): uses chunk-parallel algorithm with
-        vectorized projections and conv1d.
+        If a native HuggingFace linear attention layer is available (extracted
+        during __init__), delegates to it for correct computation. Otherwise
+        falls back to the custom implementation.
 
         Args:
             hidden_states: Input tensor of shape (batch, seq_len, hidden_size).
@@ -784,6 +825,14 @@ class TensorParallelShard:
         Returns:
             Output tensor of shape (batch, seq_len, hidden_size).
         """
+        # Use native HuggingFace layer if available (guaranteed correct)
+        if layer_idx in self._native_linear_attn_layers:
+            native_layer = self._native_linear_attn_layers[layer_idx]
+            with torch.no_grad():
+                output = native_layer(hidden_states)
+            return output
+
+        # Fallback to custom implementation
         from exo.worker.engines.pytorch_xpu.gated_deltanet import (
             causal_conv1d_prefill,
             causal_conv1d_update,

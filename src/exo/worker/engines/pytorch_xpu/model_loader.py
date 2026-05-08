@@ -364,13 +364,18 @@ class ModelLoader:
         """
         # Extract model config from HuggingFace model
         config = model.config
-        hidden_size = config.hidden_size
-        num_attention_heads = config.num_attention_heads
-        intermediate_size = config.intermediate_size
+        # For vision-language models (Qwen3.5/3.6), the text config is nested
+        if hasattr(config, 'text_config') and config.text_config is not None:
+            text_config = config.text_config
+        else:
+            text_config = config
+        hidden_size = text_config.hidden_size
+        num_attention_heads = text_config.num_attention_heads
+        intermediate_size = text_config.intermediate_size
         num_key_value_heads = getattr(
-            config, "num_key_value_heads", num_attention_heads
+            text_config, "num_key_value_heads", num_attention_heads
         )
-        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
+        head_dim = getattr(text_config, "head_dim", hidden_size // num_attention_heads)
 
         # Construct TPShardConfig
         tp_config = TPShardConfig(
