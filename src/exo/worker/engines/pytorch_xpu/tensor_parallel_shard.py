@@ -217,26 +217,35 @@ class TensorParallelShard:
         # Try to find the transformer layers in the model
         layers = None
 
-        # Qwen3.5/3.6: model.language_model.layers or model.model.layers
+        # Try various model structures
+        # Qwen3.5/3.6 ConditionalGeneration: model.language_model.layers
         if hasattr(model, 'language_model') and hasattr(model.language_model, 'layers'):
             layers = model.language_model.layers
-        elif hasattr(model, 'model') and hasattr(model.model, 'layers'):
-            layers = model.model.layers
+        # Qwen3.5/3.6 via model.model.language_model.layers
+        elif hasattr(model, 'model'):
+            if hasattr(model.model, 'language_model') and hasattr(model.model.language_model, 'layers'):
+                layers = model.model.language_model.layers
+            elif hasattr(model.model, 'layers'):
+                layers = model.model.layers
 
         if layers is None:
+            logger.info("_extract_native_linear_attn_layers: no layers found in model")
             return
 
         for idx, layer in enumerate(layers):
             if hasattr(layer, 'linear_attn') and layer.linear_attn is not None:
                 # Keep the native linear_attn module
                 self._native_linear_attn_layers[idx] = layer.linear_attn
-                logger.debug(f"Extracted native linear_attn layer {idx}: {type(layer.linear_attn).__name__}")
+            elif hasattr(layer, 'self_attn') and not hasattr(layer, 'linear_attn'):
+                pass  # Full attention layer, skip
 
         if self._native_linear_attn_layers:
             logger.info(
                 f"Extracted {len(self._native_linear_attn_layers)} native linear attention layers "
                 f"for hybrid model forward pass"
             )
+        else:
+            logger.info("_extract_native_linear_attn_layers: no linear_attn layers found")
 
     def shard_weights(self, state_dict: dict[str, torch.Tensor]) -> None:
         """Extract this rank's portion of each weight matrix.
@@ -829,7 +838,9 @@ class TensorParallelShard:
         if layer_idx in self._native_linear_attn_layers:
             native_layer = self._native_linear_attn_layers[layer_idx]
             with torch.no_grad():
-                output = native_layer(hidden_states)
+                # The native layer's forward signature:
+                # forward(hidden_states, cache_params=None, attention_mask=None)
+                output = native_layer(hidden_states, cache_params=None, attention_mask=None)
             return output
 
         # Fallback to custom implementation
