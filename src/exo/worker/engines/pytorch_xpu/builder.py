@@ -26,61 +26,30 @@ from exo.worker.runner.bootstrap import logger
 def _resolve_master_addr(bound_instance: BoundInstance) -> str:
     """Determine master_addr for Gloo TCPStore rendezvous.
 
-    Rank 0 binds the TCPStore on 0.0.0.0 (all interfaces). Other ranks
-    need rank 0's routable bond0 IP to connect. Since hosts_by_node may
-    contain incorrect IP mappings, we detect rank 0's bond0 IP directly.
+    Uses the MASTER_ADDR env var (set to 10.1.1.12 by the NixOS service)
+    as a fixed rendezvous point. The node at that IP hosts the TCPStore
+    regardless of its model rank.
 
-    For rank 0: returns own bond0 IP (for logging; actual bind is 0.0.0.0).
-    For other ranks: probes the gremlin subnet to find rank 0's TCPStore,
-    falling back to a deterministic guess if the store isn't up yet.
+    If MASTER_ADDR is not set, falls back to detecting own bond0 IP
+    (works when rank 0 is on the current node).
     """
+    import os
     import socket
 
-    # Detect our own bond0 IP
+    # Use MASTER_ADDR env var as fixed rendezvous
+    master_addr = os.environ.get("MASTER_ADDR")
+    if master_addr:
+        return master_addr
+
+    # Fallback: detect own bond0 IP
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("10.1.1.1", 1))
         our_ip = s.getsockname()[0]
         s.close()
-    except Exception:
-        our_ip = "10.1.1.12"
-
-    shard = bound_instance.bound_shard
-    if shard.device_rank == 0:
-        # We ARE rank 0 — return our own bond0 IP
         return our_ip
-
-    # We are NOT rank 0. We need rank 0's bond0 IP.
-    # Since hosts_by_node is unreliable, probe the known gremlin subnet.
-    # Rank 0 will bind TCPStore on 0.0.0.0:ephemeral_port.
-    # We try each gremlin IP on the ephemeral port to find rank 0.
-    instance = bound_instance.instance
-    port = instance.ephemeral_port  # type: ignore[union-attr]
-
-    gremlin_ips = ["10.1.1.12", "10.1.1.13", "10.1.1.14", "10.1.1.15"]
-    # Remove our own IP — we're not rank 0
-    candidate_ips = [ip for ip in gremlin_ips if ip != our_ip]
-
-    for ip in candidate_ips:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2.0)
-            result = sock.connect_ex((ip, port))
-            sock.close()
-            if result == 0:
-                # Found rank 0's TCPStore
-                logger.info(f"_resolve_master_addr: probed rank 0 at {ip}:{port}")
-                return ip
-        except Exception:
-            continue
-
-    # Fallback: if no probe succeeds (rank 0 hasn't started yet),
-    # return the first candidate. The TCPStore init has a 120s timeout
-    # so it will retry internally.
-    logger.info(
-        f"_resolve_master_addr: no probe succeeded, using first candidate {candidate_ips[0]}"
-    )
-    return candidate_ips[0] if candidate_ips else our_ip
+    except Exception:
+        return "10.1.1.12"
 
 
 @dataclass
