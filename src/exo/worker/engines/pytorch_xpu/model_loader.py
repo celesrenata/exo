@@ -211,11 +211,28 @@ class ModelLoader:
             )
 
             if is_tensor_parallel:
-                logger.debug(
-                    f"Creating TensorParallelShard (all layers, world_size={shard_metadata.world_size},"
-                    f" rank={shard_metadata.device_rank})"
+                # Check if this is a hybrid model (Qwen3.5/3.6) with linear attention
+                # These models need native HuggingFace forward for correct generation
+                # because the linear attention layers require stateful cache management
+                is_hybrid = hasattr(model, 'model') and hasattr(model.model, 'layers') and any(
+                    hasattr(layer, 'linear_attn') and layer.linear_attn is not None
+                    for layer in model.model.layers
                 )
-                model = self._create_tensor_parallel_shard(model, shard_metadata, device)
+
+                if is_hybrid:
+                    logger.info(
+                        f"Hybrid model detected (linear_attn layers present). "
+                        f"Skipping TensorParallelShard — using native HuggingFace forward. "
+                        f"Tensor parallelism not applied to hybrid models."
+                    )
+                    # Don't create TensorParallelShard — use the model directly
+                    # The engine will use HuggingFace's generate() method
+                else:
+                    logger.debug(
+                        f"Creating TensorParallelShard (all layers, world_size={shard_metadata.world_size},"
+                        f" rank={shard_metadata.device_rank})"
+                    )
+                    model = self._create_tensor_parallel_shard(model, shard_metadata, device)
             elif not (
                 shard_metadata.start_layer == 0
                 and shard_metadata.end_layer == shard_metadata.n_layers
