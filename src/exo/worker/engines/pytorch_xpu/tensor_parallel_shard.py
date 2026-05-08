@@ -884,9 +884,10 @@ class TensorParallelShard:
             q_t = F.normalize(q_t, p=2, dim=-1)
             k_t = F.normalize(k_t, p=2, dim=-1)
 
-            # Compute gates
+            # Compute gates (float32 for numerical stability, matching HF reference)
             a = a_all.squeeze(1)  # (B, num_v_heads)
-            alpha = -a_log.exp() * F.softplus(a + dt_bias)
+            alpha = -a_log.float().exp() * F.softplus(a.float() + dt_bias.float())
+            alpha = alpha.to(hidden_states.dtype)
             beta = torch.sigmoid(b_all.squeeze(1))
 
             # Recurrent step
@@ -942,8 +943,9 @@ class TensorParallelShard:
             q_heads = F.normalize(q_heads, p=2, dim=-1)
             k_heads = F.normalize(k_heads, p=2, dim=-1)
 
-            # 7. Compute gates for all tokens
-            alpha_all = -a_log.exp().unsqueeze(0).unsqueeze(0) * F.softplus(a_all + dt_bias.unsqueeze(0).unsqueeze(0))
+            # 7. Compute gates for all tokens (float32 for numerical stability)
+            alpha_all = -a_log.float().exp().unsqueeze(0).unsqueeze(0) * F.softplus(a_all.float() + dt_bias.float().unsqueeze(0).unsqueeze(0))
+            alpha_all = alpha_all.to(hidden_states.dtype)
             # alpha_all: (B, T, num_v_heads)
             beta_all = torch.sigmoid(b_all)  # (B, T, num_v_heads)
 

@@ -37,6 +37,9 @@ def gated_deltanet_recurrent_step(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Single-step recurrent Gated DeltaNet update.
 
+    All computation is done in float32 for numerical stability,
+    matching the HuggingFace reference implementation.
+
     Args:
         q: L2-normalized query, shape (B, H, d_k)
         k: L2-normalized key, shape (B, H, d_k)
@@ -49,6 +52,20 @@ def gated_deltanet_recurrent_step(
         output: shape (B, H, d_v)
         new_state: shape (B, H, d_k, d_v)
     """
+    initial_dtype = q.dtype
+
+    # Cast to float32 for numerical stability (critical for state accumulation)
+    q = q.float()
+    k = k.float()
+    v = v.float()
+    gate = gate.float()
+    beta = beta.float()
+    state = state.float()
+
+    # Scale query (matching reference: scale = 1/sqrt(d_k))
+    d_k = q.shape[-1]
+    q = q * (d_k ** -0.5)
+
     # Step 1: Decay old state
     g = gate.exp().unsqueeze(-1).unsqueeze(-1)  # (B, H, 1, 1)
     state = state * g  # (B, H, d_k, d_v)
@@ -65,15 +82,11 @@ def gated_deltanet_recurrent_step(
     delta_expanded = delta.unsqueeze(-2)  # (B, H, 1, d_v)
     state = state + k_expanded * delta_expanded  # (B, H, d_k, d_v)
 
-    # Step 5: Read output
+    # Step 5: Read output (scale already applied to q)
     q_expanded = q.unsqueeze(-1)  # (B, H, d_k, 1)
     output = (state * q_expanded).sum(dim=-2)  # (B, H, d_v)
 
-    # Scale by 1/sqrt(d_k)
-    d_k = q.shape[-1]
-    output = output / (d_k ** 0.5)
-
-    return output, state
+    return output.to(initial_dtype), state
 
 
 def gated_deltanet_chunk_prefill(
