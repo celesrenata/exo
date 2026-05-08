@@ -171,6 +171,24 @@ class ModelLoader:
             RuntimeError: If loading fails
         """
         try:
+            # Check if this is a large model that should use streaming loading
+            is_tensor_parallel = (
+                shard_metadata.start_layer == 0
+                and shard_metadata.end_layer == shard_metadata.n_layers
+                and shard_metadata.world_size > 1
+            )
+            model_size_bytes = shard_metadata.model_card.storage_size.in_bytes if hasattr(shard_metadata, 'model_card') else 0
+            use_streaming = is_tensor_parallel and model_size_bytes > 20_000_000_000
+
+            if use_streaming:
+                # STREAMING PATH: load directly from safetensors without from_pretrained()
+                logger.info(
+                    f"Using streaming safetensors loader for {model_id} "
+                    f"({model_size_bytes / 1e9:.1f}GB)"
+                )
+                return self._load_model_streaming(model_id, device, shard_metadata)
+
+            # STANDARD PATH: load via from_pretrained()
             # Load tokenizer
             logger.debug(f"Loading tokenizer for {model_id}")
             tokenizer = self._transformers.AutoTokenizer.from_pretrained(
@@ -302,20 +320,80 @@ class ModelLoader:
         )
 
     def _resolve_model_path(self, model_id: str) -> str:
-        """Resolve the local filesystem path for a downloaded model.
-
-        Models are stored at ~/.local/share/exo/models/{model_id_with_dashes}/
-        """
+        """Resolve the local filesystem path for a downloaded model."""
         import os
-        # Convert model_id (e.g., "Qwen/Qwen3.6-27B") to directory name
         dir_name = model_id.replace("/", "--")
         base_dir = os.path.expanduser("~/.local/share/exo/models")
         model_path = os.path.join(base_dir, dir_name)
         if os.path.exists(model_path):
             return model_path
-        # Fallback: try the HuggingFace cache
         from huggingface_hub import snapshot_download
         return snapshot_download(model_id, local_files_only=True)
+
+    def _load_model_streaming(
+        self, model_id: str, device: Any, shard_metadata: ShardMetadata
+    ) -> tuple[Any, Any]:
+        """Load a large model using the streaming safetensors loader.
+
+        Bypasses from_pretrained() entirely to avoid OOM. Loads weights
+        directly from safetensors files, sharding as they're read.
+
+        Returns:
+            Tuple of (TensorParallelShard, tokenizer)
+        """
+        from exo.worker.engines.pytorch_xpu.streaming_loader import load_sharded_from_safetensors
+
+        # Get model config for TPShardConfig
+        config = self._transformers.AutoConfig.from_pretrained(model_id, trust_remote_code=True)
+        if hasattr(config, 'text_config') and config.text_config is not None:
+            text_config = config.text_config
+        else:
+            text_config = config
+
+        hidden_size = text_config.hidden_size
+        num_attention_heads = text_config.num_attention_heads
+        intermediate_size = text_config.intermediate_size
+        num_key_value_heads = getattr(text_config, "num_key_value_heads", num_attention_heads)
+        head_dim = getattr(text_config, "head_dim", hidden_size // num_attention_heads)
+
+        tp_config = TPShardConfig(
+            rank=shard_metadata.device_rank,
+            world_size=shard_metadata.world_size,
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+            head_dim=head_dim,
+            intermediate_size=intermediate_size,
+            num_key_value_heads=num_key_value_heads,
+        )
+
+        logger.info(
+            f"Streaming load: rank={shard_metadata.device_rank}/{shard_metadata.world_size}, "
+            f"hidden_size={hidden_size}, heads={num_attention_heads}, "
+            f"head_dim={head_dim}, intermediate={intermediate_size}"
+        )
+
+        model_path = self._resolve_model_path(model_id)
+
+        sharded_state_dict, native_layers, tokenizer = load_sharded_from_safetensors(
+            model_path=model_path,
+            config=tp_config,
+            device=str(device),
+            model_id=model_id,
+        )
+
+        # Create TensorParallelShard from pre-sharded state dict
+        shard = TensorParallelShard(
+            model=sharded_state_dict,
+            config=tp_config,
+            device=str(device),
+        )
+
+        # Attach native linear_attn layers if any
+        if native_layers:
+            shard._native_linear_attn_layers = native_layers
+            logger.info(f"Attached {len(native_layers)} native linear_attn layers")
+
+        return shard, tokenizer
 
     def _create_model_shard(self, model: Any, shard_metadata: ShardMetadata) -> Any:
         """
