@@ -26,9 +26,12 @@ from exo.worker.runner.bootstrap import logger
 def _resolve_master_addr(bound_instance: BoundInstance) -> str:
     """Determine master_addr from the instance's hosts_by_node.
 
-    Rank 0's first non-0.0.0.0 IP is used as the master address.
+    Rank 0's first routable IP is used as the master address.
     All nodes in the instance use this same address to connect to the
     Gloo TCPStore hosted by rank 0.
+
+    Rank 0 always binds on 0.0.0.0 (determined by rank in init_process_group),
+    so the master_addr only needs to be routable FROM other ranks TO rank 0.
     """
     instance = bound_instance.instance
     # Works with both MlxRingInstance and PyTorchXPURingInstance (both have hosts_by_node)
@@ -46,16 +49,26 @@ def _resolve_master_addr(bound_instance: BoundInstance) -> str:
     if rank0_node is None:
         rank0_node = next(iter(hosts_by_node))
 
-    # Get rank 0's real IP from hosts_by_node.
-    # Each node has a list of Host objects with ip and port.
-    # We pick the first non-0.0.0.0 IP as the master address.
+    # Get rank 0's routable IP from hosts_by_node.
+    # Prefer bond0 IPs (10.1.1.x) over flannel/CNI IPs (10.42.x.x),
+    # but flannel IPs are also routable between nodes.
     rank0_hosts = hosts_by_node.get(rank0_node, [])
+    candidate_ips: list[str] = []
     for host in rank0_hosts:
         ip = host.ip if hasattr(host, "ip") else str(host.get("ip", ""))
         if ip and ip != "0.0.0.0":
+            candidate_ips.append(ip)
+
+    # Prefer 10.1.1.x (bond0) over 10.42.x.x (flannel/CNI)
+    for ip in candidate_ips:
+        if ip.startswith("10.1.1."):
             return ip
 
-    # Fallback: if no non-0.0.0.0 IP found, use env var
+    # Fallback to first non-0.0.0.0 IP (flannel — still routable)
+    if candidate_ips:
+        return candidate_ips[0]
+
+    # Last resort: env var
     import os
 
     return os.environ.get("MASTER_ADDR", "10.1.1.12")
