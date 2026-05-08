@@ -163,7 +163,6 @@ class TensorParallelShard:
         self.device = device
         self.sharded_state_dict: dict[str, torch.Tensor] = {}
         self._native_linear_attn_layers: dict[int, Any] = {}
-        self._native_model_ref: Any = None  # Keep model alive for native layers
 
         # Extract state dict from model if it's a module
         if isinstance(model, dict):
@@ -172,8 +171,6 @@ class TensorParallelShard:
             # Before extracting state dict, save references to native linear_attn layers
             # for hybrid models (Qwen3.5/3.6) that use Gated DeltaNet
             self._extract_native_linear_attn_layers(model)
-            if self._native_linear_attn_layers:
-                self._native_model_ref = model  # Keep model alive
             state_dict = model.state_dict()
         else:
             raise TypeError(
