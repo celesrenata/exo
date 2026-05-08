@@ -893,11 +893,12 @@ class TensorParallelShard:
                 q_t, k_t, v_t, alpha, beta, rec_state
             )
 
-            # Reshape and apply gated RMSNorm
-            output_t = output_t.reshape(batch_size, v_dim)
-            z_t = z_all.squeeze(1)
+            # Reshape and apply gated RMSNorm (per-head)
+            output_t = output_t.reshape(batch_size, num_v_heads, value_head_dim)
             rms = output_t.pow(2).mean(dim=-1, keepdim=True).add(1e-6).rsqrt()
             output_t = output_t * rms * norm_weight
+            output_t = output_t.reshape(batch_size, v_dim)
+            z_t = z_all.squeeze(1)
             output_t = output_t * F.silu(z_t)
 
             # Output projection
@@ -958,12 +959,16 @@ class TensorParallelShard:
             attn_output = attn_output.reshape(batch_size, seq_len, v_dim)
 
             # 10. Gated RMSNorm + output projection (vectorized over T)
-            rms = attn_output.pow(2).mean(dim=-1, keepdim=True).add(1e-6).rsqrt()
-            attn_output = attn_output * rms * norm_weight.unsqueeze(0).unsqueeze(0)
-            attn_output = attn_output * F.silu(z_all)
+            # norm_weight is per-head (shape: value_head_dim), apply per head
+            # Reshape to (B, T, H, d_v) for per-head norm, then back
+            attn_reshaped = attn_output.view(batch_size, seq_len, num_v_heads, value_head_dim)
+            rms = attn_reshaped.pow(2).mean(dim=-1, keepdim=True).add(1e-6).rsqrt()
+            attn_normed = attn_reshaped * rms * norm_weight
+            attn_normed = attn_normed.view(batch_size, seq_len, v_dim)
+            attn_normed = attn_normed * F.silu(z_all)
 
             # Output projection
-            output = F.linear(attn_output, out_proj)  # (B, T, hidden_size)
+            output = F.linear(attn_normed, out_proj)  # (B, T, hidden_size)
 
             # Store states
             self._linear_attn_states[conv_state_key] = conv_state
