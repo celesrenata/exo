@@ -301,6 +301,22 @@ class ModelLoader:
             f"shard [{shard_metadata.start_layer}, {shard_metadata.end_layer})"
         )
 
+    def _resolve_model_path(self, model_id: str) -> str:
+        """Resolve the local filesystem path for a downloaded model.
+
+        Models are stored at ~/.local/share/exo/models/{model_id_with_dashes}/
+        """
+        import os
+        # Convert model_id (e.g., "Qwen/Qwen3.6-27B") to directory name
+        dir_name = model_id.replace("/", "--")
+        base_dir = os.path.expanduser("~/.local/share/exo/models")
+        model_path = os.path.join(base_dir, dir_name)
+        if os.path.exists(model_path):
+            return model_path
+        # Fallback: try the HuggingFace cache
+        from huggingface_hub import snapshot_download
+        return snapshot_download(model_id, local_files_only=True)
+
     def _create_model_shard(self, model: Any, shard_metadata: ShardMetadata) -> Any:
         """
         Create a model shard by extracting specific layer ranges.
@@ -398,7 +414,48 @@ class ModelLoader:
             f"num_key_value_heads={num_key_value_heads}"
         )
 
-        # Create TensorParallelShard — it shards weights and moves them to device
+        # Check model size — use streaming loader for large models (>20GB)
+        # to avoid OOM from loading full model + state dict copy
+        model_size_bytes = shard_metadata.model_card.storage_size.in_bytes if hasattr(shard_metadata, 'model_card') else 0
+        use_streaming = model_size_bytes > 20_000_000_000  # 20GB threshold
+
+        if use_streaming:
+            logger.info(
+                f"Using streaming safetensors loader for large model "
+                f"({model_size_bytes / 1e9:.1f}GB > 20GB threshold)"
+            )
+            # Free the HuggingFace model to reclaim memory
+            del model
+            import gc
+            gc.collect()
+
+            from exo.worker.engines.pytorch_xpu.streaming_loader import load_sharded_from_safetensors
+
+            # Resolve model path on disk
+            model_id_str = str(shard_metadata.model_card.model_id)
+            model_path = self._resolve_model_path(model_id_str)
+
+            sharded_state_dict, native_layers, _ = load_sharded_from_safetensors(
+                model_path=model_path,
+                config=tp_config,
+                device=str(device),
+                model_id=str(shard_metadata.model_card.model_id),
+            )
+
+            # Create TensorParallelShard from pre-sharded state dict
+            shard = TensorParallelShard(
+                model=sharded_state_dict,
+                config=tp_config,
+                device=str(device),
+            )
+
+            # Attach native linear_attn layers if any
+            if native_layers:
+                shard._native_linear_attn_layers = native_layers
+
+            return shard
+
+        # Standard path for smaller models: load full model, extract state dict
         shard = TensorParallelShard(
             model=model,
             config=tp_config,
