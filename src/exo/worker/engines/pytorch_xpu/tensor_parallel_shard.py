@@ -773,15 +773,9 @@ class TensorParallelShard:
     ) -> torch.Tensor:
         """Forward pass for a linear attention (Gated DeltaNet) layer.
 
-        Implements the recurrent step for single-token decode. For prefill
-        (seq_len > 1), iterates over tokens sequentially.
-
-        The linear attention layer uses:
-        - Depthwise causal conv1d (kernel=4) on concatenated Q, K, V
-        - L2-normalized Q and K
-        - Gated decay: g = exp(-exp(A_log) * softplus(α + dt_bias))
-        - Delta rule update with sigmoid β as update rate
-        - Gated RMSNorm output with SiLU gate
+        For single-token decode (seq_len=1): uses recurrent step.
+        For prefill (seq_len>1): uses chunk-parallel algorithm with
+        vectorized projections and conv1d.
 
         Args:
             hidden_states: Input tensor of shape (batch, seq_len, hidden_size).
@@ -790,7 +784,12 @@ class TensorParallelShard:
         Returns:
             Output tensor of shape (batch, seq_len, hidden_size).
         """
-        from exo.worker.engines.pytorch_xpu.gated_deltanet import gated_deltanet_recurrent_step
+        from exo.worker.engines.pytorch_xpu.gated_deltanet import (
+            causal_conv1d_prefill,
+            causal_conv1d_update,
+            gated_deltanet_chunk_prefill,
+            gated_deltanet_recurrent_step,
+        )
 
         batch_size, seq_len, _hidden_size = hidden_states.shape
         prefix = f"{self._layer_prefix}.layers.{layer_idx}.linear_attn"
@@ -808,77 +807,67 @@ class TensorParallelShard:
 
         # 2. Infer dimensions from weight shapes
         total_qkv_dim = in_proj_qkv.shape[0]
-        v_dim = in_proj_z.shape[0]  # z gate has same dim as v output
+        v_dim = in_proj_z.shape[0]
         k_dim = (total_qkv_dim - v_dim) // 2
         q_dim = k_dim
         conv_dim = q_dim + k_dim + v_dim
 
-        # Infer head structure from A_log shape
+        # Infer head structure
         num_v_heads = a_log.shape[0]
         value_head_dim = v_dim // num_v_heads
-        # Key heads may differ from value heads
         key_head_dim = q_dim // num_v_heads if q_dim % num_v_heads == 0 else q_dim // (num_v_heads // 2)
         num_k_heads = q_dim // key_head_dim
 
-        # Prepare conv weight for depthwise operation
+        # Prepare conv weight
         if conv_weight.dim() == 3:
-            # Shape: (conv_dim, 1, kernel_size) -> (conv_dim, kernel_size)
-            w_conv = conv_weight.squeeze(1)
+            w_conv_3d = conv_weight  # (conv_dim, 1, kernel_size) for F.conv1d
+            w_conv_2d = conv_weight.squeeze(1)  # (conv_dim, kernel_size) for manual
         else:
-            w_conv = conv_weight
-        kernel_size = w_conv.shape[-1]
+            w_conv_2d = conv_weight
+            w_conv_3d = conv_weight.unsqueeze(1)
+        kernel_size = w_conv_2d.shape[-1]
 
-        # Get or initialize conv state
+        # State keys
         conv_state_key = f"conv_{layer_idx}"
-        conv_state = self._linear_attn_states.get(conv_state_key)
-        if conv_state is None:
-            conv_state = torch.zeros(
-                batch_size, conv_dim, kernel_size,
-                device=hidden_states.device, dtype=hidden_states.dtype,
-            )
-
-        # Get or initialize recurrent state
         rec_state_key = f"state_{layer_idx}"
-        rec_state = self._linear_attn_states.get(rec_state_key)
-        if rec_state is None:
-            rec_state = torch.zeros(
-                batch_size, num_v_heads, key_head_dim, value_head_dim,
-                device=hidden_states.device, dtype=hidden_states.dtype,
-            )
 
-        outputs = []
+        # 3. Project ALL tokens in parallel
+        qkv_all = F.linear(hidden_states, in_proj_qkv)   # (B, T, qkv_dim)
+        a_all = F.linear(hidden_states, in_proj_a)        # (B, T, num_v_heads)
+        b_all = F.linear(hidden_states, in_proj_b)        # (B, T, num_v_heads)
+        z_all = F.linear(hidden_states, in_proj_z)        # (B, T, v_dim)
 
-        for t in range(seq_len):
-            h_t = hidden_states[:, t:t+1, :]  # (B, 1, hidden_size)
+        # Split QKV
+        q_all = qkv_all[..., :q_dim]                      # (B, T, q_dim)
+        k_all = qkv_all[..., q_dim:q_dim + k_dim]         # (B, T, k_dim)
+        v_all = qkv_all[..., q_dim + k_dim:]              # (B, T, v_dim)
 
-            # 3. Project input
-            qkv = F.linear(h_t, in_proj_qkv)   # (B, 1, q_dim + k_dim + v_dim)
-            a_raw = F.linear(h_t, in_proj_a)    # (B, 1, num_v_heads)
-            b_raw = F.linear(h_t, in_proj_b)    # (B, 1, num_v_heads)
-            z = F.linear(h_t, in_proj_z)        # (B, 1, v_dim)
+        if seq_len == 1:
+            # === DECODE PATH: single token, use recurrent step ===
+            conv_state = self._linear_attn_states.get(conv_state_key)
+            if conv_state is None:
+                conv_state = torch.zeros(
+                    batch_size, conv_dim, kernel_size,
+                    device=hidden_states.device, dtype=hidden_states.dtype,
+                )
 
-            # 4. Split QKV
-            q = qkv[..., :q_dim]
-            k = qkv[..., q_dim:q_dim + k_dim]
-            v = qkv[..., q_dim + k_dim:]
+            rec_state = self._linear_attn_states.get(rec_state_key)
+            if rec_state is None:
+                rec_state = torch.zeros(
+                    batch_size, num_v_heads, key_head_dim, value_head_dim,
+                    device=hidden_states.device, dtype=hidden_states.dtype,
+                )
 
-            # 5. Apply causal conv1d
-            conv_input = torch.cat([q, k, v], dim=-1).squeeze(1)  # (B, conv_dim)
+            # Conv1d update (single token)
+            conv_input = torch.cat([q_all, k_all, v_all], dim=-1).squeeze(1)  # (B, conv_dim)
+            conv_out, conv_state = causal_conv1d_update(conv_input, conv_state, w_conv_2d)
 
-            # Update conv state: shift left, append new
-            conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
-            conv_state[:, :, -1] = conv_input
-
-            # Compute conv output
-            conv_out = (conv_state * w_conv.unsqueeze(0)).sum(dim=-1)  # (B, conv_dim)
-            conv_out = F.silu(conv_out)
-
-            # Split back to q, k, v after conv
+            # Split post-conv
             q_t = conv_out[:, :q_dim]
             k_t = conv_out[:, q_dim:q_dim + k_dim]
             v_t = conv_out[:, q_dim + k_dim:]
 
-            # 6. Reshape to heads
+            # Reshape to heads
             if num_k_heads != num_v_heads:
                 q_t = q_t.view(batch_size, num_k_heads, key_head_dim)
                 k_t = k_t.view(batch_size, num_k_heads, key_head_dim)
@@ -888,45 +877,99 @@ class TensorParallelShard:
             else:
                 q_t = q_t.view(batch_size, num_v_heads, key_head_dim)
                 k_t = k_t.view(batch_size, num_v_heads, key_head_dim)
-
             v_t = v_t.view(batch_size, num_v_heads, value_head_dim)
 
-            # 7. L2 normalize Q and K
+            # L2 normalize
             q_t = F.normalize(q_t, p=2, dim=-1)
             k_t = F.normalize(k_t, p=2, dim=-1)
 
-            # 8. Compute gates
-            a = a_raw.squeeze(1)  # (B, num_v_heads)
-            # gate in log-space: log(g) = -exp(A_log) * softplus(a + dt_bias)
-            alpha = -a_log.exp() * F.softplus(a + dt_bias)  # (B, num_v_heads)
-            beta = torch.sigmoid(b_raw.squeeze(1))  # (B, num_v_heads)
+            # Compute gates
+            a = a_all.squeeze(1)  # (B, num_v_heads)
+            alpha = -a_log.exp() * F.softplus(a + dt_bias)
+            beta = torch.sigmoid(b_all.squeeze(1))
 
-            # 9. Gated DeltaNet recurrent step
+            # Recurrent step
             output_t, rec_state = gated_deltanet_recurrent_step(
                 q_t, k_t, v_t, alpha, beta, rec_state
             )
 
-            # 10. Reshape output: (B, num_v_heads, value_head_dim) -> (B, v_dim)
+            # Reshape and apply gated RMSNorm
             output_t = output_t.reshape(batch_size, v_dim)
-
-            # 11. Gated RMSNorm: rms_norm(output) * silu(z)
-            z_t = z.squeeze(1)  # (B, v_dim)
-            # RMSNorm
+            z_t = z_all.squeeze(1)
             rms = output_t.pow(2).mean(dim=-1, keepdim=True).add(1e-6).rsqrt()
             output_t = output_t * rms * norm_weight
-            # Gate with silu(z)
             output_t = output_t * F.silu(z_t)
 
-            # 12. Output projection
-            output_t = F.linear(output_t, out_proj)  # (B, hidden_size)
+            # Output projection
+            output_t = F.linear(output_t, out_proj)
 
-            outputs.append(output_t.unsqueeze(1))
+            # Store states
+            self._linear_attn_states[conv_state_key] = conv_state
+            self._linear_attn_states[rec_state_key] = rec_state
 
-        # Store updated states
-        self._linear_attn_states[conv_state_key] = conv_state
-        self._linear_attn_states[rec_state_key] = rec_state
+            return output_t.unsqueeze(1)  # (B, 1, hidden_size)
 
-        return torch.cat(outputs, dim=1)  # (B, seq_len, hidden_size)
+        else:
+            # === PREFILL PATH: multiple tokens, use chunk-parallel ===
+
+            # 4. Apply causal conv1d in parallel (full sequence)
+            # Concatenate q, k, v for conv: (B, T, conv_dim) -> (B, conv_dim, T)
+            conv_input = torch.cat([q_all, k_all, v_all], dim=-1).transpose(1, 2)
+            conv_out, conv_state = causal_conv1d_prefill(conv_input, w_conv_3d)
+            # conv_out: (B, conv_dim, T) -> (B, T, conv_dim)
+            conv_out = conv_out.transpose(1, 2)
+
+            # Split post-conv
+            q_conv = conv_out[..., :q_dim]                    # (B, T, q_dim)
+            k_conv = conv_out[..., q_dim:q_dim + k_dim]       # (B, T, k_dim)
+            v_conv = conv_out[..., q_dim + k_dim:]            # (B, T, v_dim)
+
+            # 5. Reshape to heads: (B, T, dim) -> (B, T, H, head_dim)
+            if num_k_heads != num_v_heads:
+                q_heads = q_conv.view(batch_size, seq_len, num_k_heads, key_head_dim)
+                k_heads = k_conv.view(batch_size, seq_len, num_k_heads, key_head_dim)
+                repeat_factor = num_v_heads // num_k_heads
+                q_heads = q_heads.repeat_interleave(repeat_factor, dim=2)
+                k_heads = k_heads.repeat_interleave(repeat_factor, dim=2)
+            else:
+                q_heads = q_conv.view(batch_size, seq_len, num_v_heads, key_head_dim)
+                k_heads = k_conv.view(batch_size, seq_len, num_v_heads, key_head_dim)
+            v_heads = v_conv.view(batch_size, seq_len, num_v_heads, value_head_dim)
+
+            # 6. L2 normalize Q and K
+            q_heads = F.normalize(q_heads, p=2, dim=-1)
+            k_heads = F.normalize(k_heads, p=2, dim=-1)
+
+            # 7. Compute gates for all tokens
+            alpha_all = -a_log.exp().unsqueeze(0).unsqueeze(0) * F.softplus(a_all + dt_bias.unsqueeze(0).unsqueeze(0))
+            # alpha_all: (B, T, num_v_heads)
+            beta_all = torch.sigmoid(b_all)  # (B, T, num_v_heads)
+
+            # 8. Chunk-parallel Gated DeltaNet
+            rec_state = self._linear_attn_states.get(rec_state_key)
+            attn_output, rec_state = gated_deltanet_chunk_prefill(
+                q_heads, k_heads, v_heads, alpha_all, beta_all,
+                initial_state=rec_state,
+                chunk_size=64,
+            )
+            # attn_output: (B, T, num_v_heads, value_head_dim)
+
+            # 9. Reshape: (B, T, H, d_v) -> (B, T, v_dim)
+            attn_output = attn_output.reshape(batch_size, seq_len, v_dim)
+
+            # 10. Gated RMSNorm + output projection (vectorized over T)
+            rms = attn_output.pow(2).mean(dim=-1, keepdim=True).add(1e-6).rsqrt()
+            attn_output = attn_output * rms * norm_weight.unsqueeze(0).unsqueeze(0)
+            attn_output = attn_output * F.silu(z_all)
+
+            # Output projection
+            output = F.linear(attn_output, out_proj)  # (B, T, hidden_size)
+
+            # Store states
+            self._linear_attn_states[conv_state_key] = conv_state
+            self._linear_attn_states[rec_state_key] = rec_state
+
+            return output
 
     def forward(
         self,
