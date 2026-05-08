@@ -812,11 +812,12 @@ class TensorParallelShard:
         q_dim = k_dim
         conv_dim = q_dim + k_dim + v_dim
 
-        # Infer head structure
-        num_v_heads = a_log.shape[0]
-        value_head_dim = v_dim // num_v_heads
-        key_head_dim = q_dim // num_v_heads if q_dim % num_v_heads == 0 else q_dim // (num_v_heads // 2)
-        num_k_heads = q_dim // key_head_dim
+        # Infer head structure from A_log (num_v_heads) and dimensions
+        num_v_heads = a_log.shape[0]  # 32 for Qwen3.5-4B
+        value_head_dim = v_dim // num_v_heads  # 4096/32 = 128
+        # key_head_dim = value_head_dim in Gated DeltaNet (both 128)
+        key_head_dim = value_head_dim
+        num_k_heads = q_dim // key_head_dim  # 2048/128 = 16
 
         # Prepare conv weight
         if conv_weight.dim() == 3:
