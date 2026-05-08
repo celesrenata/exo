@@ -205,47 +205,43 @@ class TensorParallelShard:
         )
 
     def _extract_native_linear_attn_layers(self, model: Any) -> None:
-        """Extract native linear attention layer modules from the HuggingFace model.
-
-        For hybrid models (Qwen3.5/3.6), keeps references to the native
-        GatedDeltaNet layer modules so we can delegate to them during forward.
-        This ensures correct computation without reimplementing the complex
-        Gated DeltaNet algorithm.
-
-        The layers are identified by having a 'linear_attn' attribute.
-        """
-        # Try to find the transformer layers in the model
+        """Extract native linear attention layer modules from the HuggingFace model."""
         layers = None
 
-        # Try various model structures
-        # Qwen3.5/3.6 ConditionalGeneration: model.language_model.layers
-        if hasattr(model, 'language_model') and hasattr(model.language_model, 'layers'):
-            layers = model.language_model.layers
-        # Qwen3.5/3.6 via model.model.language_model.layers
-        elif hasattr(model, 'model'):
-            if hasattr(model.model, 'language_model') and hasattr(model.model.language_model, 'layers'):
-                layers = model.model.language_model.layers
+        # Debug: print model structure
+        import sys
+        print(f"[TPS] Model type: {type(model).__name__}", file=sys.stderr, flush=True)
+        print(f"[TPS] Model attrs: {[a for a in dir(model) if not a.startswith('_')][:20]}", file=sys.stderr, flush=True)
+
+        if hasattr(model, 'model'):
+            print(f"[TPS] model.model type: {type(model.model).__name__}", file=sys.stderr, flush=True)
+            if hasattr(model.model, 'language_model'):
+                print(f"[TPS] model.model.language_model type: {type(model.model.language_model).__name__}", file=sys.stderr, flush=True)
+                if hasattr(model.model.language_model, 'layers'):
+                    layers = model.model.language_model.layers
+                    print(f"[TPS] Found layers at model.model.language_model.layers: {len(layers)} layers", file=sys.stderr, flush=True)
             elif hasattr(model.model, 'layers'):
                 layers = model.model.layers
+                print(f"[TPS] Found layers at model.model.layers: {len(layers)} layers", file=sys.stderr, flush=True)
+        elif hasattr(model, 'language_model'):
+            if hasattr(model.language_model, 'layers'):
+                layers = model.language_model.layers
+                print(f"[TPS] Found layers at model.language_model.layers: {len(layers)} layers", file=sys.stderr, flush=True)
 
         if layers is None:
-            logger.info("_extract_native_linear_attn_layers: no layers found in model")
+            print("[TPS] No layers found!", file=sys.stderr, flush=True)
             return
 
         for idx, layer in enumerate(layers):
+            attrs = [a for a in dir(layer) if not a.startswith('_')]
+            if idx == 0:
+                print(f"[TPS] Layer 0 attrs: {attrs[:15]}", file=sys.stderr, flush=True)
             if hasattr(layer, 'linear_attn') and layer.linear_attn is not None:
-                # Keep the native linear_attn module
                 self._native_linear_attn_layers[idx] = layer.linear_attn
             elif hasattr(layer, 'self_attn') and not hasattr(layer, 'linear_attn'):
-                pass  # Full attention layer, skip
+                pass
 
-        if self._native_linear_attn_layers:
-            logger.info(
-                f"Extracted {len(self._native_linear_attn_layers)} native linear attention layers "
-                f"for hybrid model forward pass"
-            )
-        else:
-            logger.info("_extract_native_linear_attn_layers: no linear_attn layers found")
+        print(f"[TPS] Extracted {len(self._native_linear_attn_layers)} native linear_attn layers", file=sys.stderr, flush=True)
 
     def shard_weights(self, state_dict: dict[str, torch.Tensor]) -> None:
         """Extract this rank's portion of each weight matrix.
