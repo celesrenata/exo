@@ -225,6 +225,21 @@ class TensorParallelShard:
                 )
                 continue
 
+            # Detect fused gate_up_proj and split into separate gate_proj, up_proj
+            if self._matches_mlp_key(param_name, "gate_up_proj.weight"):
+                self._split_fused_gate_up(
+                    param_name, param_tensor, is_bias=False,
+                    rank=rank, intermediate_per_rank=intermediate_per_rank,
+                )
+                continue
+
+            if self._matches_mlp_key(param_name, "gate_up_proj.bias"):
+                self._split_fused_gate_up(
+                    param_name, param_tensor, is_bias=True,
+                    rank=rank, intermediate_per_rank=intermediate_per_rank,
+                )
+                continue
+
             shard = self._shard_parameter(
                 param_name,
                 param_tensor,
@@ -422,6 +437,52 @@ class TensorParallelShard:
     def _matches_attn_key(param_name: str, suffix: str) -> bool:
         """Check if param_name matches an attention layer parameter."""
         return ".self_attn." + suffix in param_name
+
+    @staticmethod
+    def _matches_mlp_key(param_name: str, suffix: str) -> bool:
+        """Check if param_name matches an MLP layer parameter."""
+        return ".mlp." + suffix in param_name
+
+    def _split_fused_gate_up(
+        self,
+        param_name: str,
+        param_tensor: torch.Tensor,
+        *,
+        is_bias: bool,
+        rank: int,
+        intermediate_per_rank: int,
+    ) -> None:
+        """Split a fused gate_up_proj weight/bias into separate gate_proj, up_proj entries.
+
+        Fused gate_up_proj layout (Phi-style):
+        - Weight shape: [2 * intermediate_size, hidden_size]
+        - Bias shape: [2 * intermediate_size]
+
+        The fused tensor is ordered as [gate, up] along dimension 0.
+        After splitting, each part is sharded per-rank and stored with
+        the canonical key names (gate_proj.weight, up_proj.weight).
+        """
+        total_intermediate = param_tensor.shape[0] // 2
+        gate_full = param_tensor.narrow(0, 0, total_intermediate)
+        up_full = param_tensor.narrow(0, total_intermediate, total_intermediate)
+
+        # Shard each part for this rank (column-parallel: slice output dim)
+        gate_shard = gate_full.narrow(0, rank * intermediate_per_rank, intermediate_per_rank).clone()
+        up_shard = up_full.narrow(0, rank * intermediate_per_rank, intermediate_per_rank).clone()
+
+        # Construct canonical key names
+        suffix = "bias" if is_bias else "weight"
+        gate_key = param_name.replace(f"gate_up_proj.{suffix}", f"gate_proj.{suffix}")
+        up_key = param_name.replace(f"gate_up_proj.{suffix}", f"up_proj.{suffix}")
+
+        self.sharded_state_dict[gate_key] = gate_shard.to(self.device)
+        self.sharded_state_dict[up_key] = up_shard.to(self.device)
+
+        logger.debug(
+            f"Rank {rank}: split fused gate_up '{param_name}' into "
+            f"gate={gate_key} ({tuple(gate_shard.shape)}), "
+            f"up={up_key} ({tuple(up_shard.shape)})"
+        )
 
     @staticmethod
     def _matches_mlp_key(param_name: str, suffix: str) -> bool:
