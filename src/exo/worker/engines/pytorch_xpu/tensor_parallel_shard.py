@@ -114,6 +114,8 @@ _REDUNDANT_PATTERNS = (
     "input_layernorm.bias",
     "post_attention_layernorm.weight",
     "post_attention_layernorm.bias",
+    "q_norm.weight",
+    "k_norm.weight",
 )
 
 # Linear attention (Gated DeltaNet) weights are kept redundant on all ranks.
@@ -1153,6 +1155,18 @@ class TensorParallelShard:
                 # k, v: [batch, seq_len, kv_heads_per_rank * head_dim] -> [batch, kv_heads_per_rank, seq_len, head_dim]
                 k = k.view(batch_size, seq_len, kv_heads_per_rank, head_dim).transpose(1, 2)
                 v = v.view(batch_size, seq_len, kv_heads_per_rank, head_dim).transpose(1, 2)
+
+                # Apply QK normalization if present (Qwen3.5/3.6)
+                q_norm_weight = self._get_weight_optional(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.q_norm.weight"
+                )
+                k_norm_weight = self._get_weight_optional(
+                    f"{self._layer_prefix}.layers.{layer_idx}.self_attn.k_norm.weight"
+                )
+                if q_norm_weight is not None:
+                    q = self._rms_norm(q, q_norm_weight)
+                if k_norm_weight is not None:
+                    k = self._rms_norm(k, k_norm_weight)
 
                 # Apply rotary positional embeddings
                 q, k = self._apply_rotary_pos_emb(q, k, position_ids)
