@@ -41,6 +41,7 @@ from exo.shared.types.worker.instances import (
     InstanceMeta,
     MlxJacclInstance,
     MlxRingInstance,
+    PyTorchXPURingInstance,
 )
 from exo.shared.types.worker.runners import ShardAssignments
 from exo.shared.types.worker.shards import PipelineShardMetadata, Sharding
@@ -774,3 +775,65 @@ def test_placement_does_not_prefer_cycle_with_failed_download(
     assigned_nodes = set(instance.shard_assignments.node_to_runner.keys())
     # node_a should win on RAM tiebreaker since failed download scores 0.0
     assert assigned_nodes == {node_a}
+
+
+def test_single_node_placement_preserves_pytorch_xpu_ring() -> None:
+    """Single-node placement with PyTorchXPURing should produce a PyTorchXPURingInstance,
+    not force MlxRingInstance."""
+    topology = Topology()
+    node_id = NodeId()
+    topology.add_node(node_id)
+    node_memory = {node_id: create_node_memory(1000 * 1024)}
+    node_network = {node_id: create_node_network()}
+
+    command = PlaceInstance(
+        command_id=CommandId(),
+        model_card=ModelCard(
+            model_id=ModelId("test-model"),
+            storage_size=Memory.from_kb(500),
+            n_layers=10,
+            hidden_size=1000,
+            supports_tensor=True,
+            tasks=[ModelTask.TextGeneration],
+        ),
+        sharding=Sharding.Tensor,
+        instance_meta=InstanceMeta.PyTorchXPURing,
+        min_nodes=1,
+    )
+
+    placements = place_instance(command, topology, {}, node_memory, node_network)
+
+    assert len(placements) == 1
+    instance = list(placements.values())[0]
+    assert isinstance(instance, PyTorchXPURingInstance)
+
+
+def test_single_node_placement_forces_mlx_ring_for_non_xpu() -> None:
+    """Single-node placement with non-PyTorchXPURing instance_meta should still
+    be forced to MlxRingInstance."""
+    topology = Topology()
+    node_id = NodeId()
+    topology.add_node(node_id)
+    node_memory = {node_id: create_node_memory(1000 * 1024)}
+    node_network = {node_id: create_node_network()}
+
+    command = PlaceInstance(
+        command_id=CommandId(),
+        model_card=ModelCard(
+            model_id=ModelId("test-model"),
+            storage_size=Memory.from_kb(500),
+            n_layers=10,
+            hidden_size=1000,
+            supports_tensor=True,
+            tasks=[ModelTask.TextGeneration],
+        ),
+        sharding=Sharding.Tensor,
+        instance_meta=InstanceMeta.MlxJaccl,
+        min_nodes=1,
+    )
+
+    placements = place_instance(command, topology, {}, node_memory, node_network)
+
+    assert len(placements) == 1
+    instance = list(placements.values())[0]
+    assert isinstance(instance, MlxRingInstance)

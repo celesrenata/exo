@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 import torch
@@ -19,6 +20,13 @@ import torch.nn.functional as F
 from exo.worker.engines.pytorch_xpu.distributed import get_tensor_parallel_group
 
 logger = logging.getLogger(__name__)
+
+
+class ModelArchitecture(str, Enum):
+    """Detected model architecture based on state_dict key patterns."""
+
+    QWEN_LLAMA = "qwen_llama"  # Separate Q, K, V projections, RMSNorm
+    PHI = "phi"  # Fused QKV or separate with LayerNorm + biases
 
 
 @dataclass(frozen=True)
@@ -99,9 +107,12 @@ _ROW_PARALLEL_MLP_KEYS = ("down_proj.weight",)
 _REDUNDANT_PATTERNS = (
     "model.embed_tokens.weight",
     "model.norm.weight",
+    "model.norm.bias",
     "lm_head.weight",
     "input_layernorm.weight",
+    "input_layernorm.bias",
     "post_attention_layernorm.weight",
+    "post_attention_layernorm.bias",
 )
 
 
@@ -158,9 +169,13 @@ class TensorParallelShard:
 
         self.shard_weights(state_dict)
 
+        # Detect architecture from stored keys
+        self.architecture = self._detect_architecture()
+
         logger.info(
             f"TensorParallelShard initialized: rank={config.rank}/{config.world_size}, "
             f"device={device}, "
+            f"architecture={self.architecture.value}, "
             f"sharded_params={len(self.sharded_state_dict)}, "
             f"heads_per_rank={config.heads_per_rank}, "
             f"kv_heads_per_rank={config.kv_heads_per_rank}, "
@@ -180,6 +195,10 @@ class TensorParallelShard:
 
         After sharding, moves weights to the target device and discards
         the full state dict.
+
+        Fused QKV weights (qkv_proj.weight) are detected and split into
+        separate q_proj.weight, k_proj.weight, v_proj.weight entries so
+        that forward() can use uniform key patterns for all architectures.
         """
         rank = self.config.rank
         world_size = self.config.world_size
@@ -189,6 +208,23 @@ class TensorParallelShard:
         intermediate_per_rank = self.config.intermediate_per_rank
 
         for param_name, param_tensor in state_dict.items():
+            # Detect fused QKV and split into separate Q, K, V entries
+            if self._matches_attn_key(param_name, "qkv_proj.weight"):
+                self._split_fused_qkv(
+                    param_name, param_tensor, is_bias=False,
+                    rank=rank, world_size=world_size, head_dim=head_dim,
+                    heads_per_rank=heads_per_rank, kv_heads_per_rank=kv_heads_per_rank,
+                )
+                continue
+
+            if self._matches_attn_key(param_name, "qkv_proj.bias"):
+                self._split_fused_qkv(
+                    param_name, param_tensor, is_bias=True,
+                    rank=rank, world_size=world_size, head_dim=head_dim,
+                    heads_per_rank=heads_per_rank, kv_heads_per_rank=kv_heads_per_rank,
+                )
+                continue
+
             shard = self._shard_parameter(
                 param_name,
                 param_tensor,
@@ -205,6 +241,66 @@ class TensorParallelShard:
         logger.debug(
             f"Rank {rank}: sharded {len(self.sharded_state_dict)} parameters "
             f"to device {self.device}"
+        )
+
+    def _split_fused_qkv(
+        self,
+        param_name: str,
+        param_tensor: torch.Tensor,
+        *,
+        is_bias: bool,
+        rank: int,
+        world_size: int,
+        head_dim: int,
+        heads_per_rank: int,
+        kv_heads_per_rank: int,
+    ) -> None:
+        """Split a fused QKV weight/bias into separate Q, K, V entries.
+
+        Fused QKV layout (Phi-style):
+        - Weight shape: [(num_heads + 2 * num_kv_heads) * head_dim, hidden_size]
+        - Bias shape: [(num_heads + 2 * num_kv_heads) * head_dim]
+
+        The fused tensor is ordered as [Q, K, V] along dimension 0.
+        After splitting, each part is sharded per-rank and stored with
+        the canonical key names (q_proj.weight, k_proj.weight, v_proj.weight).
+        """
+        num_heads = self.config.num_attention_heads
+        num_kv_heads = self.config.num_key_value_heads
+
+        q_size = num_heads * head_dim
+        k_size = num_kv_heads * head_dim
+        v_size = num_kv_heads * head_dim
+
+        # Split along dimension 0
+        q_full = param_tensor.narrow(0, 0, q_size)
+        k_full = param_tensor.narrow(0, q_size, k_size)
+        v_full = param_tensor.narrow(0, q_size + k_size, v_size)
+
+        # Shard each part for this rank
+        q_shard_size = heads_per_rank * head_dim
+        k_shard_size = kv_heads_per_rank * head_dim
+        v_shard_size = kv_heads_per_rank * head_dim
+
+        q_shard = q_full.narrow(0, rank * q_shard_size, q_shard_size).clone()
+        k_shard = k_full.narrow(0, rank * k_shard_size, k_shard_size).clone()
+        v_shard = v_full.narrow(0, rank * v_shard_size, v_shard_size).clone()
+
+        # Construct canonical key names by replacing qkv_proj with q/k/v_proj
+        suffix = "bias" if is_bias else "weight"
+        q_key = param_name.replace(f"qkv_proj.{suffix}", f"q_proj.{suffix}")
+        k_key = param_name.replace(f"qkv_proj.{suffix}", f"k_proj.{suffix}")
+        v_key = param_name.replace(f"qkv_proj.{suffix}", f"v_proj.{suffix}")
+
+        self.sharded_state_dict[q_key] = q_shard.to(self.device)
+        self.sharded_state_dict[k_key] = k_shard.to(self.device)
+        self.sharded_state_dict[v_key] = v_shard.to(self.device)
+
+        logger.debug(
+            f"Rank {rank}: split fused QKV '{param_name}' into "
+            f"q={q_key} ({tuple(q_shard.shape)}), "
+            f"k={k_key} ({tuple(k_shard.shape)}), "
+            f"v={v_key} ({tuple(v_shard.shape)})"
         )
 
     def _shard_parameter(
@@ -332,6 +428,41 @@ class TensorParallelShard:
         """Check if param_name matches an MLP layer parameter."""
         return ".mlp." + suffix in param_name
 
+    def _detect_architecture(self) -> ModelArchitecture:
+        """Detect the model architecture from sharded_state_dict key patterns.
+
+        Inspects the stored keys to determine the model family:
+        - QWEN_LLAMA: Has separate self_attn.q_proj.weight, k_proj.weight, v_proj.weight
+          and uses RMSNorm (no input_layernorm.bias)
+        - PHI: Has fused self_attn.qkv_proj.weight (before splitting) or
+          has input_layernorm.bias (LayerNorm instead of RMSNorm)
+
+        Returns:
+            ModelArchitecture enum value.
+        """
+        has_layernorm_bias = False
+        has_separate_qkv = False
+
+        for key in self.sharded_state_dict:
+            if "input_layernorm.bias" in key:
+                has_layernorm_bias = True
+            if ".self_attn.q_proj.weight" in key:
+                has_separate_qkv = True
+
+        # Phi uses LayerNorm (has bias on layernorms)
+        if has_layernorm_bias:
+            return ModelArchitecture.PHI
+
+        # If we have separate QKV (either native or from fused split), check
+        # for other Phi indicators. At this point, if fused QKV was split,
+        # the original qkv_proj keys won't exist, but we can check for
+        # Phi-specific MLP naming or other patterns.
+        if has_separate_qkv:
+            return ModelArchitecture.QWEN_LLAMA
+
+        # Default to QWEN_LLAMA for unknown patterns
+        return ModelArchitecture.QWEN_LLAMA
+
     def _column_parallel_linear(
         self, input: Any, weight: Any, bias: Any | None = None
     ) -> Any:
@@ -391,8 +522,25 @@ class TensorParallelShard:
         return max_layer_idx + 1 if max_layer_idx >= 0 else 0
 
     def _get_weight(self, key: str) -> torch.Tensor:
-        """Get a weight tensor from the sharded state dict."""
-        return self.sharded_state_dict[key]
+        """Get a weight tensor from the sharded state dict.
+
+        Raises:
+            KeyError: If the key is not found, with a descriptive message
+                including the missing key and available keys with the same
+                layer prefix.
+        """
+        try:
+            return self.sharded_state_dict[key]
+        except KeyError:
+            # Extract prefix (everything up to the last '.')
+            prefix = key.rsplit(".", 1)[0] if "." in key else ""
+            similar_keys = sorted(
+                k for k in self.sharded_state_dict if k.startswith(prefix)
+            )
+            raise KeyError(
+                f"Weight key '{key}' not found in sharded_state_dict. "
+                f"Available keys with prefix '{prefix}': {similar_keys}"
+            )
 
     def _get_weight_optional(self, key: str) -> torch.Tensor | None:
         """Get a weight tensor if it exists, otherwise return None."""
@@ -405,6 +553,36 @@ class TensorParallelShard:
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + eps)
         return (weight * hidden_states).to(input_dtype)
+
+    def _apply_norm(
+        self,
+        hidden_states: torch.Tensor,
+        weight: torch.Tensor,
+        bias: torch.Tensor | None = None,
+        eps: float = 1e-6,
+    ) -> torch.Tensor:
+        """Apply the appropriate normalization based on bias presence.
+
+        If bias is present, applies F.layer_norm (LayerNorm, used by Phi).
+        If bias is absent, applies RMSNorm (used by Qwen/Llama).
+
+        Args:
+            hidden_states: Input tensor of shape [..., hidden_size].
+            weight: Normalization weight of shape [hidden_size].
+            bias: Optional normalization bias of shape [hidden_size].
+                  When present, indicates LayerNorm should be used.
+            eps: Epsilon for numerical stability.
+
+        Returns:
+            Normalized tensor with same shape as input.
+        """
+        if bias is not None:
+            # LayerNorm (Phi-style): uses both weight and bias
+            normalized_shape = [weight.shape[0]]
+            return F.layer_norm(hidden_states, normalized_shape, weight, bias, eps)
+        else:
+            # RMSNorm (Qwen/Llama-style): weight only, no bias
+            return self._rms_norm(hidden_states, weight, eps)
 
     def _apply_rotary_pos_emb(
         self,
@@ -519,7 +697,10 @@ class TensorParallelShard:
             ln_weight = self._get_weight(
                 f"model.layers.{layer_idx}.input_layernorm.weight"
             )
-            hidden_states = self._rms_norm(hidden_states, ln_weight)
+            ln_bias = self._get_weight_optional(
+                f"model.layers.{layer_idx}.input_layernorm.bias"
+            )
+            hidden_states = self._apply_norm(hidden_states, ln_weight, ln_bias)
 
             # 2. QKV projections (column-parallel)
             q_weight = self._get_weight(
@@ -615,7 +796,10 @@ class TensorParallelShard:
             post_ln_weight = self._get_weight(
                 f"model.layers.{layer_idx}.post_attention_layernorm.weight"
             )
-            hidden_states = self._rms_norm(hidden_states, post_ln_weight)
+            post_ln_bias = self._get_weight_optional(
+                f"model.layers.{layer_idx}.post_attention_layernorm.bias"
+            )
+            hidden_states = self._apply_norm(hidden_states, post_ln_weight, post_ln_bias)
 
             # 5. MLP gate/up projections (column-parallel)
             gate_weight = self._get_weight(
@@ -653,7 +837,8 @@ class TensorParallelShard:
 
         # --- Final LayerNorm (redundant on all ranks) ---
         final_ln_weight = self._get_weight("model.norm.weight")
-        hidden_states = self._rms_norm(hidden_states, final_ln_weight)
+        final_ln_bias = self._get_weight_optional("model.norm.bias")
+        hidden_states = self._apply_norm(hidden_states, final_ln_weight, final_ln_bias)
 
         # --- lm_head projection (redundant on all ranks) ---
         lm_head_weight = self._get_weight("lm_head.weight")
@@ -697,10 +882,12 @@ class TensorParallelShard:
             tensor.copy_(cpu_tensor.to(original_device))
         except Exception as exc:
             rank = self.config.rank
+            timeout = self.config.allreduce_timeout_seconds
             raise RuntimeError(
                 f"Tensor-parallel all-reduce failed: "
                 f"layer_index={layer_index}, "
                 f"tensor_shape={tuple(tensor.shape)}, "
+                f"timeout={timeout}s, "
                 f"device={original_device}, "
                 f"rank={rank}"
             ) from exc

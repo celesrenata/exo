@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import torch
 import pytest
+import torch.nn.functional as F
 
 from exo.worker.engines.pytorch_xpu.tensor_parallel_shard import (
     TPShardConfig,
@@ -616,3 +617,549 @@ class TestAllReduce:
         error_msg = str(exc_info.value)
         assert "timeout=30s" in error_msg
         assert "rank=3" in error_msg
+
+# ============================================================================
+# Tests for Task 1: Architecture Detection, Fused QKV, Key Consistency, Errors
+# ============================================================================
+
+from exo.worker.engines.pytorch_xpu.tensor_parallel_shard import ModelArchitecture
+
+
+def _make_phi_config(rank: int = 0, world_size: int = 2) -> TPShardConfig:
+    """Create a Phi-4-like TPShardConfig.
+
+    Uses world_size=2 by default because Phi-4 has 10 KV heads
+    which is divisible by 2 but not by 4.
+    """
+    return TPShardConfig(
+        rank=rank,
+        world_size=world_size,
+        hidden_size=6144,
+        num_attention_heads=40,
+        head_dim=128,
+        intermediate_size=16384,
+        num_key_value_heads=10,
+    )
+
+
+def _make_phi_state_dict_fused(
+    hidden_size: int = 6144,
+    num_heads: int = 40,
+    head_dim: int = 128,
+    num_kv_heads: int = 10,
+    intermediate_size: int = 16384,
+    num_layers: int = 2,
+) -> dict[str, torch.Tensor]:
+    """Create a fake Phi-style state dict with fused QKV and LayerNorm biases."""
+    state_dict: dict[str, torch.Tensor] = {}
+
+    # Embedding and final layers (redundant)
+    state_dict["model.embed_tokens.weight"] = torch.randn(32064, hidden_size)
+    state_dict["model.norm.weight"] = torch.randn(hidden_size)
+    state_dict["model.norm.bias"] = torch.randn(hidden_size)
+    state_dict["lm_head.weight"] = torch.randn(32064, hidden_size)
+
+    # Fused QKV size: (num_heads + 2 * num_kv_heads) * head_dim
+    fused_qkv_size = (num_heads + 2 * num_kv_heads) * head_dim
+
+    for i in range(num_layers):
+        prefix = f"model.layers.{i}"
+
+        # Layer norms with bias (LayerNorm, Phi-style)
+        state_dict[f"{prefix}.input_layernorm.weight"] = torch.randn(hidden_size)
+        state_dict[f"{prefix}.input_layernorm.bias"] = torch.randn(hidden_size)
+        state_dict[f"{prefix}.post_attention_layernorm.weight"] = torch.randn(hidden_size)
+        state_dict[f"{prefix}.post_attention_layernorm.bias"] = torch.randn(hidden_size)
+
+        # Fused QKV projection
+        state_dict[f"{prefix}.self_attn.qkv_proj.weight"] = torch.randn(
+            fused_qkv_size, hidden_size
+        )
+        state_dict[f"{prefix}.self_attn.qkv_proj.bias"] = torch.randn(fused_qkv_size)
+
+        # Output projection
+        state_dict[f"{prefix}.self_attn.o_proj.weight"] = torch.randn(
+            hidden_size, num_heads * head_dim
+        )
+        state_dict[f"{prefix}.self_attn.o_proj.bias"] = torch.randn(hidden_size)
+
+        # MLP projections
+        state_dict[f"{prefix}.mlp.gate_proj.weight"] = torch.randn(
+            intermediate_size, hidden_size
+        )
+        state_dict[f"{prefix}.mlp.up_proj.weight"] = torch.randn(
+            intermediate_size, hidden_size
+        )
+        state_dict[f"{prefix}.mlp.down_proj.weight"] = torch.randn(
+            hidden_size, intermediate_size
+        )
+
+    return state_dict
+
+
+def _make_qwen_state_dict_with_separate_qkv(
+    hidden_size: int = 2560,
+    num_heads: int = 32,
+    head_dim: int = 80,
+    num_kv_heads: int = 8,
+    intermediate_size: int = 6912,
+    num_layers: int = 2,
+) -> dict[str, torch.Tensor]:
+    """Create a Qwen/Llama-style state dict with separate Q, K, V and RMSNorm."""
+    return _make_fake_state_dict(
+        hidden_size=hidden_size,
+        num_heads=num_heads,
+        head_dim=head_dim,
+        num_kv_heads=num_kv_heads,
+        intermediate_size=intermediate_size,
+        num_layers=num_layers,
+    )
+
+
+class TestArchitectureDetection:
+    """Tests for _detect_architecture() method (Task 1.1)."""
+
+    def test_detects_qwen_llama_from_separate_qkv(self) -> None:
+        """Qwen/Llama architecture detected when separate q/k/v_proj keys exist."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_qwen_state_dict_with_separate_qkv(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+        assert shard.architecture == ModelArchitecture.QWEN_LLAMA
+
+    def test_detects_phi_from_layernorm_bias(self) -> None:
+        """Phi architecture detected when input_layernorm.bias is present."""
+        config = _make_phi_config(rank=0)
+        state_dict = _make_phi_state_dict_fused(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+        assert shard.architecture == ModelArchitecture.PHI
+
+    def test_detects_qwen_llama_without_bias(self) -> None:
+        """Qwen/Llama detected when no layernorm bias exists."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        # Verify no bias keys exist
+        assert not any("layernorm.bias" in k for k in state_dict)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+        assert shard.architecture == ModelArchitecture.QWEN_LLAMA
+
+    def test_architecture_is_enum_value(self) -> None:
+        """Architecture detection returns a ModelArchitecture enum member."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+        assert isinstance(shard.architecture, ModelArchitecture)
+
+    def test_phi_detection_with_multiple_layers(self) -> None:
+        """Phi detection works with multiple layers."""
+        config = _make_phi_config(rank=0)
+        state_dict = _make_phi_state_dict_fused(num_layers=3)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+        assert shard.architecture == ModelArchitecture.PHI
+
+
+class TestFusedQKVSplitting:
+    """Tests for fused QKV weight splitting (Task 1.2)."""
+
+    def test_fused_qkv_produces_separate_keys(self) -> None:
+        """Fused qkv_proj.weight is split into q_proj, k_proj, v_proj keys."""
+        config = _make_phi_config(rank=0)
+        state_dict = _make_phi_state_dict_fused(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        # After splitting, separate keys exist
+        assert "model.layers.0.self_attn.q_proj.weight" in shard.sharded_state_dict
+        assert "model.layers.0.self_attn.k_proj.weight" in shard.sharded_state_dict
+        assert "model.layers.0.self_attn.v_proj.weight" in shard.sharded_state_dict
+
+        # Original fused key does NOT exist
+        assert "model.layers.0.self_attn.qkv_proj.weight" not in shard.sharded_state_dict
+
+    def test_fused_qkv_bias_produces_separate_bias_keys(self) -> None:
+        """Fused qkv_proj.bias is split into q_proj, k_proj, v_proj bias keys."""
+        config = _make_phi_config(rank=0)
+        state_dict = _make_phi_state_dict_fused(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        assert "model.layers.0.self_attn.q_proj.bias" in shard.sharded_state_dict
+        assert "model.layers.0.self_attn.k_proj.bias" in shard.sharded_state_dict
+        assert "model.layers.0.self_attn.v_proj.bias" in shard.sharded_state_dict
+        assert "model.layers.0.self_attn.qkv_proj.bias" not in shard.sharded_state_dict
+
+    def test_fused_qkv_split_shapes_correct(self) -> None:
+        """Split Q, K, V shards have correct shapes for rank 0 with world_size=2."""
+        config = _make_phi_config(rank=0, world_size=2)
+        state_dict = _make_phi_state_dict_fused(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        # Phi-4: 40 heads, 10 kv_heads, head_dim=128, world_size=2
+        # heads_per_rank = 40/2 = 20, kv_heads_per_rank = 10/2 = 5
+        # q_shard: (20 * 128, 6144) = (2560, 6144)
+        # k_shard: (5 * 128, 6144) = (640, 6144)
+        # v_shard: (5 * 128, 6144) = (640, 6144)
+        q_weight = shard.sharded_state_dict["model.layers.0.self_attn.q_proj.weight"]
+        k_weight = shard.sharded_state_dict["model.layers.0.self_attn.k_proj.weight"]
+        v_weight = shard.sharded_state_dict["model.layers.0.self_attn.v_proj.weight"]
+
+        assert q_weight.shape == (2560, 6144)
+        assert k_weight.shape == (640, 6144)
+        assert v_weight.shape == (640, 6144)
+
+    def test_fused_qkv_split_shapes_world_size_2(self) -> None:
+        """Split Q, K, V shards have correct shapes with world_size=2."""
+        config = TPShardConfig(
+            rank=0,
+            world_size=2,
+            hidden_size=6144,
+            num_attention_heads=40,
+            head_dim=128,
+            intermediate_size=16384,
+            num_key_value_heads=10,
+        )
+        state_dict = _make_phi_state_dict_fused(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        # heads_per_rank = 40/2 = 20, kv_heads_per_rank = 10/2 = 5
+        # q_shard: (20 * 128, 6144) = (2560, 6144)
+        # k_shard: (5 * 128, 6144) = (640, 6144)
+        # v_shard: (5 * 128, 6144) = (640, 6144)
+        q_weight = shard.sharded_state_dict["model.layers.0.self_attn.q_proj.weight"]
+        k_weight = shard.sharded_state_dict["model.layers.0.self_attn.k_proj.weight"]
+        v_weight = shard.sharded_state_dict["model.layers.0.self_attn.v_proj.weight"]
+
+        assert q_weight.shape == (2560, 6144)
+        assert k_weight.shape == (640, 6144)
+        assert v_weight.shape == (640, 6144)
+
+    def test_fused_qkv_split_bias_shapes(self) -> None:
+        """Split Q, K, V bias shards have correct 1D shapes."""
+        config = TPShardConfig(
+            rank=0,
+            world_size=2,
+            hidden_size=6144,
+            num_attention_heads=40,
+            head_dim=128,
+            intermediate_size=16384,
+            num_key_value_heads=10,
+        )
+        state_dict = _make_phi_state_dict_fused(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        q_bias = shard.sharded_state_dict["model.layers.0.self_attn.q_proj.bias"]
+        k_bias = shard.sharded_state_dict["model.layers.0.self_attn.k_proj.bias"]
+        v_bias = shard.sharded_state_dict["model.layers.0.self_attn.v_proj.bias"]
+
+        assert q_bias.shape == (2560,)
+        assert k_bias.shape == (640,)
+        assert v_bias.shape == (640,)
+
+    def test_fused_qkv_round_trip_reconstruction(self) -> None:
+        """Concatenating Q, K, V shards from all ranks reconstructs the original fused weight."""
+        world_size = 2
+        hidden_size = 6144
+        num_heads = 40
+        head_dim = 128
+        num_kv_heads = 10
+        intermediate_size = 16384
+
+        state_dict = _make_phi_state_dict_fused(
+            hidden_size=hidden_size,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            num_kv_heads=num_kv_heads,
+            intermediate_size=intermediate_size,
+            num_layers=1,
+        )
+        original_fused = state_dict["model.layers.0.self_attn.qkv_proj.weight"].clone()
+
+        # Shard across all ranks
+        q_shards = []
+        k_shards = []
+        v_shards = []
+        for rank in range(world_size):
+            config = TPShardConfig(
+                rank=rank,
+                world_size=world_size,
+                hidden_size=hidden_size,
+                num_attention_heads=num_heads,
+                head_dim=head_dim,
+                intermediate_size=intermediate_size,
+                num_key_value_heads=num_kv_heads,
+            )
+            shard = TensorParallelShard(dict(state_dict), config, device="cpu")
+            q_shards.append(shard.sharded_state_dict["model.layers.0.self_attn.q_proj.weight"])
+            k_shards.append(shard.sharded_state_dict["model.layers.0.self_attn.k_proj.weight"])
+            v_shards.append(shard.sharded_state_dict["model.layers.0.self_attn.v_proj.weight"])
+
+        # Reconstruct full Q, K, V
+        q_full = torch.cat(q_shards, dim=0)
+        k_full = torch.cat(k_shards, dim=0)
+        v_full = torch.cat(v_shards, dim=0)
+
+        # Reconstruct fused
+        reconstructed = torch.cat([q_full, k_full, v_full], dim=0)
+        assert torch.allclose(reconstructed, original_fused)
+
+    def test_fused_qkv_different_ranks_get_different_slices(self) -> None:
+        """Different ranks get non-overlapping slices of the fused QKV."""
+        world_size = 2
+        state_dict = _make_phi_state_dict_fused(num_layers=1)
+
+        shards = []
+        for rank in range(world_size):
+            config = TPShardConfig(
+                rank=rank,
+                world_size=world_size,
+                hidden_size=6144,
+                num_attention_heads=40,
+                head_dim=128,
+                intermediate_size=16384,
+                num_key_value_heads=10,
+            )
+            shard = TensorParallelShard(dict(state_dict), config, device="cpu")
+            shards.append(shard)
+
+        # Rank 0 and rank 1 q_proj should be different
+        q0 = shards[0].sharded_state_dict["model.layers.0.self_attn.q_proj.weight"]
+        q1 = shards[1].sharded_state_dict["model.layers.0.self_attn.q_proj.weight"]
+        assert not torch.allclose(q0, q1)
+
+
+class TestKeyConsistency:
+    """Tests for key consistency after shard_weights() (Task 1.5).
+
+    Verifies that forward() can access all needed keys without KeyError.
+    """
+
+    def test_qwen_forward_no_key_error(self) -> None:
+        """Forward pass on Qwen state dict does not raise KeyError."""
+        config = _make_qwen_config(rank=0, world_size=4)
+        state_dict = _make_fake_state_dict(num_layers=2)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        # Mock _all_reduce to be a no-op
+        shard._all_reduce = lambda tensor, layer_index=-1: tensor  # type: ignore[assignment]
+
+        input_ids = torch.randint(0, 100, (1, 3))
+        # This should not raise KeyError
+        logits, kv_cache = shard.forward(input_ids)
+        assert logits.shape[0] == 1
+        assert logits.shape[1] == 3
+        assert len(kv_cache) == 2
+
+    def test_phi_forward_no_key_error(self) -> None:
+        """Forward pass on Phi state dict (fused QKV split) does not raise KeyError."""
+        config = TPShardConfig(
+            rank=0,
+            world_size=2,
+            hidden_size=6144,
+            num_attention_heads=40,
+            head_dim=128,
+            intermediate_size=16384,
+            num_key_value_heads=10,
+        )
+        state_dict = _make_phi_state_dict_fused(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        # Mock _all_reduce to be a no-op
+        shard._all_reduce = lambda tensor, layer_index=-1: tensor  # type: ignore[assignment]
+
+        input_ids = torch.randint(0, 100, (1, 3))
+        # This should not raise KeyError — fused QKV was split into separate keys
+        logits, kv_cache = shard.forward(input_ids)
+        assert logits.shape[0] == 1
+        assert logits.shape[1] == 3
+        assert len(kv_cache) == 1
+
+    def test_all_forward_keys_exist_in_sharded_dict_qwen(self) -> None:
+        """Every key accessed by forward() exists in sharded_state_dict for Qwen."""
+        config = _make_qwen_config(rank=0, world_size=4)
+        state_dict = _make_fake_state_dict(num_layers=2)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        # Check all keys that forward() would access
+        num_layers = shard._detect_num_layers()
+        for layer_idx in range(num_layers):
+            assert f"model.layers.{layer_idx}.input_layernorm.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.self_attn.q_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.self_attn.k_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.self_attn.v_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.self_attn.o_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.post_attention_layernorm.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.mlp.gate_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.mlp.up_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.mlp.down_proj.weight" in shard.sharded_state_dict
+
+        assert "model.embed_tokens.weight" in shard.sharded_state_dict
+        assert "model.norm.weight" in shard.sharded_state_dict
+        assert "lm_head.weight" in shard.sharded_state_dict
+
+    def test_all_forward_keys_exist_in_sharded_dict_phi(self) -> None:
+        """Every key accessed by forward() exists in sharded_state_dict for Phi (fused QKV)."""
+        config = TPShardConfig(
+            rank=0,
+            world_size=2,
+            hidden_size=6144,
+            num_attention_heads=40,
+            head_dim=128,
+            intermediate_size=16384,
+            num_key_value_heads=10,
+        )
+        state_dict = _make_phi_state_dict_fused(num_layers=2)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        num_layers = shard._detect_num_layers()
+        for layer_idx in range(num_layers):
+            # After fused QKV split, separate keys exist
+            assert f"model.layers.{layer_idx}.self_attn.q_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.self_attn.k_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.self_attn.v_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.self_attn.o_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.mlp.gate_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.mlp.up_proj.weight" in shard.sharded_state_dict
+            assert f"model.layers.{layer_idx}.mlp.down_proj.weight" in shard.sharded_state_dict
+
+        assert "model.embed_tokens.weight" in shard.sharded_state_dict
+        assert "model.norm.weight" in shard.sharded_state_dict
+        assert "lm_head.weight" in shard.sharded_state_dict
+
+
+class TestDescriptiveKeyError:
+    """Tests for descriptive KeyError in _get_weight() (Task 1.3)."""
+
+    def test_missing_key_raises_key_error(self) -> None:
+        """_get_weight raises KeyError for missing keys."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        with pytest.raises(KeyError):
+            shard._get_weight("model.layers.99.self_attn.q_proj.weight")
+
+    def test_error_includes_missing_key_name(self) -> None:
+        """KeyError message includes the missing key name."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        with pytest.raises(KeyError, match="model.layers.99.self_attn.q_proj.weight"):
+            shard._get_weight("model.layers.99.self_attn.q_proj.weight")
+
+    def test_error_includes_similar_keys(self) -> None:
+        """KeyError message includes available keys with the same prefix."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        # Request a key with a valid layer prefix but wrong suffix
+        with pytest.raises(KeyError) as exc_info:
+            shard._get_weight("model.layers.0.self_attn.nonexistent_proj.weight")
+
+        error_msg = str(exc_info.value)
+        # The prefix is "model.layers.0.self_attn.nonexistent_proj"
+        # Available keys with that prefix should be empty, but the message
+        # should still contain the prefix info
+        assert "model.layers.0.self_attn.nonexistent_proj" in error_msg
+
+    def test_error_lists_keys_with_matching_prefix(self) -> None:
+        """KeyError lists keys that share the same layer prefix."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        # Request a key where the prefix matches existing keys
+        with pytest.raises(KeyError) as exc_info:
+            shard._get_weight("model.layers.0.self_attn.missing")
+
+        error_msg = str(exc_info.value)
+        # The prefix is "model.layers.0.self_attn" which has real keys
+        assert "model.layers.0.self_attn" in error_msg
+        # Should list available keys with that prefix
+        assert "q_proj.weight" in error_msg
+
+    def test_get_weight_optional_returns_none_for_missing(self) -> None:
+        """_get_weight_optional returns None for missing keys without error."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        result = shard._get_weight_optional("model.layers.0.self_attn.q_proj.bias")
+        assert result is None
+
+
+class TestLayerNormSupport:
+    """Tests for LayerNorm support alongside RMSNorm (Task 1.4)."""
+
+    def test_apply_norm_uses_rms_norm_without_bias(self) -> None:
+        """_apply_norm uses RMSNorm when bias is None."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        hidden_states = torch.randn(1, 3, 2560)
+        weight = torch.ones(2560)
+
+        # RMSNorm result
+        rms_result = shard._rms_norm(hidden_states, weight)
+        # _apply_norm with no bias should give same result
+        apply_result = shard._apply_norm(hidden_states, weight, bias=None)
+
+        assert torch.allclose(rms_result, apply_result, atol=1e-6)
+
+    def test_apply_norm_uses_layer_norm_with_bias(self) -> None:
+        """_apply_norm uses F.layer_norm when bias is provided."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        hidden_states = torch.randn(1, 3, 2560)
+        weight = torch.ones(2560)
+        bias = torch.zeros(2560)
+
+        # F.layer_norm result
+        expected = F.layer_norm(hidden_states, [2560], weight, bias, 1e-6)
+        # _apply_norm with bias should give same result
+        apply_result = shard._apply_norm(hidden_states, weight, bias=bias, eps=1e-6)
+
+        assert torch.allclose(expected, apply_result, atol=1e-6)
+
+    def test_layer_norm_differs_from_rms_norm(self) -> None:
+        """LayerNorm and RMSNorm produce different results for same input."""
+        config = _make_qwen_config(rank=0)
+        state_dict = _make_fake_state_dict(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        hidden_states = torch.randn(1, 3, 2560)
+        weight = torch.ones(2560)
+        bias = torch.randn(2560)  # Non-zero bias
+
+        rms_result = shard._apply_norm(hidden_states, weight, bias=None)
+        ln_result = shard._apply_norm(hidden_states, weight, bias=bias)
+
+        # Results should differ because LayerNorm subtracts mean and adds bias
+        assert not torch.allclose(rms_result, ln_result)
+
+    def test_phi_forward_uses_layer_norm(self) -> None:
+        """Forward pass on Phi model uses LayerNorm (bias present in state dict)."""
+        config = TPShardConfig(
+            rank=0,
+            world_size=2,
+            hidden_size=6144,
+            num_attention_heads=40,
+            head_dim=128,
+            intermediate_size=16384,
+            num_key_value_heads=10,
+        )
+        state_dict = _make_phi_state_dict_fused(num_layers=1)
+        shard = TensorParallelShard(state_dict, config, device="cpu")
+
+        # Mock _all_reduce to be a no-op
+        shard._all_reduce = lambda tensor, layer_index=-1: tensor  # type: ignore[assignment]
+
+        # Verify bias keys exist (LayerNorm indicator)
+        assert "model.layers.0.input_layernorm.bias" in shard.sharded_state_dict
+        assert "model.layers.0.post_attention_layernorm.bias" in shard.sharded_state_dict
+
+        # Forward pass should work without error
+        input_ids = torch.randint(0, 100, (1, 2))
+        logits, _ = shard.forward(input_ids)
+        assert logits.shape == (1, 2, 32064)

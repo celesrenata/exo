@@ -204,12 +204,19 @@ def place_instance(
 
     # Single-node: force Pipeline/Ring (Tensor and Jaccl require multi-node)
     if len(selected_cycle) == 1:
-        command = command.model_copy(
-            update={
-                "instance_meta": InstanceMeta.MlxRing,
-                "sharding": Sharding.Pipeline,
-            }
-        )
+        if command.instance_meta != InstanceMeta.PyTorchXPURing:
+            command = command.model_copy(
+                update={
+                    "instance_meta": InstanceMeta.MlxRing,
+                    "sharding": Sharding.Pipeline,
+                }
+            )
+        else:
+            command = command.model_copy(
+                update={
+                    "sharding": Sharding.Pipeline,
+                }
+            )
 
     shard_assignments = get_shard_assignments(
         command.model_card, selected_cycle, command.sharding, node_memory
