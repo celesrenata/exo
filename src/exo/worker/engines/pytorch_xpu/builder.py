@@ -27,6 +27,8 @@ def _resolve_master_addr(bound_instance: BoundInstance) -> str:
     """Determine master_addr from the instance's hosts_by_node.
 
     Rank 0's first non-0.0.0.0 IP is used as the master address.
+    All nodes in the instance use this same address to connect to the
+    Gloo TCPStore hosted by rank 0.
     """
     instance = bound_instance.instance
     # Works with both MlxRingInstance and PyTorchXPURingInstance (both have hosts_by_node)
@@ -44,37 +46,19 @@ def _resolve_master_addr(bound_instance: BoundInstance) -> str:
     if rank0_node is None:
         rank0_node = next(iter(hosts_by_node))
 
-    # Resolve master_addr for Gloo TCPStore.
-    # Rank 0 binds on 0.0.0.0 (all interfaces). Non-rank-0 nodes need rank 0's
-    # real IP to connect. We resolve rank 0's IP by getting its bond0 address.
-    # Since _resolve_master_addr runs on EVERY node, rank 0 returns its own bond0 IP
-    # and non-rank-0 nodes need the same value.
-    #
-    # Solution: rank 0 gets its own bond0 IP. Non-rank-0 nodes get the same IP
-    # by looking at the instance's ephemeral_port — but they can't know rank 0's IP
-    # without communication.
-    #
-    # The only reliable approach: use the MASTER_ADDR env var as a FIXED rendezvous
-    # point. The node at MASTER_ADDR runs the TCPStore (regardless of model rank).
-    # We override the Gloo rank so that the node at MASTER_ADDR is always Gloo rank 0.
+    # Get rank 0's real IP from hosts_by_node.
+    # Each node has a list of Host objects with ip and port.
+    # We pick the first non-0.0.0.0 IP as the master address.
+    rank0_hosts = hosts_by_node.get(rank0_node, [])
+    for host in rank0_hosts:
+        ip = host.ip if hasattr(host, "ip") else str(host.get("ip", ""))
+        if ip and ip != "0.0.0.0":
+            return ip
+
+    # Fallback: if no non-0.0.0.0 IP found, use env var
     import os
-    import socket
 
-    master_addr = os.environ.get("MASTER_ADDR", "10.1.1.12")
-
-    # Determine if WE are the node at MASTER_ADDR
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("10.1.1.1", 1))
-        our_ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        our_ip = ""
-
-    # Return master_addr for all nodes — the TCPStore master is determined
-    # by is_master flag in init_process_group, which we set based on whether
-    # our IP matches MASTER_ADDR
-    return master_addr
+    return os.environ.get("MASTER_ADDR", "10.1.1.12")
 
 
 @dataclass
