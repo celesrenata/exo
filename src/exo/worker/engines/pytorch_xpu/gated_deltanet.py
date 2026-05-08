@@ -308,13 +308,34 @@ def gated_deltanet_prefill(
     """
     seq_len = q.shape[1]
 
-    # Use chunk-parallel for all sequences (even short ones benefit from
-    # vectorized operations within the chunk)
-    return gated_deltanet_chunk_prefill(
-        q, k, v, gate, beta,
-        initial_state=initial_state,
-        chunk_size=min(chunk_size, seq_len),
-    )
+    # Use sequential recurrent form for correctness.
+    # The chunk-parallel algorithm requires WY decomposition for the delta
+    # rule correction which is not yet implemented. The 600s Gloo timeout
+    # accommodates the sequential processing time.
+    batch, _seq_len, num_heads, d_k = q.shape
+    d_v = v.shape[-1]
+
+    if initial_state is None:
+        state = torch.zeros(
+            batch, num_heads, d_k, d_v,
+            device=q.device, dtype=q.dtype
+        )
+    else:
+        state = initial_state.clone()
+
+    outputs = []
+    for t in range(seq_len):
+        q_t = q[:, t]
+        k_t = k[:, t]
+        v_t = v[:, t]
+        g_t = gate[:, t]
+        b_t = beta[:, t]
+
+        out_t, state = gated_deltanet_recurrent_step(q_t, k_t, v_t, g_t, b_t, state)
+        outputs.append(out_t)
+
+    output = torch.stack(outputs, dim=1)
+    return output, state
 
 
 def causal_conv1d_update(
