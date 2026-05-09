@@ -462,10 +462,10 @@ class Master:
             for instance_id, instance in self.state.instances.items():
                 for node_id in instance.shard_assignments.node_to_runner:
                     last_seen_time = self.state.last_seen.get(node_id)
-                    if last_seen_time is None or (now - last_seen_time) > timedelta(seconds=600):
+                    if last_seen_time is None or (now - last_seen_time) > timedelta(seconds=1800):
                         logger.info(
                             f"Deleting instance {instance_id}: node {node_id} "
-                            f"not seen for >600s (last_seen={last_seen_time})"
+                            f"not seen for >1800s (last_seen={last_seen_time})"
                         )
                         await self.event_sender.send(
                             InstanceDeleted(instance_id=instance_id)
@@ -475,7 +475,7 @@ class Master:
             # time out dead nodes
             for node_id, time in self.state.last_seen.items():
                 now = datetime.now(tz=timezone.utc)
-                if now - time > timedelta(seconds=600):
+                if now - time > timedelta(seconds=1800):
                     logger.info(f"Manually removing node {node_id} due to inactivity")
                     await self.event_sender.send(NodeTimedOut(node_id=node_id))
 
