@@ -34,6 +34,10 @@ _REDUNDANT_SUFFIXES = (
 # Linear attention weights are redundant on all ranks
 _LINEAR_ATTN_PATTERN = "linear_attn."
 
+# MTP (multi-token prediction) layers are redundant — they have different
+# dimensions than the main model and are auxiliary prediction heads
+_MTP_PATTERN = "mtp."
+
 
 def load_sharded_from_safetensors(
     model_path: str,
@@ -521,6 +525,11 @@ def _is_redundant(param_name: str) -> bool:
         if param_name.endswith(suffix) or param_name == suffix:
             return True
     if _LINEAR_ATTN_PATTERN in param_name:
+        return True
+    if param_name.startswith(_MTP_PATTERN):
+        return True
+    # Vision encoder weights are redundant
+    if "visual." in param_name or "vision." in param_name:
         return True
     return False
 
