@@ -344,9 +344,22 @@ class PipelineParallelShard:
 
             # Process through local layers (compiled or eager path)
             if self._compiled_forward is not None:
-                hidden_states, updated_kv_cache = self._compiled_forward(
-                    hidden_states, position_ids, position_embeddings, kv_cache
-                )
+                try:
+                    hidden_states, updated_kv_cache = self._compiled_forward(
+                        hidden_states, position_ids, position_embeddings, kv_cache
+                    )
+                except Exception as compile_err:
+                    # torch.compile wraps lazily — actual compilation happens on
+                    # first invocation and can fail if triton/inductor is missing.
+                    # Fall back to eager permanently.
+                    logger.warning(
+                        f"torch.compile runtime failure on rank={self.config.rank}: "
+                        f"{compile_err}. Disabling compiled path permanently."
+                    )
+                    self._compiled_forward = None
+                    hidden_states, updated_kv_cache = self._eager_forward(
+                        hidden_states, position_ids, position_embeddings, kv_cache
+                    )
             else:
                 hidden_states, updated_kv_cache = self._eager_forward(
                     hidden_states, position_ids, position_embeddings, kv_cache
