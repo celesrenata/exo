@@ -180,6 +180,10 @@ class TensorParallelShard:
 
         self.shard_weights(state_dict)
 
+        # Move native linear attention layers to target device and set eval mode
+        for layer_idx, native_layer in self._native_linear_attn_layers.items():
+            native_layer.to(self.device).eval()
+
         # Detect architecture from stored keys
         self.architecture = self._detect_architecture()
 
@@ -207,77 +211,43 @@ class TensorParallelShard:
         """Extract native linear attention layer modules from the HuggingFace model."""
         layers = None
 
-        # Debug: print model structure
-        import sys
-        print(f"[TPS] Model type: {type(model).__name__}", file=sys.stderr, flush=True)
-        print(f"[TPS] Model attrs: {[a for a in dir(model) if not a.startswith('_')][:20]}", file=sys.stderr, flush=True)
-
         if hasattr(model, 'model'):
-            print(f"[TPS] model.model type: {type(model.model).__name__}", file=sys.stderr, flush=True)
             if hasattr(model.model, 'language_model'):
-                print(f"[TPS] model.model.language_model type: {type(model.model.language_model).__name__}", file=sys.stderr, flush=True)
                 if hasattr(model.model.language_model, 'layers'):
                     layers = model.model.language_model.layers
-                    print(f"[TPS] Found layers at model.model.language_model.layers: {len(layers)} layers", file=sys.stderr, flush=True)
             elif hasattr(model.model, 'layers'):
                 layers = model.model.layers
-                print(f"[TPS] Found layers at model.model.layers: {len(layers)} layers", file=sys.stderr, flush=True)
         elif hasattr(model, 'language_model'):
             if hasattr(model.language_model, 'layers'):
                 layers = model.language_model.layers
-                print(f"[TPS] Found layers at model.language_model.layers: {len(layers)} layers", file=sys.stderr, flush=True)
 
         if layers is None:
-            print("[TPS] No layers found!", file=sys.stderr, flush=True)
             return
 
         for idx, layer in enumerate(layers):
-            attrs = [a for a in dir(layer) if not a.startswith('_')]
-            if idx == 0:
-                print(f"[TPS] Layer 0 attrs: {attrs[:15]}", file=sys.stderr, flush=True)
             if hasattr(layer, 'linear_attn') and layer.linear_attn is not None:
                 self._native_linear_attn_layers[idx] = layer.linear_attn
-            elif hasattr(layer, 'self_attn') and not hasattr(layer, 'linear_attn'):
-                pass
 
-        print(f"[TPS] Extracted {len(self._native_linear_attn_layers)} native linear_attn layers", file=sys.stderr, flush=True)
+        logger.info(f"Extracted {len(self._native_linear_attn_layers)} native linear_attn layers")
 
     def _create_native_cache(self) -> Any:
-        """Create a HuggingFace Cache object for the native linear attention layers.
-
-        The cache maintains conv_states and recurrent_states across decode steps,
-        which is required for correct autoregressive generation with Gated DeltaNet.
-        """
+        """Create a HuggingFace Cache object for the native linear attention layers."""
         try:
-            from transformers.cache_utils import Cache, LinearAttentionLayer
+            from transformers.cache_utils import Cache, LinearAttentionLayer, DynamicLayer
         except ImportError:
-            # Older transformers version — try alternative import
-            import sys
-            print("[TPS] Could not import Cache/LinearAttentionLayer from transformers.cache_utils", file=sys.stderr, flush=True)
+            logger.warning("Could not import Cache/LinearAttentionLayer/DynamicLayer from transformers.cache_utils")
             return None
 
         num_layers = self._detect_num_layers()
-
-        # Create a list of cache layers — LinearAttentionLayer for linear_attn,
-        # None placeholder for full_attn (we handle those with our own KV cache)
-        from transformers.cache_utils import CacheLayerMixin
-
-        # We need to create a Cache with the right layer types
-        # For simplicity, create with LinearAttentionLayer for all layers
-        # (full_attn layers won't use it)
         cache_layers = []
         for idx in range(num_layers):
-            if idx in self._native_linear_attn_layers:
+            if self._layer_types[idx] == "linear_attention":
                 cache_layers.append(LinearAttentionLayer())
             else:
-                # Full attention layers — use a dummy LinearAttentionLayer
-                # (won't be accessed since we handle full_attn ourselves)
-                cache_layers.append(LinearAttentionLayer())
+                cache_layers.append(DynamicLayer())
 
         cache = Cache(layers=cache_layers)
-
-        import sys
-        print(f"[TPS] Created native cache with {num_layers} layers", file=sys.stderr, flush=True)
+        logger.info(f"Created native cache with {num_layers} layers")
         return cache
 
     def shard_weights(self, state_dict: dict[str, torch.Tensor]) -> None:
