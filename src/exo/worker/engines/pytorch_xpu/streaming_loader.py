@@ -87,75 +87,73 @@ def load_sharded_from_safetensors(
         filepath = model_dir / filename
         logger.info(f"Rank {rank}: loading {filename} ({len(keys)} tensors)")
 
-        # Load all tensors from this single file into CPU memory
-        file_tensors = st.load_file(str(filepath), device="cpu")
+        # Use safe_open to load tensors selectively (avoids loading MTP/vision into memory)
+        from safetensors import safe_open
 
-        for key in keys:
-            if key not in file_tensors:
-                logger.warning(f"Rank {rank}: key '{key}' not found in {filename}, skipping")
-                continue
+        with safe_open(str(filepath), framework="pt", device="cpu") as f:
+            for key in keys:
+                # Skip MTP and vision weights entirely
+                if _should_skip(key):
+                    processed += 1
+                    continue
 
-            # Skip MTP and vision weights entirely — not needed for text generation
-            if _should_skip(key):
-                processed += 1
-                continue
+                if key not in f.keys():
+                    logger.warning(f"Rank {rank}: key '{key}' not found in {filename}, skipping")
+                    continue
 
-            tensor = file_tensors[key]
+                tensor = f.get_tensor(key)
 
-            # Handle fused gate_up_proj: split into gate_proj + up_proj, shard each
-            if _matches_mlp_key(key, "gate_up_proj.weight"):
-                _split_fused_gate_up(
-                    sharded_state_dict, key, tensor,
-                    is_bias=False, rank=rank,
-                    intermediate_per_rank=intermediate_per_rank, device=device,
+                # Handle fused gate_up_proj: split into gate_proj + up_proj, shard each
+                if _matches_mlp_key(key, "gate_up_proj.weight"):
+                    _split_fused_gate_up(
+                        sharded_state_dict, key, tensor,
+                        is_bias=False, rank=rank,
+                        intermediate_per_rank=intermediate_per_rank, device=device,
+                    )
+                    del tensor
+                    processed += 1
+                    continue
+
+                if _matches_mlp_key(key, "gate_up_proj.bias"):
+                    _split_fused_gate_up(
+                        sharded_state_dict, key, tensor,
+                        is_bias=True, rank=rank,
+                        intermediate_per_rank=intermediate_per_rank, device=device,
+                    )
+                    del tensor
+                    processed += 1
+                    continue
+
+                # Handle fused QKV: split into q_proj, k_proj, v_proj, shard each
+                if _matches_attn_key(key, "qkv_proj.weight"):
+                    _split_fused_qkv(
+                        sharded_state_dict, key, tensor,
+                        is_bias=False, rank=rank, config=config, device=device,
+                    )
+                    del tensor
+                    processed += 1
+                    continue
+
+                if _matches_attn_key(key, "qkv_proj.bias"):
+                    _split_fused_qkv(
+                        sharded_state_dict, key, tensor,
+                        is_bias=True, rank=rank, config=config, device=device,
+                    )
+                    del tensor
+                    processed += 1
+                    continue
+
+                # Standard sharding for all other parameters
+                sharded = _shard_tensor(
+                    key, tensor, rank=rank, world_size=world_size,
+                    head_dim=head_dim, heads_per_rank=heads_per_rank,
+                    kv_heads_per_rank=kv_heads_per_rank,
+                    intermediate_per_rank=intermediate_per_rank,
                 )
+
+                sharded_state_dict[key] = sharded.to(device)
                 del tensor
                 processed += 1
-                continue
-
-            if _matches_mlp_key(key, "gate_up_proj.bias"):
-                _split_fused_gate_up(
-                    sharded_state_dict, key, tensor,
-                    is_bias=True, rank=rank,
-                    intermediate_per_rank=intermediate_per_rank, device=device,
-                )
-                del tensor
-                processed += 1
-                continue
-
-            # Handle fused QKV: split into q_proj, k_proj, v_proj, shard each
-            if _matches_attn_key(key, "qkv_proj.weight"):
-                _split_fused_qkv(
-                    sharded_state_dict, key, tensor,
-                    is_bias=False, rank=rank, config=config, device=device,
-                )
-                del tensor
-                processed += 1
-                continue
-
-            if _matches_attn_key(key, "qkv_proj.bias"):
-                _split_fused_qkv(
-                    sharded_state_dict, key, tensor,
-                    is_bias=True, rank=rank, config=config, device=device,
-                )
-                del tensor
-                processed += 1
-                continue
-
-            # Standard sharding for all other parameters
-            sharded = _shard_tensor(
-                key, tensor, rank=rank, world_size=world_size,
-                head_dim=head_dim, heads_per_rank=heads_per_rank,
-                kv_heads_per_rank=kv_heads_per_rank,
-                intermediate_per_rank=intermediate_per_rank,
-            )
-
-            sharded_state_dict[key] = sharded.to(device)
-            del tensor
-            processed += 1
-
-        # Free the entire file's tensor dict
-        del file_tensors
 
         if processed % 500 == 0 or processed == total_params:
             logger.info(f"Rank {rank}: processed {processed}/{total_params} parameters")
