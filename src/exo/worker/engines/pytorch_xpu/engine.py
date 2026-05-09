@@ -54,21 +54,46 @@ class PyTorchXPUEngine(Engine):
         """Run a dummy forward pass to warm up the model."""
         import torch
 
+        from exo.worker.engines.pytorch_xpu.pipeline_parallel_shard import (
+            PipelineParallelShard,
+        )
+
         logger.info(f"PyTorchXPUEngine.warmup: device={self.device}, rank={self.rank}")
 
         try:
             with torch.no_grad():
-                # Create a small dummy input
-                dummy_input = torch.tensor([[1, 2, 3]], dtype=torch.long, device=self.device)
-
-                if hasattr(self.model, "forward"):
+                if isinstance(self.model, PipelineParallelShard):
+                    if self.model.config.is_first_stage:
+                        # First stage: expects token IDs
+                        dummy_input = torch.tensor(
+                            [[1, 2, 3]], dtype=torch.long, device=self.device
+                        )
+                    else:
+                        # Non-first stage: expects hidden_state
+                        dummy_input = torch.randn(
+                            1,
+                            3,
+                            self.model.config.hidden_size,
+                            dtype=torch.bfloat16,
+                            device=self.device,
+                        )
+                    _output, _kv = self.model.forward(input_data=dummy_input)
+                    # Clear KV cache from dummy forward pass
+                    self.model.reset_state()
+                elif hasattr(self.model, "forward"):
                     # TensorParallelShard or TransformerShard
+                    dummy_input = torch.tensor(
+                        [[1, 2, 3]], dtype=torch.long, device=self.device
+                    )
                     _logits, _kv = self.model.forward(
                         input_data=dummy_input,
                         past_key_values=None,
                     )
                 elif hasattr(self.model, "__call__"):
                     # Standard HuggingFace model
+                    dummy_input = torch.tensor(
+                        [[1, 2, 3]], dtype=torch.long, device=self.device
+                    )
                     self.model(input_ids=dummy_input, use_cache=False)
 
             logger.info("PyTorchXPUEngine.warmup: complete")
@@ -167,6 +192,9 @@ class PyTorchXPUEngine(Engine):
         import torch
 
         from exo.worker.engines.pytorch_xpu.generator import pytorch_xpu_generate
+        from exo.worker.engines.pytorch_xpu.pipeline_parallel_shard import (
+            PipelineParallelShard,
+        )
 
         # Extract prompt from task params
         prompt = ""
@@ -187,6 +215,29 @@ class PyTorchXPUEngine(Engine):
         temperature = task.task_params.temperature or 1.0
         top_k = getattr(task.task_params, "top_k", None)
         top_p = task.task_params.top_p
+
+        # Pipeline-parallel dispatch (check BEFORE tensor-parallel)
+        if isinstance(self.model, PipelineParallelShard):
+            from exo.worker.engines.pytorch_xpu.pipeline_generator import (
+                pipeline_parallel_generate,
+                pipeline_parallel_worker_loop,
+            )
+
+            if self.rank == 0:
+                return pipeline_parallel_generate(
+                    model=self.model,
+                    tokenizer=self.tokenizer,
+                    prompt=prompt,
+                    device=self.device,
+                    rank=self.rank,
+                    world_size=self.world_size,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                )
+            else:
+                return self._pipeline_worker_loop_generator()
 
         if self.world_size > 1 and self.rank == 0:
             # Multi-node: use tensor parallel generator
@@ -245,6 +296,29 @@ class PyTorchXPUEngine(Engine):
         )
 
         # Worker loop completed — yield nothing (StopIteration will signal finish)
+        return
+        yield  # Make this a generator function  # noqa: RET503
+
+    def _pipeline_worker_loop_generator(self) -> Generator[Any]:
+        """Wrap pipeline_parallel_worker_loop as a generator for non-rank-0 nodes.
+
+        The pipeline worker loop is blocking — it receives activations from the
+        previous stage, forwards through local layers, and sends to the next stage
+        (or samples and broadcasts if last stage). When the loop exits (EOS or
+        termination signal), StopIteration signals the engine to finish.
+        """
+        from exo.worker.engines.pytorch_xpu.pipeline_generator import (
+            pipeline_parallel_worker_loop,
+        )
+
+        pipeline_parallel_worker_loop(
+            model=self.model,
+            device=self.device,
+            rank=self.rank,
+            world_size=self.world_size,
+            tokenizer=self.tokenizer,
+        )
+
         return
         yield  # Make this a generator function  # noqa: RET503
 

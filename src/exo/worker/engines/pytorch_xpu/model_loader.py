@@ -24,6 +24,10 @@ else:
         np = None  # type: ignore
 
 from exo.shared.types.worker.shards import ShardMetadata
+from exo.worker.engines.pytorch_xpu.pipeline_parallel_shard import (
+    PipelineParallelShard,
+    PipelineStageConfig,
+)
 from exo.worker.engines.pytorch_xpu.tensor_parallel_shard import (
     TensorParallelShard,
     TPShardConfig,
@@ -228,17 +232,28 @@ class ModelLoader:
                 and shard_metadata.world_size > 1
             )
 
+            is_pipeline_parallel = (
+                (shard_metadata.start_layer != 0 or shard_metadata.end_layer != shard_metadata.n_layers)
+                and shard_metadata.world_size > 1
+            )
+
             if is_tensor_parallel:
                 logger.debug(
                     f"Creating TensorParallelShard (all layers, world_size={shard_metadata.world_size},"
                     f" rank={shard_metadata.device_rank})"
                 )
                 model = self._create_tensor_parallel_shard(model, shard_metadata, device)
+            elif is_pipeline_parallel:
+                logger.debug(
+                    f"Creating PipelineParallelShard [{shard_metadata.start_layer}, {shard_metadata.end_layer})"
+                    f" (world_size={shard_metadata.world_size}, rank={shard_metadata.device_rank})"
+                )
+                model = self._create_pipeline_parallel_shard(model, shard_metadata, device)
             elif not (
                 shard_metadata.start_layer == 0
                 and shard_metadata.end_layer == shard_metadata.n_layers
-            ) or shard_metadata.world_size > 1:
-                # Pipeline-parallel or partial layer range: create TransformerShard
+            ):
+                # Single-node partial layer range (world_size == 1): use TransformerShard
                 # The distributed generator expects the TransformerShard.forward(input_data=...)
                 # interface, not the raw HuggingFace model.forward(input_ids=...) interface.
                 logger.debug(
@@ -541,6 +556,108 @@ class ModelLoader:
         )
 
         return shard
+
+    def _create_pipeline_parallel_shard(
+        self, model: Any, shard_metadata: ShardMetadata, device: Any
+    ) -> PipelineParallelShard:
+        """
+        Create a PipelineParallelShard by extracting assigned layers from a fully-loaded model.
+
+        Extracts only the layers in [start_layer, end_layer), plus embed_tokens on rank 0
+        and lm_head + final_norm on the last rank. Deletes the full model after extraction
+        to free memory, then moves extracted components to the target device.
+
+        Args:
+            model: Full HuggingFace model instance (on CPU or device)
+            shard_metadata: Metadata describing the pipeline shard (layer range, rank, etc.)
+            device: Torch device object to move extracted components to
+
+        Returns:
+            PipelineParallelShard wrapping the extracted layers
+
+        Requirements: 10.1, 10.2, 10.3, 10.4, 1.2
+        """
+        import gc
+
+        import torch
+
+        # Extract model config — handle nested text_config for vision-language models (Qwen3.5)
+        config = model.config
+        if hasattr(config, "text_config") and config.text_config is not None:
+            text_model_config = config.text_config
+        else:
+            text_model_config = config
+
+        hidden_size = text_model_config.hidden_size
+        vocab_size = text_model_config.vocab_size
+
+        # Extract layers from model.model.layers[start_layer:end_layer]
+        layers = torch.nn.ModuleList(
+            list(model.model.layers[shard_metadata.start_layer : shard_metadata.end_layer])
+        )
+
+        # Extract embed_tokens if this is the first stage (rank 0)
+        embed_tokens: torch.nn.Embedding | None = None
+        if shard_metadata.start_layer == 0:
+            embed_tokens = model.model.embed_tokens
+
+        # Extract lm_head and final_norm if this is the last stage
+        lm_head: torch.nn.Linear | None = None
+        final_norm: torch.nn.Module | None = None
+        if shard_metadata.end_layer == shard_metadata.n_layers:
+            lm_head = model.lm_head
+            final_norm = model.model.norm
+
+        # Extract rotary_emb if available
+        rotary_emb: torch.nn.Module | None = getattr(model.model, "rotary_emb", None)
+
+        # Delete the full model to free memory
+        del model
+        gc.collect()
+
+        # Move extracted components to device
+        layers = layers.to(device)
+        if embed_tokens is not None:
+            embed_tokens = embed_tokens.to(device)
+        if lm_head is not None:
+            lm_head = lm_head.to(device)
+        if final_norm is not None:
+            final_norm = final_norm.to(device)
+        if rotary_emb is not None:
+            rotary_emb = rotary_emb.to(device)
+
+        # Create PipelineStageConfig
+        pipeline_config = PipelineStageConfig(
+            rank=shard_metadata.device_rank,
+            world_size=shard_metadata.world_size,
+            start_layer=shard_metadata.start_layer,
+            end_layer=shard_metadata.end_layer,
+            hidden_size=hidden_size,
+            vocab_size=vocab_size,
+            num_layers=shard_metadata.n_layers,
+            device=str(device),
+        )
+
+        logger.info(
+            f"Created PipelineParallelShard: "
+            f"rank={shard_metadata.device_rank}/{shard_metadata.world_size}, "
+            f"layers=[{shard_metadata.start_layer}, {shard_metadata.end_layer}), "
+            f"hidden_size={hidden_size}, vocab_size={vocab_size}, "
+            f"embed={embed_tokens is not None}, "
+            f"lm_head={lm_head is not None}, "
+            f"final_norm={final_norm is not None}, "
+            f"rotary_emb={rotary_emb is not None}"
+        )
+
+        return PipelineParallelShard(
+            layers=layers,
+            config=pipeline_config,
+            embed_tokens=embed_tokens,
+            lm_head=lm_head,
+            final_norm=final_norm,
+            rotary_emb=rotary_emb,
+            text_model_config=text_model_config,
+        )
 
     async def encode(self, model_id: str, prompt: str) -> "np.ndarray[Any, Any]":
         """
