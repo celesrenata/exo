@@ -843,13 +843,32 @@ class TensorParallelShard:
             # Get or create the cache for this layer
             if not hasattr(self, '_native_cache'):
                 self._native_cache = self._create_native_cache()
-            with torch.no_grad():
-                output = native_layer(
-                    hidden_states,
-                    cache_params=self._native_cache,
-                    attention_mask=None,
-                )
-            return output
+                if self._native_cache is None:
+                    logger.error("_create_native_cache() returned None — falling through to custom impl")
+                else:
+                    logger.info(f"Native cache created with {len(self._native_cache.layers)} layers")
+            if self._native_cache is not None:
+                with torch.no_grad():
+                    has_state = self._native_cache.has_previous_state(layer_idx)
+                    if layer_idx == 0:
+                        logger.debug(
+                            f"Native forward layer={layer_idx}, seq_len={hidden_states.shape[1]}, "
+                            f"has_previous_state={has_state}, "
+                            f"hidden_states device={hidden_states.device}, "
+                            f"native_layer device={next(native_layer.parameters()).device}"
+                        )
+                    output = native_layer(
+                        hidden_states,
+                        cache_params=self._native_cache,
+                        attention_mask=None,
+                    )
+                    if layer_idx == 0:
+                        logger.debug(
+                            f"Native output layer=0: shape={output.shape}, "
+                            f"abs_mean={output.abs().mean().item():.6f}, "
+                            f"all_zero={torch.all(output == 0).item()}"
+                        )
+                return output
 
         # Fallback to custom implementation
         from exo.worker.engines.pytorch_xpu.gated_deltanet import (
