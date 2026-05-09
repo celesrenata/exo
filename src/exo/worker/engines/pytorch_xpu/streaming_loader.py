@@ -95,6 +95,11 @@ def load_sharded_from_safetensors(
                 logger.warning(f"Rank {rank}: key '{key}' not found in {filename}, skipping")
                 continue
 
+            # Skip MTP and vision weights entirely — not needed for text generation
+            if _should_skip(key):
+                processed += 1
+                continue
+
             tensor = file_tensors[key]
 
             # Handle fused gate_up_proj: split into gate_proj + up_proj, shard each
@@ -526,9 +531,19 @@ def _is_redundant(param_name: str) -> bool:
             return True
     if _LINEAR_ATTN_PATTERN in param_name:
         return True
-    if param_name.startswith(_MTP_PATTERN):
+    # MTP and vision weights are SKIPPED entirely (not loaded)
+    # They're not needed for text generation
+    return False
+
+
+def _should_skip(param_name: str) -> bool:
+    """Check if a parameter should be skipped entirely (not loaded into memory).
+
+    MTP (multi-token prediction) and vision encoder weights are not needed
+    for text generation and would waste memory on the 27B model.
+    """
+    if param_name.startswith(_MTP_PATTERN) or param_name.startswith("mtp."):
         return True
-    # Vision encoder weights are redundant
     if "visual." in param_name or "vision." in param_name:
         return True
     return False
