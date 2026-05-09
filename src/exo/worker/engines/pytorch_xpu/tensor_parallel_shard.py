@@ -184,6 +184,9 @@ class TensorParallelShard:
         for layer_idx, native_layer in self._native_linear_attn_layers.items():
             native_layer.to(self.device).eval()
 
+        import sys
+        print(f"[TPS] __init__: native_linear_attn_layers={len(self._native_linear_attn_layers)}, device={self.device}", file=sys.stderr, flush=True)
+
         # Detect architecture from stored keys
         self.architecture = self._detect_architecture()
 
@@ -843,19 +846,21 @@ class TensorParallelShard:
             # Get or create the cache for this layer
             if not hasattr(self, '_native_cache'):
                 self._native_cache = self._create_native_cache()
+                import sys
                 if self._native_cache is None:
-                    logger.error("_create_native_cache() returned None — falling through to custom impl")
+                    print("[TPS] _create_native_cache() returned None", file=sys.stderr, flush=True)
                 else:
-                    logger.info(f"Native cache created with {len(self._native_cache.layers)} layers")
+                    print(f"[TPS] Native cache created with {len(self._native_cache.layers)} layers", file=sys.stderr, flush=True)
             if self._native_cache is not None:
                 with torch.no_grad():
-                    has_state = self._native_cache.has_previous_state(layer_idx)
                     if layer_idx == 0:
-                        logger.debug(
-                            f"Native forward layer={layer_idx}, seq_len={hidden_states.shape[1]}, "
-                            f"has_previous_state={has_state}, "
-                            f"hidden_states device={hidden_states.device}, "
-                            f"native_layer device={next(native_layer.parameters()).device}"
+                        import sys
+                        has_state = self._native_cache.has_previous_state(layer_idx)
+                        dev = next(native_layer.parameters()).device
+                        print(
+                            f"[TPS] Native fwd layer=0 seq_len={hidden_states.shape[1]} "
+                            f"has_prev={has_state} h_dev={hidden_states.device} l_dev={dev}",
+                            file=sys.stderr, flush=True
                         )
                     output = native_layer(
                         hidden_states,
@@ -863,10 +868,12 @@ class TensorParallelShard:
                         attention_mask=None,
                     )
                     if layer_idx == 0:
-                        logger.debug(
-                            f"Native output layer=0: shape={output.shape}, "
-                            f"abs_mean={output.abs().mean().item():.6f}, "
-                            f"all_zero={torch.all(output == 0).item()}"
+                        import sys
+                        print(
+                            f"[TPS] Native out layer=0: shape={output.shape} "
+                            f"abs_mean={output.abs().mean().item():.6f} "
+                            f"all_zero={torch.all(output == 0).item()}",
+                            file=sys.stderr, flush=True
                         )
                 return output
 
