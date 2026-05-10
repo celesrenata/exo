@@ -728,9 +728,10 @@ def main() -> None:
         tokenizer = AutoTokenizer.from_pretrained(config.model_id)
         model = AutoModelForCausalLM.from_pretrained(
             config.model_id,
-            torch_dtype=torch_dtype,
-            device_map=config.device,
+            dtype=torch_dtype,
         )
+        model = model.to(config.device)  # type: ignore[union-attr]
+        model.eval()  # type: ignore[union-attr]
     except Exception as e:
         print(
             f"ERROR: Failed to load model '{config.model_id}': {e}",
