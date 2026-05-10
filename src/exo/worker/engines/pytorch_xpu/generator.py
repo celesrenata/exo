@@ -170,8 +170,9 @@ def pytorch_xpu_generate(
                 probs = torch.nn.functional.softmax(next_token_logits, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1)
 
-                # Append to input_ids
-                input_ids = torch.cat([input_ids, next_token], dim=-1)
+                # Update input_ids to only contain the new token for next iteration
+                # (KV cache already has all previous context)
+                input_ids = next_token
                 generated_tokens += 1
 
                 # Decode token
