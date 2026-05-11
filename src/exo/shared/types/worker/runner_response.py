@@ -16,6 +16,22 @@ class BaseRunnerResponse(TaggedModel):
     pass
 
 
+class SpeculativeDecodingResult(BaseRunnerResponse):
+    """Result of a speculative decoding step.
+
+    Design Document Reference: Section "Data Models" — SpeculativeDecodingResult
+    Requirements: 4.1, 4.2, 4.3, 4.5
+    """
+
+    draft_tokens: list[int]  # k draft token IDs
+    accepted_tokens: list[int]  # Subset of draft_tokens that were accepted
+    rejected_at_position: int | None  # First position where draft disagreed with verifier
+    acceptance_rate: float  # len(accepted) / len(draft)
+    verification_time_seconds: float  # Time for verifier forward pass
+    draft_time_seconds: float  # Time for drafter forward pass
+    effective_tokens_per_step: float  # len(accepted) + 1 (the verified next token)
+
+
 class GenerationResponse(BaseRunnerResponse):
     text: str
     token: int
@@ -25,6 +41,7 @@ class GenerationResponse(BaseRunnerResponse):
     stats: GenerationStats | None = None
     usage: Usage | None
     is_thinking: bool = False
+    speculative_result: SpeculativeDecodingResult | None = None
 
 
 class ImageGenerationResponse(BaseRunnerResponse):

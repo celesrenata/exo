@@ -89,6 +89,25 @@ class Shutdown(BaseTask):  # emitted by Worker
     runner_id: RunnerId
 
 
+class SpeculativeDecoding(BaseTask):  # emitted by Master
+    """Task for speculative decoding (drafter + verifier).
+
+    The verifier runs on multiple nodes with TP/PP, while the drafter
+    runs on a single node. The runner dispatches to SpeculativeDecoder
+    instead of standard pipeline/TP generation.
+
+    Requirements: 4.1, 4.7
+    """
+
+    command_id: CommandId
+    task_params: TextGenerationTaskParams
+    drafter_model_id: str | None = None  # Optional: if None, standard generation
+    draft_tokens: int = 4  # Number of draft tokens (k)
+
+    error_type: str | None = Field(default=None)
+    error_message: str | None = Field(default=None)
+
+
 Task = (
     CreateRunner
     | DownloadModel
@@ -96,6 +115,7 @@ Task = (
     | LoadModel
     | StartWarmup
     | TextGeneration
+    | SpeculativeDecoding
     | CancelTask
     | ImageGeneration
     | ImageEdits
