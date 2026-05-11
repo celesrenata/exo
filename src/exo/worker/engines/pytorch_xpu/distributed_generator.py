@@ -63,12 +63,21 @@ def sample_token(
 
     Requirements: 2.2, 3.1, 3.2, 3.3, 3.4, 3.5
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     # Extract last-position logits only (Requirement 2.2)
     if logits.dim() == 3:
         logits = logits[:, -1, :]  # Shape: (1, vocab_size)
 
     # Work with a 1D tensor for simplicity: shape (vocab_size,)
     logits_1d = logits[0].clone()
+
+    # Check for NaN or inf in logits and handle gracefully
+    if torch.isnan(logits_1d).any() or torch.isinf(logits_1d).any():
+        logger.warning("Detected NaN or inf in logits, falling back to argmax")
+        token_id: int = int(logits_1d.nanargmax().item())
+        return token_id
 
     # Handle near-zero temperature as greedy/argmax (edge case)
     if temperature <= 1e-7:
@@ -78,6 +87,12 @@ def sample_token(
     # Temperature scaling (Requirement 3.1)
     if temperature != 1.0:
         logits_1d = logits_1d / temperature
+
+    # Check for NaN or inf after temperature scaling
+    if torch.isnan(logits_1d).any() or torch.isinf(logits_1d).any():
+        logger.warning("Detected NaN or inf after temperature scaling, falling back to argmax")
+        token_id: int = int(logits_1d.nanargmax().item())
+        return token_id
 
     # Top-k filtering (Requirement 3.2): set values below k-th largest to -inf
     if top_k is not None and top_k > 0:
@@ -90,7 +105,14 @@ def sample_token(
     # Sort by descending probability, compute cumulative sum, mask tokens above threshold
     if top_p is not None and 0.0 < top_p < 1.0:
         sorted_logits, sorted_indices = torch.sort(logits_1d, descending=True)
-        sorted_probs = torch.softmax(sorted_logits, dim=-1)
+
+        # Check for NaN or inf in sorted logits before softmax
+        if torch.isnan(sorted_logits).any() or torch.isinf(sorted_logits).any():
+            logger.warning("Detected NaN or inf in sorted logits, skipping top-p filtering")
+            sorted_probs = torch.softmax(sorted_logits, dim=-1)
+        else:
+            sorted_probs = torch.softmax(sorted_logits, dim=-1)
+
         cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
 
         # Find tokens where cumulative probability exceeds top_p
@@ -106,8 +128,30 @@ def sample_token(
         logits_1d = torch.zeros_like(logits_1d).scatter(0, sorted_indices, sorted_logits)
 
     # Softmax → multinomial sampling (Requirements 3.4, 3.5)
+    # Clamp logits to prevent numerical instability
+    logits_1d = torch.clamp(logits_1d, min=-1e9, max=1e9)
     probs = torch.softmax(logits_1d, dim=-1)
-    token_id = int(torch.multinomial(probs.unsqueeze(0), num_samples=1).squeeze().item())
+
+    # Ensure probabilities are valid (no NaN, no inf, sum to 1)
+    if torch.isnan(probs).any() or torch.isinf(probs).any():
+        logger.warning("Detected NaN or inf in probabilities, falling back to argmax")
+        token_id: int = int(logits_1d.argmax().item())
+        return token_id
+
+    # Normalize probabilities to ensure they sum to 1
+    probs = probs / probs.sum()
+
+    # Check if all probabilities are zero
+    if probs.sum() == 0:
+        logger.warning("All probabilities are zero, falling back to argmax")
+        token_id: int = int(logits_1d.argmax().item())
+        return token_id
+
+    try:
+        token_id = int(torch.multinomial(probs.unsqueeze(0), num_samples=1).squeeze().item())
+    except Exception as e:
+        logger.warning(f"Multinomial sampling failed: {e}, falling back to argmax")
+        token_id = int(logits_1d.argmax().item())
 
     return token_id
 
