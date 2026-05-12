@@ -1444,6 +1444,8 @@ class TensorParallelShard:
                 )
 
                 # Qwen3.5 gated attention: attn_output = attn_output * sigmoid(gate)
+                # MUST happen BEFORE o_proj — gate shape is (batch, seq, heads_per_rank * head_dim)
+                # which matches attn_output BEFORE the o_proj all-reduce expands to hidden_size.
                 if q_gate is not None:
                     attn_output = attn_output * torch.sigmoid(q_gate)
 
