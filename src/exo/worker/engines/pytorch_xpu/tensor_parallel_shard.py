@@ -1375,6 +1375,15 @@ class TensorParallelShard:
                 # Compare against the per-rank expected sizes (NOT full-model sizes).
                 q_raw_heads_dim = q_raw.shape[-1]  # expected: H*D (standard) or H*D*2 (gated)
                 expected_q_dim = heads_per_rank * head_dim  # e.g. 4*256 = 1024 per rank
+                # One-shot log to confirm q_raw shape at the first full_attention layer
+                if not getattr(self, '_q_shape_logged', False):
+                    self._q_shape_logged = True  # type: ignore[attr-defined]
+                    logger.info(
+                        f"[Q_SHAPE_DIAG] rank={self.config.rank} layer={layer_idx} "
+                        f"q_weight.shape={q_weight.shape} q_raw.shape={q_raw.shape} "
+                        f"expected_q_dim={expected_q_dim} expected_q_dim*2={expected_q_dim*2} "
+                        f"q_doubled_detected={q_raw_heads_dim == expected_q_dim * 2}"
+                    )
                 if q_raw_heads_dim == expected_q_dim * 2:  # e.g. 2048 == 2*1024
                     # Split Q and gate along the last dim
                     # Shape: [batch, seq_len, heads_per_rank, head_dim * 2] → q, gate
