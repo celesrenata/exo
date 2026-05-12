@@ -1148,6 +1148,9 @@ class TensorParallelShard:
 
             return output
 
+    # Track whether the first-forward diagnostic has been logged
+    _forward_diag_logged: bool = False
+
     def forward(
         self,
         input_data: torch.Tensor,
@@ -1187,6 +1190,38 @@ class TensorParallelShard:
         heads_per_rank = self.config.heads_per_rank
         kv_heads_per_rank = self.config.kv_heads_per_rank
         head_dim = self.config.head_dim
+
+        # --- ONE-SHOT FORWARD DIAGNOSTIC (first call only) ---
+        # Emits a single INFO log per rank with shard configuration and
+        # key weight shapes so we can verify tensor-parallel sharding is correct.
+        if not self._forward_diag_logged:
+            self._forward_diag_logged = True
+            import torch.distributed as _dist_diag
+            pg_initialized = _dist_diag.is_initialized()
+            try:
+                _rank_from_pg = _dist_diag.get_rank() if pg_initialized else -1
+            except Exception:
+                _rank_from_pg = -1
+
+            # Sample the actual shape of layer 0 q_proj.weight to confirm sharding
+            _q_key = f"{self._layer_prefix}.layers.0.self_attn.q_proj.weight"
+            _q_shape = tuple(self.sharded_state_dict[_q_key].shape) if _q_key in self.sharded_state_dict else "NOT_FOUND"
+            _o_key = f"{self._layer_prefix}.layers.0.self_attn.o_proj.weight"
+            _o_shape = tuple(self.sharded_state_dict[_o_key].shape) if _o_key in self.sharded_state_dict else "NOT_FOUND"
+
+            logger.info(
+                f"[FORWARD_DIAG] rank={self.config.rank}/{self.config.world_size} "
+                f"pg_initialized={pg_initialized} rank_from_pg={_rank_from_pg} "
+                f"tp_group={get_tensor_parallel_group()!r} "
+                f"num_layers={num_layers} heads_per_rank={heads_per_rank} "
+                f"kv_heads_per_rank={kv_heads_per_rank} head_dim={head_dim} "
+                f"rope_theta={self.config.rope_theta} "
+                f"rope_scaling_type={self.config.rope_scaling.get('type') if self.config.rope_scaling else None} "
+                f"q_proj.weight[0] shape={_q_shape} "
+                f"o_proj.weight[0] shape={_o_shape} "
+                f"(q expected ({heads_per_rank * head_dim}, {self.config.hidden_size}), "
+                f"o expected ({self.config.hidden_size}, {heads_per_rank * head_dim}))"
+            )
 
         # GQA repeat factor: how many Q head groups share each KV head
         gqa_groups = heads_per_rank // kv_heads_per_rank
@@ -1394,6 +1429,9 @@ class TensorParallelShard:
 
         return logits, new_kv_cache
 
+    # Track whether we have already logged the first all-reduce summary (once per rank)
+    _allreduce_diag_logged: bool = False
+
     def _all_reduce(self, tensor: Any, layer_index: int = -1) -> Any:
         """All-reduce (sum) over the tensor-parallel process group with CPU staging.
 
@@ -1432,12 +1470,34 @@ class TensorParallelShard:
             # performed across all ranks rather than silently returning the local
             # partial result.
             cpu_f32 = tensor.detach().to(dtype=torch.float32, device="cpu")
+
+            # --- DIAGNOSTIC: capture pre-reduce norm on layer 0 o_proj (first call) ---
+            _do_diag = (not self._allreduce_diag_logged and layer_index == 0)
+            _pre_norm: float = 0.0
+            if _do_diag:
+                _pre_norm = float(cpu_f32.norm().item())
+
             dist.all_reduce(
                 cpu_f32,
                 op=dist.ReduceOp.SUM,
                 group=tp_group,
                 async_op=False,
             )
+
+            if _do_diag:
+                _post_norm = float(cpu_f32.norm().item())
+                _ratio = _post_norm / (_pre_norm + 1e-10)
+                logger.info(
+                    f"[ALLREDUCE_DIAG] rank={self.config.rank}/{self.config.world_size} "
+                    f"layer={layer_index} "
+                    f"tp_group={tp_group!r} "
+                    f"pre_norm={_pre_norm:.4f} post_norm={_post_norm:.4f} "
+                    f"ratio={_ratio:.4f} "
+                    f"(expected ~{self.config.world_size}.0 if reduction is correct, "
+                    f"~1.0 if reduction is no-op)"
+                )
+                self._allreduce_diag_logged = True
+
             # Cast back to original dtype and move to original device in one step
             result = cpu_f32.to(dtype=original_dtype, device=original_device)
             tensor.copy_(result)
