@@ -8,7 +8,6 @@ tensor-parallel forward pass.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -16,10 +15,9 @@ from typing import Any
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
+from loguru import logger
 
 from exo.worker.engines.pytorch_xpu.distributed import get_tensor_parallel_group
-
-logger = logging.getLogger(__name__)
 
 
 class ModelArchitecture(str, Enum):
