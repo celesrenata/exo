@@ -1453,10 +1453,9 @@ class TensorParallelShard:
                     batch_size, seq_len, heads_per_rank * head_dim
                 )
 
-                # Qwen3.5 gated attention: disabled for now to diagnose regression
-                # The gate IS present but we skip applying it to confirm it's the cause.
-                # if q_gate is not None:
-                #     attn_output = attn_output * torch.sigmoid(q_gate)
+                # Qwen3.5 gated attention: attn_output * sigmoid(gate) before o_proj
+                if q_gate is not None:
+                    attn_output = attn_output * torch.sigmoid(q_gate)
 
                 # 3. Output projection (row-parallel) → all_reduce
                 o_weight = self._get_weight(
