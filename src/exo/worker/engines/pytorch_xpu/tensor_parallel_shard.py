@@ -1371,10 +1371,11 @@ class TensorParallelShard:
                 v = self._column_parallel_linear(hidden_states, v_weight, v_bias)
 
                 # Qwen3.5 q_proj output is num_attention_heads * head_dim * 2 (Q + gate).
-                # Detect this by checking if q_raw has 2x expected size.
-                q_raw_heads_dim = q_raw.shape[-1]  # heads_per_rank * head_dim or * head_dim * 2
-                expected_q_dim = heads_per_rank * head_dim
-                if q_raw_heads_dim == expected_q_dim * 2:
+                # After sharding, each rank's q_raw has dim = heads_per_rank * head_dim * 2.
+                # Compare against the per-rank expected sizes (NOT full-model sizes).
+                q_raw_heads_dim = q_raw.shape[-1]  # expected: H*D (standard) or H*D*2 (gated)
+                expected_q_dim = heads_per_rank * head_dim  # e.g. 4*256 = 1024 per rank
+                if q_raw_heads_dim == expected_q_dim * 2:  # e.g. 2048 == 2*1024
                     # Split Q and gate along the last dim
                     # Shape: [batch, seq_len, heads_per_rank, head_dim * 2] → q, gate
                     q_gate_view = q_raw.view(batch_size, seq_len, heads_per_rank, head_dim * 2)
