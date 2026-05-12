@@ -174,6 +174,7 @@ class TensorParallelShard:
         self.device = device
         self.sharded_state_dict: dict[str, torch.Tensor] = {}
         self._native_linear_attn_layers: dict[int, Any] = {}
+        self._native_rotary_emb: Any = None  # Native rotary embedding module (optional)
 
         # Extract state dict from model if it's a module
         if isinstance(model, dict):
@@ -182,6 +183,8 @@ class TensorParallelShard:
             # Before extracting state dict, save references to native linear_attn layers
             # for hybrid models (Qwen3.5/3.6) that use Gated DeltaNet
             self._extract_native_linear_attn_layers(model)
+            # Extract native rotary_emb if available — avoids reimplementing MRoPE
+            self._extract_native_rotary_emb(model)
             state_dict = model.state_dict()
         else:
             raise TypeError(
@@ -217,6 +220,44 @@ class TensorParallelShard:
             f"kv_heads_per_rank={config.kv_heads_per_rank}, "
             f"intermediate_per_rank={config.intermediate_per_rank}"
         )
+
+    def _extract_native_rotary_emb(self, model: Any) -> None:  # pyright: ignore[reportAny]
+        """Extract the native rotary embedding module from the HuggingFace model.
+
+        Qwen3.5 uses 3D Multi-Resolution RoPE (MRoPE) with mrope_section and
+        interleaved layout — impossible to reimplement correctly without the model's
+        own rotary_emb module. We extract it once and store it for use in forward().
+        """
+        rotary_emb: Any = None  # pyright: ignore[reportAny]
+        for candidate_attr in ("rotary_emb", "rotary_embedding", "rope"):
+            # Try model.model.rotary_emb (standard Qwen/Llama layout)
+            m = getattr(model, "model", None)
+            if m is not None:
+                # Also try language_model nested layout
+                lm = getattr(m, "language_model", None)
+                if lm is not None:
+                    rotary_emb = getattr(lm, candidate_attr, None)
+                    if rotary_emb is not None:
+                        break
+                rotary_emb = getattr(m, candidate_attr, None)
+                if rotary_emb is not None:
+                    break
+            rotary_emb = getattr(model, candidate_attr, None)
+            if rotary_emb is not None:
+                break
+
+        if rotary_emb is not None:
+            self._native_rotary_emb = rotary_emb.to(self.device)
+            logger.info(
+                f"Extracted native rotary_emb: {type(rotary_emb).__name__} "
+                f"(will be used instead of custom RoPE reimplementation)"
+            )
+        else:
+            logger.warning(
+                "TensorParallelShard: no native rotary_emb found — "
+                "falling back to custom RoPE. Output may be incorrect for models "
+                "with non-standard RoPE (e.g. Qwen3.5 MRoPE)."
+            )
 
     def _extract_native_linear_attn_layers(self, model: Any) -> None:  # pyright: ignore[reportAny]
         """Extract native linear attention layer modules from the HuggingFace model.
@@ -843,14 +884,11 @@ class TensorParallelShard:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Apply rotary positional embeddings (RoPE) to Q and K tensors.
 
-        Uses rope_theta and rope_scaling from TPShardConfig (which must be
-        populated from the model's HuggingFace config). Supports standard RoPE
-        and YaRN-scaled RoPE (used by Qwen3.5-4B).
+        When _native_rotary_emb is available, delegates to the model's own
+        rotary embedding module which handles MRoPE, partial_rotary_factor, and
+        interleaved layout correctly. This is the preferred path for Qwen3.5.
 
-        For YaRN scaling (rope_scaling["type"] == "yarn"):
-        - The frequency table is rescaled by the long-factor / short-factor arrays
-          when present; otherwise a uniform scaling_factor is applied.
-        - This mirrors the HuggingFace Qwen3_5RotaryEmbedding implementation.
+        Falls back to manual partial-RoPE implementation for other models.
 
         Args:
             q: Query tensor of shape [batch, heads, seq_len, head_dim]
@@ -860,37 +898,60 @@ class TensorParallelShard:
         Returns:
             Tuple of (rotated_q, rotated_k) with same shapes as inputs.
         """
+        # === Native rotary_emb path (Qwen3.5 MRoPE) ===
+        if self._native_rotary_emb is not None:
+            # Qwen3.5 rotary_emb.forward() expects position_ids of shape (3, batch, seq_len)
+            # for 3D MRoPE. For pure text inference the spatial dims (H, W) are zero.
+            if position_ids.ndim == 2:
+                # Expand to (3, batch, seq_len): text positions in dim 0, zeros for H/W
+                pos_3d = position_ids.unsqueeze(0).expand(3, -1, -1)
+            else:
+                pos_3d = position_ids  # already 3D
+
+            # rotary_emb returns (cos, sin) each of shape [batch, heads, seq_len, head_dim]
+            # or [batch, 1, seq_len, head_dim] depending on implementation.
+            # q has shape [batch, heads, seq_len, head_dim].
+            cos, sin = self._native_rotary_emb(q, pos_3d)
+
+            # cos/sin may have shape [batch, 1, seq_len, partial_dim] — apply to the
+            # rotated portion only (matches the model's partial_rotary_factor).
+            rotary_dim = cos.shape[-1]
+
+            q_rot = q[..., :rotary_dim]
+            q_pass = q[..., rotary_dim:]
+            k_rot = k[..., :rotary_dim]
+            k_pass = k[..., rotary_dim:]
+
+            q_embed = torch.cat(
+                [(q_rot * cos) + (self._rotate_half(q_rot) * sin), q_pass], dim=-1
+            )
+            k_embed = torch.cat(
+                [(k_rot * cos) + (self._rotate_half(k_rot) * sin), k_pass], dim=-1
+            )
+            return q_embed.to(q.dtype), k_embed.to(k.dtype)
+
+        # === Fallback: manual partial-RoPE (for models without MRoPE) ===
         head_dim = q.shape[-1]
         rope_theta: float = self.config.rope_theta
         partial_rotary_factor: float = self.config.partial_rotary_factor
 
-        # Number of dimensions to rotate.  Qwen3.5 uses partial_rotary_factor=0.25
-        # so only the first 25% of head_dim is rotated; the rest passes through unchanged.
+        # Number of dimensions to rotate.
         rotary_dim: int = int(head_dim * partial_rotary_factor)
-        # Ensure rotary_dim is even (required for the paired cos/sin structure)
-        rotary_dim = (rotary_dim // 2) * 2
+        rotary_dim = (rotary_dim // 2) * 2  # must be even
 
-        # --- Base inverse-frequency table (length = rotary_dim / 2) ---
         inv_freq = 1.0 / (
             rope_theta ** (
                 torch.arange(0, rotary_dim, 2, device=q.device, dtype=torch.float32) / rotary_dim
             )
         )
 
-        # --- Build cos/sin tables ---
-        # position_ids: [batch, seq_len] → [batch, seq_len, 1]
         pos = position_ids.unsqueeze(-1).float()
-        # inv_freq: [rotary_dim/2] → [1, 1, rotary_dim/2]
         inv_freq = inv_freq.unsqueeze(0).unsqueeze(0)
-        # freqs: [batch, seq_len, rotary_dim/2]
         freqs = pos * inv_freq
-        # emb: [batch, seq_len, rotary_dim] (cat of freqs with itself)
         emb = torch.cat([freqs, freqs], dim=-1)
-        cos = emb.cos().unsqueeze(1)  # [batch, 1, seq_len, rotary_dim]
-        sin = emb.sin().unsqueeze(1)  # [batch, 1, seq_len, rotary_dim]
+        cos = emb.cos().unsqueeze(1)
+        sin = emb.sin().unsqueeze(1)
 
-        # --- Apply partial rotation ---
-        # Split into the rotated portion and the pass-through portion
         q_rot = q[..., :rotary_dim]
         q_pass = q[..., rotary_dim:]
         k_rot = k[..., :rotary_dim]
