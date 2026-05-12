@@ -370,6 +370,11 @@ class ModelLoader:
         intermediate_size = text_config.intermediate_size
         num_key_value_heads = getattr(text_config, "num_key_value_heads", num_attention_heads)
         head_dim = getattr(text_config, "head_dim", hidden_size // num_attention_heads)
+        rope_theta = float(getattr(text_config, "rope_theta", 1000000.0))
+        rope_scaling_raw = getattr(text_config, "rope_scaling", None)
+        rope_scaling: dict[str, object] | None = (
+            dict(rope_scaling_raw) if isinstance(rope_scaling_raw, dict) else None
+        )
 
         tp_config = TPShardConfig(
             rank=shard_metadata.device_rank,
@@ -379,12 +384,15 @@ class ModelLoader:
             head_dim=head_dim,
             intermediate_size=intermediate_size,
             num_key_value_heads=num_key_value_heads,
+            rope_theta=rope_theta,
+            rope_scaling=rope_scaling,
         )
 
         logger.info(
             f"Streaming load: rank={shard_metadata.device_rank}/{shard_metadata.world_size}, "
             f"hidden_size={hidden_size}, heads={num_attention_heads}, "
-            f"head_dim={head_dim}, intermediate={intermediate_size}"
+            f"head_dim={head_dim}, intermediate={intermediate_size}, "
+            f"rope_theta={rope_theta}, rope_scaling_type={rope_scaling.get('type') if rope_scaling else None}"
         )
 
         model_path = self._resolve_model_path(model_id)
@@ -485,6 +493,13 @@ class ModelLoader:
             text_config, "num_key_value_heads", num_attention_heads
         )
         head_dim = getattr(text_config, "head_dim", hidden_size // num_attention_heads)
+        # Must read rope_theta and rope_scaling from model config — do NOT hardcode.
+        # Qwen3.5-4B: rope_theta=1000000.0, rope_scaling={"type": "yarn", ...}
+        rope_theta = float(getattr(text_config, "rope_theta", 1000000.0))
+        rope_scaling_raw = getattr(text_config, "rope_scaling", None)
+        rope_scaling: dict[str, object] | None = (
+            dict(rope_scaling_raw) if isinstance(rope_scaling_raw, dict) else None
+        )
 
         # Construct TPShardConfig
         tp_config = TPShardConfig(
@@ -495,6 +510,8 @@ class ModelLoader:
             head_dim=head_dim,
             intermediate_size=intermediate_size,
             num_key_value_heads=num_key_value_heads,
+            rope_theta=rope_theta,
+            rope_scaling=rope_scaling,
         )
 
         logger.info(
@@ -504,7 +521,9 @@ class ModelLoader:
             f"num_attention_heads={num_attention_heads}, "
             f"head_dim={head_dim}, "
             f"intermediate_size={intermediate_size}, "
-            f"num_key_value_heads={num_key_value_heads}"
+            f"num_key_value_heads={num_key_value_heads}, "
+            f"rope_theta={rope_theta}, "
+            f"rope_scaling_type={rope_scaling.get('type') if rope_scaling else None}"
         )
 
         # Check model size — use streaming loader for large models (>20GB)

@@ -99,16 +99,32 @@ class PyTorchXPUBuilder(Builder):
         )
         init_process_group(config)
 
-        # Also set the TP group handle so TensorParallelShard can use it
-        from exo.worker.engines.pytorch_xpu.distributed import (
-            _tp_process_group,
-        )
-
-        # If init_process_group set up the default group, point TP group at WORLD
+        # After init_process_group, ensure the TP group handle is set to a real
+        # ProcessGroup object (not the WORLD sentinel) so that TensorParallelShard
+        # can use it for all-reduce operations with a well-defined timeout.
+        # We create a sub-group covering all ranks; on the GLOO backend this is
+        # equivalent to WORLD but is an actual ProcessGroup instance.
         import exo.worker.engines.pytorch_xpu.distributed as dist_module
 
         if dist_module._tp_process_group is None:
-            dist_module._tp_process_group = dist.group.WORLD
+            try:
+                # new_group creates a real ProcessGroup for the given ranks.
+                tp_group = dist.new_group(
+                    ranks=list(range(self._world_size)),
+                    backend="gloo",
+                )
+                dist_module._tp_process_group = tp_group
+                logger.info(
+                    f"PyTorchXPUBuilder.connect: TP process group created "
+                    f"(world_size={self._world_size})"
+                )
+            except Exception as pg_exc:
+                # Fallback: use WORLD if new_group fails (e.g. already a sub-group)
+                logger.warning(
+                    f"PyTorchXPUBuilder.connect: new_group failed ({pg_exc}), "
+                    "falling back to dist.group.WORLD"
+                )
+                dist_module._tp_process_group = dist.group.WORLD
 
         logger.info("PyTorchXPUBuilder.connect: process group initialized")
 

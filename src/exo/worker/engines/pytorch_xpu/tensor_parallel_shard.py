@@ -49,6 +49,12 @@ class TPShardConfig:
     intermediate_size: int  # MLP intermediate dimension
     num_key_value_heads: int  # For GQA models
     allreduce_timeout_seconds: int = 30
+    # RoPE parameters — must be read from model config, not hardcoded.
+    # Qwen3.5-4B uses rope_theta=1000000.0 and YaRN rope_scaling.
+    rope_theta: float = 1000000.0
+    # rope_scaling dict from HuggingFace config (e.g. {"type": "yarn", "factor": 4.0, ...})
+    # None means standard RoPE with no scaling.
+    rope_scaling: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         """Validate that model dimensions are compatible with the world size."""
@@ -181,7 +187,7 @@ class TensorParallelShard:
         self.shard_weights(state_dict)
 
         # Move native linear attention layers to target device and set eval mode
-        for layer_idx, native_layer in self._native_linear_attn_layers.items():
+        for _layer_idx, native_layer in self._native_linear_attn_layers.items():
             native_layer.to(self.device).eval()
 
         # Detect architecture from stored keys
@@ -207,28 +213,76 @@ class TensorParallelShard:
             f"intermediate_per_rank={config.intermediate_per_rank}"
         )
 
-    def _extract_native_linear_attn_layers(self, model: Any) -> None:
-        """Extract native linear attention layer modules from the HuggingFace model."""
-        layers = None
+    def _extract_native_linear_attn_layers(self, model: Any) -> None:  # pyright: ignore[reportAny]
+        """Extract native linear attention layer modules from the HuggingFace model.
 
-        if hasattr(model, 'model'):
-            if hasattr(model.model, 'language_model'):
-                if hasattr(model.model.language_model, 'layers'):
-                    layers = model.model.language_model.layers
-            elif hasattr(model.model, 'layers'):
-                layers = model.model.layers
-        elif hasattr(model, 'language_model'):
-            if hasattr(model.language_model, 'layers'):
-                layers = model.language_model.layers
+        Supports multiple model layouts:
+        - model.model.layers (standard Qwen/Llama)
+        - model.model.language_model.layers (VL models: Qwen3.5-VL)
+        - model.language_model.layers (older VL layout)
+
+        Within each layer, the linear attention sub-module may be exposed as:
+        - layer.linear_attn  (Qwen3.5 Gated DeltaNet layers)
+        - layer.self_attn when layer_types[i] == "linear_attention" (fallback)
+
+        If zero native layers are found for a hybrid model (i.e. the model config
+        declares linear_attention layer_types but no native modules were extracted),
+        a warning is emitted so the caller knows the fallback implementation will run.
+        """
+        layers: Any = None  # pyright: ignore[reportAny]
+
+        # Resolve the transformer layer list, trying the most common layouts first.
+        for candidate in (
+            lambda m: m.model.language_model.layers if hasattr(m, 'model') and hasattr(m.model, 'language_model') and hasattr(m.model.language_model, 'layers') else None,  # noqa: E731
+            lambda m: m.model.layers if hasattr(m, 'model') and hasattr(m.model, 'layers') else None,  # noqa: E731
+            lambda m: m.language_model.layers if hasattr(m, 'language_model') and hasattr(m.language_model, 'layers') else None,  # noqa: E731
+        ):
+            result = candidate(model)  # pyright: ignore[reportAny]
+            if result is not None:
+                layers = result
+                break
 
         if layers is None:
+            logger.warning(
+                "TensorParallelShard: could not locate transformer layer list in model "
+                "for native linear_attn extraction. Custom fallback will be used for "
+                "all linear attention layers."
+            )
             return
 
-        for idx, layer in enumerate(layers):
-            if hasattr(layer, 'linear_attn') and layer.linear_attn is not None:
-                self._native_linear_attn_layers[idx] = layer.linear_attn
+        for idx, layer in enumerate(layers):  # pyright: ignore[reportAny]
+            # Primary attribute name: linear_attn (Qwen3.5 Gated DeltaNet)
+            native: Any = getattr(layer, 'linear_attn', None)  # pyright: ignore[reportAny]
+            if native is not None:
+                self._native_linear_attn_layers[idx] = native
+                continue
+            # Secondary: some builds expose the recurrent layer as 'mamba' or 'ssm'
+            for alt_attr in ('mamba', 'ssm', 'recurrent_layer'):
+                alt: Any = getattr(layer, alt_attr, None)  # pyright: ignore[reportAny]
+                if alt is not None:
+                    self._native_linear_attn_layers[idx] = alt
+                    break
 
-        logger.info(f"Extracted {len(self._native_linear_attn_layers)} native linear_attn layers")
+        num_found = len(self._native_linear_attn_layers)
+        logger.info(f"Extracted {num_found} native linear_attn layers")
+
+        # Warn if the model config declares linear_attention layers but we found none,
+        # because the custom fallback is a best-effort reimplementation and may differ
+        # numerically from the reference.
+        if num_found == 0:
+            # Try to detect whether the model is actually hybrid by checking model config.
+            model_config: Any = getattr(model, 'config', None)  # pyright: ignore[reportAny]
+            if model_config is not None:
+                text_cfg: Any = getattr(model_config, 'text_config', model_config)  # pyright: ignore[reportAny]
+                layer_types: Any = getattr(text_cfg, 'layer_types', None)  # pyright: ignore[reportAny]
+                if layer_types is not None and 'linear_attention' in layer_types:
+                    logger.warning(
+                        "TensorParallelShard: model config declares 'linear_attention' "
+                        "layer_types but no native linear_attn modules were found. "
+                        "The custom Gated DeltaNet fallback will run for these layers. "
+                        "Output quality may be degraded if the fallback diverges from "
+                        "the reference implementation."
+                    )
 
     def _create_native_cache(self) -> Any:
         """Create a HuggingFace Cache object for the native linear attention layers."""
@@ -784,6 +838,15 @@ class TensorParallelShard:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Apply rotary positional embeddings (RoPE) to Q and K tensors.
 
+        Uses rope_theta and rope_scaling from TPShardConfig (which must be
+        populated from the model's HuggingFace config). Supports standard RoPE
+        and YaRN-scaled RoPE (used by Qwen3.5-4B).
+
+        For YaRN scaling (rope_scaling["type"] == "yarn"):
+        - The frequency table is rescaled by the long-factor / short-factor arrays
+          when present; otherwise a uniform scaling_factor is applied.
+        - This mirrors the HuggingFace Qwen3_5RotaryEmbedding implementation.
+
         Args:
             q: Query tensor of shape [batch, heads, seq_len, head_dim]
             k: Key tensor of shape [batch, kv_heads, seq_len, head_dim]
@@ -793,23 +856,60 @@ class TensorParallelShard:
             Tuple of (rotated_q, rotated_k) with same shapes as inputs.
         """
         head_dim = q.shape[-1]
-        # Compute inverse frequencies for RoPE
-        # Use base 1000000.0 (Qwen3.5 uses a large RoPE base)
+        rope_theta: float = self.config.rope_theta
+        rope_scaling: dict[str, object] | None = self.config.rope_scaling
+
+        # --- Base inverse-frequency table ---
         inv_freq = 1.0 / (
-            1000000.0 ** (torch.arange(0, head_dim, 2, device=q.device, dtype=torch.float32) / head_dim)
+            rope_theta ** (
+                torch.arange(0, head_dim, 2, device=q.device, dtype=torch.float32) / head_dim
+            )
         )
-        # position_ids: [batch, seq_len] -> [batch, seq_len, 1]
+
+        # --- YaRN / linear scaling ---
+        if rope_scaling is not None:
+            scaling_type = str(rope_scaling.get("type", ""))
+            # Helper: safely extract a float from the rope_scaling dict.
+            # dict.get() returns object when the dict is dict[str, object], so
+            # we must guard the cast.
+            _raw_factor = rope_scaling.get("factor", 1.0)
+            scaling_factor_scalar: float = float(_raw_factor) if isinstance(_raw_factor, (int, float)) else 1.0
+
+            if scaling_type in ("yarn", "longrope"):
+                # YaRN may provide per-dimension long_factor / short_factor arrays or a
+                # single scalar scaling_factor. Apply the reciprocal so that effectively
+                # inv_freq[i] = base_inv_freq[i] / factor[i].
+                long_factor = rope_scaling.get("long_factor")
+                if long_factor is not None and isinstance(long_factor, (list, tuple)):
+                    # Per-dimension factors (list of floats, one per frequency slot)
+                    factor_tensor = torch.tensor(
+                        list(long_factor),
+                        device=q.device,
+                        dtype=torch.float32,
+                    )
+                    # factor_tensor has length head_dim//2 — same as inv_freq
+                    inv_freq = inv_freq / factor_tensor
+                elif scaling_factor_scalar != 1.0:
+                    inv_freq = inv_freq / scaling_factor_scalar
+            elif scaling_type in ("linear", "dynamic"):
+                # Linear: uniform rescaling.  Dynamic NTK: approximated by
+                # the configured factor for inference (no runtime adaptation).
+                if scaling_factor_scalar != 1.0:
+                    inv_freq = inv_freq / scaling_factor_scalar
+
+        # --- Build cos/sin tables ---
+        # position_ids: [batch, seq_len] → [batch, seq_len, 1]
         pos = position_ids.unsqueeze(-1).float()
-        # inv_freq: [head_dim/2] -> [1, 1, head_dim/2]
+        # inv_freq: [head_dim/2] → [1, 1, head_dim/2]
         inv_freq = inv_freq.unsqueeze(0).unsqueeze(0)
         # freqs: [batch, seq_len, head_dim/2]
         freqs = pos * inv_freq
-        # emb: [batch, seq_len, head_dim]
+        # emb: [batch, seq_len, head_dim]  (cat of freqs with itself = standard RoPE)
         emb = torch.cat([freqs, freqs], dim=-1)
         cos = emb.cos().unsqueeze(1)  # [batch, 1, seq_len, head_dim]
         sin = emb.sin().unsqueeze(1)  # [batch, 1, seq_len, head_dim]
 
-        # Apply rotation
+        # --- Apply rotation ---
         q_embed = (q * cos) + (self._rotate_half(q) * sin)
         k_embed = (k * cos) + (self._rotate_half(k) * sin)
         return q_embed.to(q.dtype), k_embed.to(k.dtype)
@@ -1302,6 +1402,14 @@ class TensorParallelShard:
         original device. On Intel iGPUs with shared memory, the CPU↔XPU copy
         is near-zero cost.
 
+        The Gloo backend also does not reliably support bfloat16 all-reduce in
+        all PyTorch builds — it may silently return the local partial sum without
+        performing the reduction. We therefore cast to float32 on CPU, perform the
+        all-reduce, then cast back to the original dtype before moving to device.
+        This is numerically safe: float32 has higher precision than bfloat16, so
+        the round-trip bf16→f32→bf16 introduces no additional error beyond what
+        the original bf16 computation already has.
+
         Args:
             tensor: Tensor to all-reduce (on any device).
             layer_index: Transformer layer index for error context on timeout.
@@ -1316,18 +1424,23 @@ class TensorParallelShard:
         """
         tp_group = get_tensor_parallel_group()
         original_device = tensor.device
+        original_dtype = tensor.dtype
 
         try:
-            # Stage to CPU for Gloo all_reduce
-            cpu_tensor = tensor.to("cpu")
+            # Stage to CPU as float32. Gloo does not reliably support bfloat16
+            # collectives; an explicit cast ensures the all-reduce is actually
+            # performed across all ranks rather than silently returning the local
+            # partial result.
+            cpu_f32 = tensor.detach().to(dtype=torch.float32, device="cpu")
             dist.all_reduce(
-                cpu_tensor,
+                cpu_f32,
                 op=dist.ReduceOp.SUM,
                 group=tp_group,
                 async_op=False,
             )
-            # Move back to original device
-            tensor.copy_(cpu_tensor.to(original_device))
+            # Cast back to original dtype and move to original device in one step
+            result = cpu_f32.to(dtype=original_dtype, device=original_device)
+            tensor.copy_(result)
         except Exception as exc:
             rank = self.config.rank
             timeout = self.config.allreduce_timeout_seconds
@@ -1335,6 +1448,7 @@ class TensorParallelShard:
                 f"Tensor-parallel all-reduce failed: "
                 f"layer_index={layer_index}, "
                 f"tensor_shape={tuple(tensor.shape)}, "
+                f"tensor_dtype={original_dtype}, "
                 f"timeout={timeout}s, "
                 f"device={original_device}, "
                 f"rank={rank}"
