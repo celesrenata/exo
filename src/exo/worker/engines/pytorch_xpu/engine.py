@@ -201,13 +201,28 @@ class PyTorchXPUEngine(Engine):
         if task.task_params.input:
             prompt = task.task_params.input[0].content or ""
 
-        # Apply chat template if tokenizer supports it
+        # Apply chat template if tokenizer supports it.
+        # enable_thinking controls whether Qwen3.5 thinking mode is active.
+        # When None (not set by caller), default to False — thinking tokens
+        # (<think>...</think>) are stripped by skip_special_tokens=True but consume
+        # max_tokens budget before the model produces any visible output.
+        # Callers can pass enable_thinking=True via the API to enable reasoning.
+        enable_thinking: bool = bool(getattr(task.task_params, "enable_thinking", None) or False)
         if hasattr(self.tokenizer, "apply_chat_template"):
             try:
                 messages = [{"role": "user", "content": prompt}]
-                prompt = self.tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True
-                )
+                try:
+                    prompt = self.tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                        enable_thinking=enable_thinking,
+                    )
+                except TypeError:
+                    # Tokenizer doesn't support enable_thinking — fall back without it
+                    prompt = self.tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    )
             except Exception:
                 pass  # Fall back to raw prompt
 
