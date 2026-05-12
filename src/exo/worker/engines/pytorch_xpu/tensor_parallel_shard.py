@@ -48,11 +48,18 @@ class TPShardConfig:
     num_key_value_heads: int  # For GQA models
     allreduce_timeout_seconds: int = 30
     # RoPE parameters — must be read from model config, not hardcoded.
-    # Qwen3.5-4B uses rope_theta=1000000.0 and YaRN rope_scaling.
-    rope_theta: float = 1000000.0
+    # Qwen3.5-4B uses rope_parameters.rope_theta=10000000 and partial_rotary_factor=0.25.
+    rope_theta: float = 10000.0
     # rope_scaling dict from HuggingFace config (e.g. {"type": "yarn", "factor": 4.0, ...})
     # None means standard RoPE with no scaling.
     rope_scaling: dict[str, object] | None = None
+    # Fraction of head_dim to rotate. Qwen3.5 uses partial_rotary_factor=0.25
+    # (only first 25% of head dimensions are rotated, rest are passed through unchanged).
+    # Must be read from rope_parameters.partial_rotary_factor in the model config.
+    partial_rotary_factor: float = 1.0
+    # Whether rotary frequencies are interleaved (cos, sin applied to alternating dims)
+    # vs the standard half-rotation layout. Qwen3.5 uses mrope_interleaved=True.
+    mrope_interleaved: bool = False
 
     def __post_init__(self) -> None:
         """Validate that model dimensions are compatible with the world size."""
@@ -855,61 +862,42 @@ class TensorParallelShard:
         """
         head_dim = q.shape[-1]
         rope_theta: float = self.config.rope_theta
-        rope_scaling: dict[str, object] | None = self.config.rope_scaling
+        partial_rotary_factor: float = self.config.partial_rotary_factor
 
-        # --- Base inverse-frequency table ---
+        # Number of dimensions to rotate.  Qwen3.5 uses partial_rotary_factor=0.25
+        # so only the first 25% of head_dim is rotated; the rest passes through unchanged.
+        rotary_dim: int = int(head_dim * partial_rotary_factor)
+        # Ensure rotary_dim is even (required for the paired cos/sin structure)
+        rotary_dim = (rotary_dim // 2) * 2
+
+        # --- Base inverse-frequency table (length = rotary_dim / 2) ---
         inv_freq = 1.0 / (
             rope_theta ** (
-                torch.arange(0, head_dim, 2, device=q.device, dtype=torch.float32) / head_dim
+                torch.arange(0, rotary_dim, 2, device=q.device, dtype=torch.float32) / rotary_dim
             )
         )
-
-        # --- YaRN / linear scaling ---
-        if rope_scaling is not None:
-            scaling_type = str(rope_scaling.get("type", ""))
-            # Helper: safely extract a float from the rope_scaling dict.
-            # dict.get() returns object when the dict is dict[str, object], so
-            # we must guard the cast.
-            _raw_factor = rope_scaling.get("factor", 1.0)
-            scaling_factor_scalar: float = float(_raw_factor) if isinstance(_raw_factor, (int, float)) else 1.0
-
-            if scaling_type in ("yarn", "longrope"):
-                # YaRN may provide per-dimension long_factor / short_factor arrays or a
-                # single scalar scaling_factor. Apply the reciprocal so that effectively
-                # inv_freq[i] = base_inv_freq[i] / factor[i].
-                long_factor = rope_scaling.get("long_factor")
-                if long_factor is not None and isinstance(long_factor, (list, tuple)):
-                    # Per-dimension factors (list of floats, one per frequency slot)
-                    factor_tensor = torch.tensor(
-                        list(long_factor),
-                        device=q.device,
-                        dtype=torch.float32,
-                    )
-                    # factor_tensor has length head_dim//2 — same as inv_freq
-                    inv_freq = inv_freq / factor_tensor
-                elif scaling_factor_scalar != 1.0:
-                    inv_freq = inv_freq / scaling_factor_scalar
-            elif scaling_type in ("linear", "dynamic"):
-                # Linear: uniform rescaling.  Dynamic NTK: approximated by
-                # the configured factor for inference (no runtime adaptation).
-                if scaling_factor_scalar != 1.0:
-                    inv_freq = inv_freq / scaling_factor_scalar
 
         # --- Build cos/sin tables ---
         # position_ids: [batch, seq_len] → [batch, seq_len, 1]
         pos = position_ids.unsqueeze(-1).float()
-        # inv_freq: [head_dim/2] → [1, 1, head_dim/2]
+        # inv_freq: [rotary_dim/2] → [1, 1, rotary_dim/2]
         inv_freq = inv_freq.unsqueeze(0).unsqueeze(0)
-        # freqs: [batch, seq_len, head_dim/2]
+        # freqs: [batch, seq_len, rotary_dim/2]
         freqs = pos * inv_freq
-        # emb: [batch, seq_len, head_dim]  (cat of freqs with itself = standard RoPE)
+        # emb: [batch, seq_len, rotary_dim] (cat of freqs with itself)
         emb = torch.cat([freqs, freqs], dim=-1)
-        cos = emb.cos().unsqueeze(1)  # [batch, 1, seq_len, head_dim]
-        sin = emb.sin().unsqueeze(1)  # [batch, 1, seq_len, head_dim]
+        cos = emb.cos().unsqueeze(1)  # [batch, 1, seq_len, rotary_dim]
+        sin = emb.sin().unsqueeze(1)  # [batch, 1, seq_len, rotary_dim]
 
-        # --- Apply rotation ---
-        q_embed = (q * cos) + (self._rotate_half(q) * sin)
-        k_embed = (k * cos) + (self._rotate_half(k) * sin)
+        # --- Apply partial rotation ---
+        # Split into the rotated portion and the pass-through portion
+        q_rot = q[..., :rotary_dim]
+        q_pass = q[..., rotary_dim:]
+        k_rot = k[..., :rotary_dim]
+        k_pass = k[..., rotary_dim:]
+
+        q_embed = torch.cat([(q_rot * cos) + (self._rotate_half(q_rot) * sin), q_pass], dim=-1)
+        k_embed = torch.cat([(k_rot * cos) + (self._rotate_half(k_rot) * sin), k_pass], dim=-1)
         return q_embed.to(q.dtype), k_embed.to(k.dtype)
 
     @staticmethod

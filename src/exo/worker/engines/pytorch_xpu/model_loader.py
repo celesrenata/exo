@@ -493,9 +493,19 @@ class ModelLoader:
             text_config, "num_key_value_heads", num_attention_heads
         )
         head_dim = getattr(text_config, "head_dim", hidden_size // num_attention_heads)
-        # Must read rope_theta and rope_scaling from model config — do NOT hardcode.
-        # Qwen3.5-4B: rope_theta=1000000.0, rope_scaling={"type": "yarn", ...}
-        rope_theta = float(getattr(text_config, "rope_theta", 1000000.0))
+        # Qwen3.5-4B stores RoPE params under text_config.rope_parameters, not rope_theta directly.
+        # rope_parameters = {"rope_theta": 10000000, "partial_rotary_factor": 0.25, ...}
+        rope_params_raw = getattr(text_config, "rope_parameters", None)
+        rope_params: dict[str, object] = dict(rope_params_raw) if isinstance(rope_params_raw, dict) else {}
+
+        # rope_theta: try rope_parameters first, then direct attribute, then default
+        _theta_raw = rope_params.get("rope_theta") or getattr(text_config, "rope_theta", 10000.0)
+        rope_theta = float(_theta_raw) if isinstance(_theta_raw, (int, float)) else 10000.0
+
+        # partial_rotary_factor: from rope_parameters (Qwen3.5 uses 0.25)
+        _prf_raw = rope_params.get("partial_rotary_factor") or getattr(text_config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = float(_prf_raw) if isinstance(_prf_raw, (int, float)) else 1.0
+
         rope_scaling_raw = getattr(text_config, "rope_scaling", None)
         rope_scaling: dict[str, object] | None = (
             dict(rope_scaling_raw) if isinstance(rope_scaling_raw, dict) else None
@@ -512,6 +522,7 @@ class ModelLoader:
             num_key_value_heads=num_key_value_heads,
             rope_theta=rope_theta,
             rope_scaling=rope_scaling,
+            partial_rotary_factor=partial_rotary_factor,
         )
 
         logger.info(
@@ -523,6 +534,7 @@ class ModelLoader:
             f"intermediate_size={intermediate_size}, "
             f"num_key_value_heads={num_key_value_heads}, "
             f"rope_theta={rope_theta}, "
+            f"partial_rotary_factor={partial_rotary_factor}, "
             f"rope_scaling_type={rope_scaling.get('type') if rope_scaling else None}"
         )
 
