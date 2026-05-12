@@ -509,9 +509,17 @@ class TensorParallelShard:
 
         # Attention QKV projections: column-parallel (split output dim)
         if self._matches_attn_key(param_name, "q_proj.weight"):
-            # q_proj: shape (num_heads * head_dim, hidden_size)
-            # Each rank gets heads_per_rank * head_dim rows
-            shard_size = heads_per_rank * head_dim
+            # Qwen3.5 q_proj output is doubled: num_heads * head_dim * 2 (Q + gate).
+            # Check actual weight shape to handle both standard and doubled layouts.
+            actual_out_dim = param_tensor.shape[0]
+            expected_standard = heads_per_rank * head_dim * world_size  # standard
+            q_doubled = actual_out_dim == expected_standard * 2
+            if q_doubled:
+                # Each rank gets heads_per_rank * head_dim * 2 rows
+                shard_size = heads_per_rank * head_dim * 2
+            else:
+                # Standard layout
+                shard_size = heads_per_rank * head_dim
             start = rank * shard_size
             return param_tensor.narrow(0, start, shard_size).clone()
 
@@ -1358,13 +1366,27 @@ class TensorParallelShard:
                 )
 
                 # Column-parallel QKV: each rank computes its assigned heads
-                q = self._column_parallel_linear(hidden_states, q_weight, q_bias)
+                q_raw = self._column_parallel_linear(hidden_states, q_weight, q_bias)
                 k = self._column_parallel_linear(hidden_states, k_weight, k_bias)
                 v = self._column_parallel_linear(hidden_states, v_weight, v_bias)
 
-                # Reshape for multi-head attention
-                # q: [batch, seq_len, heads_per_rank * head_dim] -> [batch, heads_per_rank, seq_len, head_dim]
-                q = q.view(batch_size, seq_len, heads_per_rank, head_dim).transpose(1, 2)
+                # Qwen3.5 q_proj output is num_attention_heads * head_dim * 2 (Q + gate).
+                # Detect this by checking if q_raw has 2x expected size.
+                q_raw_heads_dim = q_raw.shape[-1]  # heads_per_rank * head_dim or * head_dim * 2
+                expected_q_dim = heads_per_rank * head_dim
+                if q_raw_heads_dim == expected_q_dim * 2:
+                    # Split Q and gate along the last dim
+                    # Shape: [batch, seq_len, heads_per_rank, head_dim * 2] → q, gate
+                    q_gate_view = q_raw.view(batch_size, seq_len, heads_per_rank, head_dim * 2)
+                    q_head = q_gate_view[..., :head_dim]   # [batch, seq_len, heads_per_rank, head_dim]
+                    gate_head = q_gate_view[..., head_dim:]  # [batch, seq_len, heads_per_rank, head_dim]
+                    # gate is applied per-head after attention: flatten to [batch, seq_len, heads_per_rank * head_dim]
+                    q_gate = gate_head.reshape(batch_size, seq_len, heads_per_rank * head_dim)
+                    q = q_head.transpose(1, 2)  # [batch, heads_per_rank, seq_len, head_dim]
+                else:
+                    q_gate = None
+                    q = q_raw.view(batch_size, seq_len, heads_per_rank, head_dim).transpose(1, 2)
+
                 # k, v: [batch, seq_len, kv_heads_per_rank * head_dim] -> [batch, kv_heads_per_rank, seq_len, head_dim]
                 k = k.view(batch_size, seq_len, kv_heads_per_rank, head_dim).transpose(1, 2)
                 v = v.view(batch_size, seq_len, kv_heads_per_rank, head_dim).transpose(1, 2)
@@ -1420,6 +1442,10 @@ class TensorParallelShard:
                 attn_output = attn_output.transpose(1, 2).contiguous().view(
                     batch_size, seq_len, heads_per_rank * head_dim
                 )
+
+                # Qwen3.5 gated attention: attn_output = attn_output * sigmoid(gate)
+                if q_gate is not None:
+                    attn_output = attn_output * torch.sigmoid(q_gate)
 
                 # 3. Output projection (row-parallel) → all_reduce
                 o_weight = self._get_weight(
