@@ -176,17 +176,29 @@ def tensor_parallel_generate(
 
     logger.debug(f"Tokenized prompt: {prompt_tokens} tokens")
 
-    # Determine EOS token IDs
+    # Determine EOS token IDs.
+    # IMPORTANT: Only add tokens that are genuine stop signals. Do NOT add all
+    # additional_special_tokens unconditionally — for Qwen3.5-4B that includes
+    # <|im_start|> and ~20 other special tokens that appear mid-generation
+    # (vision, thinking, etc.) and are NOT stop tokens. Adding them to eos_token_ids
+    # causes generation to terminate on the second token for thinking-model prompts.
+    _STOP_TOKEN_STRINGS = frozenset({
+        "<|im_end|>",
+        "<|endoftext|>",
+        "<|end|>",
+        "<|eot_id|>",      # Llama-3 style
+        "<eos>",
+        "<|end_of_text|>",
+    })
     eos_token_ids: set[int] = set()
+    # Always include the tokenizer's primary EOS token
     if hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None:  # pyright: ignore[reportAny]
         eos_token_ids.add(int(tokenizer.eos_token_id))  # pyright: ignore[reportAny]
-    if hasattr(tokenizer, "additional_special_tokens_ids"):  # pyright: ignore[reportAny]
-        for special_id in tokenizer.additional_special_tokens_ids:  # pyright: ignore[reportAny]
-            eos_token_ids.add(int(special_id))  # pyright: ignore[reportAny]
+    # Scan all special tokens for known stop-token strings only
     if hasattr(tokenizer, "all_special_ids"):  # pyright: ignore[reportAny]
         for special_id in tokenizer.all_special_ids:  # pyright: ignore[reportAny]
             special_tok: str = tokenizer.decode([special_id], skip_special_tokens=False)  # pyright: ignore[reportAny]
-            if special_tok in ("<|im_end|>", "<|endoftext|>", "<|end|>"):
+            if special_tok in _STOP_TOKEN_STRINGS:
                 eos_token_ids.add(int(special_id))  # pyright: ignore[reportAny]
 
     logger.debug(f"EOS token IDs: {eos_token_ids}")
