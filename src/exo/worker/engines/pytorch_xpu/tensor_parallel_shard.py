@@ -908,13 +908,18 @@ class TensorParallelShard:
             else:
                 pos_3d = position_ids  # already 3D
 
-            # rotary_emb returns (cos, sin) each of shape [batch, heads, seq_len, head_dim]
-            # or [batch, 1, seq_len, head_dim] depending on implementation.
-            # q has shape [batch, heads, seq_len, head_dim].
+            # rotary_emb returns (cos, sin) with shape [batch, seq_len, rotary_dim].
+            # Qwen3.5's apply_rotary_pos_emb unsqueezes dim=1 to broadcast with
+            # q/k of shape [batch, heads, seq_len, head_dim].
             cos, sin = self._native_rotary_emb(q, pos_3d)
 
-            # cos/sin may have shape [batch, 1, seq_len, partial_dim] — apply to the
-            # rotated portion only (matches the model's partial_rotary_factor).
+            # cos/sin: [batch, seq_len, rotary_dim] → [batch, 1, seq_len, rotary_dim]
+            if cos.ndim == 3:
+                cos = cos.unsqueeze(1)
+                sin = sin.unsqueeze(1)
+
+            # Apply to the rotated portion only (partial_rotary_factor handled by
+            # the native rotary_emb — rotary_dim = cos.shape[-1]).
             rotary_dim = cos.shape[-1]
 
             q_rot = q[..., :rotary_dim]
