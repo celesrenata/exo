@@ -226,6 +226,13 @@ class PyTorchXPUEngine(Engine):
             except Exception:
                 pass  # Fall back to raw prompt
 
+        # Log the final prompt suffix to verify enable_thinking is working
+        from exo.worker.runner.bootstrap import logger as _runner_logger  # pyright: ignore[reportAny]
+        _runner_logger.info(
+            f"PyTorchXPUEngine._build_generator: enable_thinking={enable_thinking} "
+            f"prompt_tail={repr(prompt[-120:]) if isinstance(prompt, str) else repr(prompt)}"
+        )
+
         max_tokens = task.task_params.max_output_tokens or 100
         temperature = task.task_params.temperature or 1.0
         top_k = getattr(task.task_params, "top_k", None)
