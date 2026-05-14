@@ -628,11 +628,6 @@ def init_tensor_parallel_group(config: TensorParallelGroupConfig) -> None:
 
     global _tp_process_group  # noqa: PLW0603
 
-    # Set GLOO_SOCKET_IFNAME to the TB4 interface so Gloo binds to the
-    # high-bandwidth Thunderbolt 4 link instead of ethernet.
-    os.environ["GLOO_SOCKET_IFNAME"] = config.tb4_interface_name
-    os.environ["TP_SOCKET_IFNAME"] = config.tb4_interface_name
-
     # Set env:// rendezvous variables for the TB4 master.
     os.environ["MASTER_ADDR"] = config.master_addr
     os.environ["MASTER_PORT"] = str(config.master_port)
@@ -650,8 +645,10 @@ def init_tensor_parallel_group(config: TensorParallelGroupConfig) -> None:
     timeout = timedelta(seconds=config.init_timeout_seconds)
 
     if dist.is_initialized():
-        # A default process group already exists (pipeline parallelism).
-        # Create a separate group for tensor parallelism that coexists.
+        # A default process group already exists (pipeline parallelism over ethernet).
+        # Do NOT override GLOO_SOCKET_IFNAME - the existing TCPStore is bound to the
+        # network that the default group uses (ethernet). Overriding it would cause
+        # Gloo to bind to TB4 while TCPStore listens on ethernet, breaking all-reduce.
         logger.info(
             "Default process group already initialized (pipeline parallelism). "
             "Creating new group for tensor parallelism."
@@ -667,7 +664,10 @@ def init_tensor_parallel_group(config: TensorParallelGroupConfig) -> None:
                 f"tb4_interface={config.tb4_interface_name}: {exc}"
             ) from exc
     else:
-        # No default group exists. Initialize as the default process group.
+        # No default group exists. Safe to set GLOO_SOCKET_IFNAME to TB4 since we'll
+        # create a new TCPStore bound to the TB4 interface.
+        os.environ["GLOO_SOCKET_IFNAME"] = config.tb4_interface_name
+        os.environ["TP_SOCKET_IFNAME"] = config.tb4_interface_name
         try:
             dist.init_process_group(
                 backend="gloo",
