@@ -41,12 +41,46 @@ from exo.shared.types.memory import Memory
 from exo.shared.types.worker.runner_response import GenerationResponse
 from exo.worker.engines.pytorch_xpu.distributed import recv_activation, send_activation
 from exo.worker.engines.pytorch_xpu.distributed_generator import sample_token
+from exo.worker.engines.pytorch_xpu.instrumentation import (
+    EventMode,
+    PerformanceRecorder,
+)
+from exo.worker.engines.pytorch_xpu.pipeline_config import (
+    PytorchXpuOptimizationConfiguration,
+)
 from exo.worker.engines.pytorch_xpu.pipeline_parallel_shard import PipelineParallelShard
 
 logger = logging.getLogger(__name__)
 
 TERMINATION_SENTINEL: int = -1
 """Special token ID broadcast by last rank to signal all ranks to exit generation."""
+
+
+def _create_recorder_from_configuration(
+    configuration: PytorchXpuOptimizationConfiguration | None,
+    rank: int,
+    stage: int | None = None,
+) -> PerformanceRecorder:
+    """Create a PerformanceRecorder based on optimization configuration.
+
+    If configuration is None or instrumentation is disabled, returns a
+    disabled recorder that acts as a no-op for all span calls.
+
+    Args:
+        configuration: Optimization configuration with instrumentation flags.
+        rank: Distributed rank for this recorder.
+        stage: Pipeline stage index for this recorder.
+
+    Returns:
+        A PerformanceRecorder instance, enabled or disabled per configuration.
+    """
+    if configuration is None:
+        return PerformanceRecorder(enabled=False, rank=rank, stage=stage)
+    return PerformanceRecorder(
+        enabled=configuration.enable_performance_instrumentation,
+        rank=rank,
+        stage=stage,
+    )
 
 
 def pipeline_parallel_generate(
@@ -60,6 +94,8 @@ def pipeline_parallel_generate(
     temperature: float = 1.0,
     top_k: int | None = None,
     top_p: float | None = None,
+    performance_recorder: PerformanceRecorder | None = None,
+    optimization_configuration: PytorchXpuOptimizationConfiguration | None = None,
 ) -> Generator[GenerationResponse, None, None]:
     """Drive autoregressive generation on rank 0 (pipeline parallelism).
 
@@ -85,17 +121,30 @@ def pipeline_parallel_generate(
         temperature: Sampling temperature (higher = more random).
         top_k: Top-k sampling parameter (None = disabled).
         top_p: Top-p (nucleus) sampling parameter (None = disabled).
+        performance_recorder: Optional pre-configured PerformanceRecorder instance.
+            If provided, takes precedence over optimization_configuration.
+        optimization_configuration: Optional configuration used to create a
+            recorder when performance_recorder is not provided.
 
     Yields:
         GenerationResponse objects containing generated tokens.
 
-    Requirements: 4.1, 4.2, 4.3, 4.4, 11.1, 11.2, 11.3
+    Requirements: 4.1, 4.2, 4.3, 4.4, 8.1, 8.2, 8.4, 11.1, 11.2, 11.3
     """
     logger.info(
         f"Starting pipeline-parallel generation: prompt_len={len(prompt)}, "
         f"max_tokens={max_tokens}, temperature={temperature}, "
         f"top_k={top_k}, top_p={top_p}, rank={rank}, world_size={world_size}"
     )
+
+    # Initialize performance recorder
+    recorder: PerformanceRecorder
+    if performance_recorder is not None:
+        recorder = performance_recorder
+    else:
+        recorder = _create_recorder_from_configuration(
+            optimization_configuration, rank=rank, stage=0
+        )
 
     # Tokenize prompt
     input_ids: list[int] = tokenizer.encode(prompt)  # pyright: ignore[reportAny]
@@ -119,13 +168,18 @@ def pipeline_parallel_generate(
     # Single-stage mode: rank 0 is both first and last stage
     is_single_stage: bool = world_size == 1
 
-    start_time: float = time.perf_counter()
+    _start_time: float = time.perf_counter()
 
     try:
         # --- Prefill Phase ---
-        prefill_start = time.perf_counter()
-        output, _kv_cache = model.forward(input_data=input_tensor)
-        prefill_elapsed = time.perf_counter() - prefill_start
+        with recorder.span(
+            "prefill",
+            mode="prefill",
+            metadata={"prompt_tokens": prompt_tokens},
+        ):
+            prefill_start = time.perf_counter()
+            output, _kv_cache = model.forward(input_data=input_tensor)
+            prefill_elapsed = time.perf_counter() - prefill_start
 
         logger.debug(f"Prefill completed in {prefill_elapsed:.3f}s")
 
@@ -230,80 +284,151 @@ def pipeline_parallel_generate(
         prev_token_id: int = first_token_id
         decode_start: float = time.perf_counter()
 
-        for _ in range(max_tokens - 1):
-            # Embed the received token and forward through local layers
-            token_input = torch.tensor([[prev_token_id]], dtype=torch.long, device=device)
+        with recorder.span(
+            "decode_total",
+            mode="decode",
+            metadata={"max_tokens": max_tokens},
+        ):
+            for step_index in range(max_tokens - 1):
+                # Scheduler wait placeholder — records near-zero time until
+                # continuous batching is implemented and real scheduling
+                # latency is introduced.
+                with recorder.span(
+                    "scheduler_wait",
+                    mode="decode",
+                    metadata={"step": step_index},
+                ):
+                    pass
 
-            step_start = time.perf_counter()
-            output, _kv_cache = model.forward(input_data=token_input)
-            step_elapsed_ms = (time.perf_counter() - step_start) * 1000.0
+                # End-to-end token latency: from decode step start to token
+                # availability (includes compute + communication).
+                with recorder.span(
+                    "end_to_end_token_latency",
+                    mode="decode",
+                    metadata={"step": step_index},
+                ):
+                    # Decode step: forward pass through local layers
+                    with recorder.span(
+                        "decode_step",
+                        mode="decode",
+                        metadata={"step": step_index},
+                    ):
+                        # Embed the received token and forward through local layers
+                        token_input = torch.tensor(
+                            [[prev_token_id]], dtype=torch.long, device=device
+                        )
 
-            if is_single_stage:
-                # Single stage: output is logits, sample directly
-                next_token_id: int = sample_token(
-                    output, temperature=temperature, top_k=top_k, top_p=top_p
+                        step_start = time.perf_counter()
+                        output, _kv_cache = model.forward(input_data=token_input)
+                        _step_elapsed_ms = (time.perf_counter() - step_start) * 1000.0
+
+                    if is_single_stage:
+                        # Single stage: output is logits, sample directly
+                        next_token_id: int = sample_token(
+                            output,
+                            temperature=temperature,
+                            top_k=top_k,
+                            top_p=top_p,
+                        )
+                    else:
+                        # Multi-stage: send hidden_state to rank 1, wait for token broadcast
+                        _send_with_shape(output, dst_rank=1)
+
+                        token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
+                        dist.broadcast(token_tensor, src=world_size - 1)
+                        next_token_id = int(token_tensor.item())
+
+                completion_tokens += 1
+                recorder.increment_counter("tokens_generated")
+
+                # Check for termination sentinel (error/abort from last rank)
+                if next_token_id == TERMINATION_SENTINEL:
+                    logger.debug("Received termination sentinel during decode")
+                    return
+
+                # Calculate generation stats
+                decode_elapsed = time.perf_counter() - decode_start
+                generation_tps: float = (
+                    (completion_tokens - 1) / decode_elapsed
+                    if decode_elapsed > 0
+                    else 0.0
                 )
-            else:
-                # Multi-stage: send hidden_state to rank 1, wait for token broadcast
-                _send_with_shape(output, dst_rank=1)
 
-                token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
-                dist.broadcast(token_tensor, src=world_size - 1)
-                next_token_id = int(token_tensor.item())
+                # Check EOS termination
+                if next_token_id in eos_token_ids:
+                    logger.debug(
+                        f"EOS token {next_token_id} at step {completion_tokens}, terminating"
+                    )
+                    yield GenerationResponse(
+                        text="",
+                        token=next_token_id,
+                        finish_reason="stop",
+                        usage=Usage(
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=prompt_tokens + completion_tokens,
+                            prompt_tokens_details=PromptTokensDetails(
+                                cached_tokens=0, audio_tokens=0
+                            ),
+                            completion_tokens_details=CompletionTokensDetails(
+                                reasoning_tokens=0, audio_tokens=0
+                            ),
+                        ),
+                        stats=GenerationStats(
+                            prompt_tps=prompt_tps,
+                            generation_tps=generation_tps,
+                            prompt_tokens=prompt_tokens,
+                            generation_tokens=completion_tokens,
+                            peak_memory_usage=Memory(in_bytes=0),
+                        ),
+                    )
+                    return
 
-            completion_tokens += 1
+                # Check max_tokens termination
+                if completion_tokens >= max_tokens:
+                    logger.debug(f"max_tokens ({max_tokens}) reached, terminating")
+                    token_text: str = tokenizer.decode([next_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
+                    yield GenerationResponse(
+                        text=token_text,
+                        token=next_token_id,
+                        finish_reason="length",
+                        usage=Usage(
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=prompt_tokens + completion_tokens,
+                            prompt_tokens_details=PromptTokensDetails(
+                                cached_tokens=0, audio_tokens=0
+                            ),
+                            completion_tokens_details=CompletionTokensDetails(
+                                reasoning_tokens=0, audio_tokens=0
+                            ),
+                        ),
+                        stats=GenerationStats(
+                            prompt_tps=prompt_tps,
+                            generation_tps=generation_tps,
+                            prompt_tokens=prompt_tokens,
+                            generation_tokens=completion_tokens,
+                            peak_memory_usage=Memory(in_bytes=0),
+                        ),
+                    )
+                    return
 
-            # Check for termination sentinel (error/abort from last rank)
-            if next_token_id == TERMINATION_SENTINEL:
-                logger.debug("Received termination sentinel during decode")
-                return
-
-            # Calculate generation stats
-            decode_elapsed = time.perf_counter() - decode_start
-            generation_tps: float = (
-                (completion_tokens - 1) / decode_elapsed if decode_elapsed > 0 else 0.0
-            )
-
-            # Check EOS termination
-            if next_token_id in eos_token_ids:
-                logger.debug(
-                    f"EOS token {next_token_id} at step {completion_tokens}, terminating"
-                )
-                yield GenerationResponse(
-                    text="",
-                    token=next_token_id,
-                    finish_reason="stop",
-                    usage=Usage(
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        total_tokens=prompt_tokens + completion_tokens,
-                        prompt_tokens_details=PromptTokensDetails(cached_tokens=0, audio_tokens=0),
-                        completion_tokens_details=CompletionTokensDetails(reasoning_tokens=0, audio_tokens=0),
-                    ),
-                    stats=GenerationStats(
-                        prompt_tps=prompt_tps,
-                        generation_tps=generation_tps,
-                        prompt_tokens=prompt_tokens,
-                        generation_tokens=completion_tokens,
-                        peak_memory_usage=Memory(in_bytes=0),
-                    ),
-                )
-                return
-
-            # Check max_tokens termination
-            if completion_tokens >= max_tokens:
-                logger.debug(f"max_tokens ({max_tokens}) reached, terminating")
-                token_text: str = tokenizer.decode([next_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
+                # Yield intermediate token response
+                token_text = tokenizer.decode([next_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
                 yield GenerationResponse(
                     text=token_text,
                     token=next_token_id,
-                    finish_reason="length",
+                    finish_reason=None,
                     usage=Usage(
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         total_tokens=prompt_tokens + completion_tokens,
-                        prompt_tokens_details=PromptTokensDetails(cached_tokens=0, audio_tokens=0),
-                        completion_tokens_details=CompletionTokensDetails(reasoning_tokens=0, audio_tokens=0),
+                        prompt_tokens_details=PromptTokensDetails(
+                            cached_tokens=0, audio_tokens=0
+                        ),
+                        completion_tokens_details=CompletionTokensDetails(
+                            reasoning_tokens=0, audio_tokens=0
+                        ),
                     ),
                     stats=GenerationStats(
                         prompt_tps=prompt_tps,
@@ -313,32 +438,9 @@ def pipeline_parallel_generate(
                         peak_memory_usage=Memory(in_bytes=0),
                     ),
                 )
-                return
 
-            # Yield intermediate token response
-            token_text = tokenizer.decode([next_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
-            yield GenerationResponse(
-                text=token_text,
-                token=next_token_id,
-                finish_reason=None,
-                usage=Usage(
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    total_tokens=prompt_tokens + completion_tokens,
-                    prompt_tokens_details=PromptTokensDetails(cached_tokens=0, audio_tokens=0),
-                    completion_tokens_details=CompletionTokensDetails(reasoning_tokens=0, audio_tokens=0),
-                ),
-                stats=GenerationStats(
-                    prompt_tps=prompt_tps,
-                    generation_tps=generation_tps,
-                    prompt_tokens=prompt_tokens,
-                    generation_tokens=completion_tokens,
-                    peak_memory_usage=Memory(in_bytes=0),
-                ),
-            )
-
-            # Update for next iteration
-            prev_token_id = next_token_id
+                # Update for next iteration
+                prev_token_id = next_token_id
 
     except Exception as exc:
         # --- Error Handling (Requirements: 11.1, 11.2, 11.3) ---
@@ -418,6 +520,8 @@ def pipeline_parallel_worker_loop(
     temperature: float = 1.0,
     top_k: int | None = None,
     top_p: float | None = None,
+    performance_recorder: PerformanceRecorder | None = None,
+    optimization_configuration: PytorchXpuOptimizationConfiguration | None = None,
 ) -> None:
     """Worker loop for non-rank-0 pipeline stages.
 
@@ -442,13 +546,26 @@ def pipeline_parallel_worker_loop(
         temperature: Sampling temperature (higher = more random).
         top_k: Top-k sampling parameter (None = disabled).
         top_p: Top-p (nucleus) sampling parameter (None = disabled).
+        performance_recorder: Optional pre-configured PerformanceRecorder instance.
+            If provided, takes precedence over optimization_configuration.
+        optimization_configuration: Optional configuration used to create a
+            recorder when performance_recorder is not provided.
 
-    Requirements: 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 9.4, 9.5
+    Requirements: 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 8.1, 8.2, 8.4, 9.4, 9.5
     """
     logger.info(
         f"Starting pipeline-parallel worker loop: rank={rank}/{world_size}, "
         f"device={device}, temperature={temperature}, top_k={top_k}, top_p={top_p}"
     )
+
+    # Initialize performance recorder
+    recorder: PerformanceRecorder
+    if performance_recorder is not None:
+        recorder = performance_recorder
+    else:
+        recorder = _create_recorder_from_configuration(
+            optimization_configuration, rank=rank, stage=rank
+        )
 
     prev_rank: int = rank - 1
     next_rank: int = rank + 1
@@ -468,36 +585,64 @@ def pipeline_parallel_worker_loop(
 
     logger.debug(f"Worker rank={rank}: EOS token IDs: {eos_token_ids}")
 
+    is_first_iteration: bool = True
+    step_index: int = 0
+
     try:
         while True:
-            # Step 1: Receive activation from previous rank (with shape metadata)
-            hidden_state = _recv_with_shape(
-                hidden_size=hidden_size,
-                src_rank=prev_rank,
-                target_device=device,
-            )
+            # Determine mode: first iteration is prefill, subsequent are decode
+            current_mode: EventMode = "prefill" if is_first_iteration else "decode"
 
-            # Step 2: Forward through local layers
-            output, _kv_cache = model.forward(input_data=hidden_state)
+            # Scheduler wait placeholder — records near-zero time until
+            # continuous batching is implemented.
+            with recorder.span(
+                "scheduler_wait",
+                mode="decode",
+                metadata={"step": step_index},
+            ):
+                pass
 
-            # Step 3/4: Send or sample depending on position in pipeline
-            if not is_last_rank:
-                # Middle stage: send activation to next rank
-                _send_with_shape(output, dst_rank=next_rank)
-
-                # Wait for token broadcast from last rank
-                token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
-                dist.broadcast(token_tensor, src=world_size - 1)
-                token_id: int = int(token_tensor.item())
-            else:
-                # Last stage: output is logits, sample token
-                token_id = sample_token(
-                    output, temperature=temperature, top_k=top_k, top_p=top_p
+            # End-to-end token latency for this step
+            with recorder.span(
+                "end_to_end_token_latency",
+                mode=current_mode,
+                metadata={"step": step_index},
+            ):
+                # Step 1: Receive activation from previous rank (with shape metadata)
+                hidden_state = _recv_with_shape(
+                    hidden_size=hidden_size,
+                    src_rank=prev_rank,
+                    target_device=device,
                 )
 
-                # Broadcast sampled token to all ranks
-                token_tensor = torch.tensor([token_id], dtype=torch.long, device="cpu")
-                dist.broadcast(token_tensor, src=rank)
+                # Step 2: Forward through local layers
+                with recorder.span(
+                    "prefill" if is_first_iteration else "decode_step",
+                    mode=current_mode,
+                    metadata={"step": step_index},
+                ):
+                    output, _kv_cache = model.forward(input_data=hidden_state)
+
+                # Step 3/4: Send or sample depending on position in pipeline
+                if not is_last_rank:
+                    # Middle stage: send activation to next rank
+                    _send_with_shape(output, dst_rank=next_rank)
+
+                    # Wait for token broadcast from last rank
+                    token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
+                    dist.broadcast(token_tensor, src=world_size - 1)
+                    token_id: int = int(token_tensor.item())
+                else:
+                    # Last stage: output is logits, sample token
+                    token_id = sample_token(
+                        output, temperature=temperature, top_k=top_k, top_p=top_p
+                    )
+
+                    # Broadcast sampled token to all ranks
+                    token_tensor = torch.tensor([token_id], dtype=torch.long, device="cpu")
+                    dist.broadcast(token_tensor, src=rank)
+
+            recorder.increment_counter("tokens_generated")
 
             # Step 5: Check for termination
             if token_id == TERMINATION_SENTINEL:
@@ -507,6 +652,9 @@ def pipeline_parallel_worker_loop(
             if token_id in eos_token_ids:
                 logger.debug(f"Worker rank={rank}: EOS token {token_id}, exiting")
                 break
+
+            is_first_iteration = False
+            step_index += 1
 
     except Exception as exc:
         logger.error(

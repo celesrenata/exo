@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
+
+if TYPE_CHECKING:
+    from exo.worker.engines.pytorch_xpu.instrumentation import PerformanceRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +162,7 @@ class PipelineParallelShard:
         final_norm: torch.nn.Module | None,
         rotary_emb: torch.nn.Module | None = None,
         text_model_config: Any | None = None,
+        performance_recorder: PerformanceRecorder | None = None,
     ) -> None:
         """Initialize the pipeline-parallel shard.
 
@@ -170,6 +174,9 @@ class PipelineParallelShard:
             final_norm: Final layer norm (only on last rank).
             rotary_emb: Rotary embedding module for position encoding.
             text_model_config: The HuggingFace model config (for layer_types, etc.).
+            performance_recorder: Optional recorder for performance instrumentation.
+                When provided, per-stage, per-layer, final norm, and lm_head
+                timings are recorded via the span context-manager API.
         """
         self.layers = layers
         self.config = config
@@ -178,6 +185,7 @@ class PipelineParallelShard:
         self.final_norm = final_norm
         self.rotary_emb = rotary_emb
         self.text_model_config = text_model_config
+        self.performance_recorder: PerformanceRecorder | None = performance_recorder
 
         # KV cache: one entry per local layer (None until first forward pass)
         self._kv_cache: list[tuple[torch.Tensor, torch.Tensor] | None] = [
@@ -219,7 +227,8 @@ class PipelineParallelShard:
             f"rotary_emb={rotary_emb is not None}, "
             f"layer_types={self._layer_types}, "
             f"hf_cache={self._hf_cache is not None}, "
-            f"compiled={self._compiled_forward is not None}"
+            f"compiled={self._compiled_forward is not None}, "
+            f"instrumented={self.performance_recorder is not None}"
         )
 
     def _detect_layer_types(self) -> list[str]:
@@ -349,6 +358,9 @@ class PipelineParallelShard:
 
             batch_size, seq_len, _ = hidden_states.shape
 
+            # Determine mode for instrumentation: prefill vs decode
+            mode = "prefill" if seq_len > 1 else "decode"
+
             # Compute position IDs based on past KV cache length
             past_seq_len = self._get_past_seq_len(kv_cache)
             position_ids = torch.arange(
@@ -362,40 +374,93 @@ class PipelineParallelShard:
             if self.rotary_emb is not None:
                 position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-            # Process through local layers (compiled or eager path)
-            if self._compiled_forward is not None:
-                try:
-                    hidden_states, updated_kv_cache = self._compiled_forward(
-                        hidden_states, position_ids, position_embeddings, kv_cache
+            # Wrap the entire stage compute in an instrumentation span
+            recorder = self.performance_recorder
+            if recorder is not None:
+                with recorder.span(
+                    "stage_compute",
+                    mode=mode,
+                    metadata={"rank": self.config.rank, "seq_len": seq_len},
+                ):
+                    hidden_states, updated_kv_cache = self._execute_layers(
+                        hidden_states, position_ids, position_embeddings, kv_cache, mode
                     )
-                except Exception as compile_err:
-                    # torch.compile wraps lazily — actual compilation happens on
-                    # first invocation and can fail if triton/inductor is missing.
-                    # Fall back to eager permanently.
-                    logger.warning(
-                        f"torch.compile runtime failure on rank={self.config.rank}: "
-                        f"{compile_err}. Disabling compiled path permanently."
-                    )
-                    self._compiled_forward = None
-                    hidden_states, updated_kv_cache = self._eager_forward(
-                        hidden_states, position_ids, position_embeddings, kv_cache
-                    )
+
+                    # Final norm + lm_head: only on last stage
+                    if self.config.is_last_stage:
+                        if self.final_norm is not None:
+                            with recorder.span(
+                                "final_norm",
+                                mode=mode,
+                                metadata={"rank": self.config.rank},
+                            ):
+                                hidden_states = self.final_norm(hidden_states)
+                        if self.lm_head is not None:
+                            with recorder.span(
+                                "lm_head",
+                                mode=mode,
+                                metadata={"rank": self.config.rank},
+                            ):
+                                hidden_states = self.lm_head(hidden_states)
             else:
-                hidden_states, updated_kv_cache = self._eager_forward(
-                    hidden_states, position_ids, position_embeddings, kv_cache
+                hidden_states, updated_kv_cache = self._execute_layers(
+                    hidden_states, position_ids, position_embeddings, kv_cache, mode
                 )
 
-            # Final norm + lm_head: only on last stage
-            if self.config.is_last_stage:
-                if self.final_norm is not None:
-                    hidden_states = self.final_norm(hidden_states)
-                if self.lm_head is not None:
-                    hidden_states = self.lm_head(hidden_states)
+                # Final norm + lm_head: only on last stage
+                if self.config.is_last_stage:
+                    if self.final_norm is not None:
+                        hidden_states = self.final_norm(hidden_states)
+                    if self.lm_head is not None:
+                        hidden_states = self.lm_head(hidden_states)
 
             # Update internal KV cache state
             self._kv_cache = updated_kv_cache
 
             return hidden_states, updated_kv_cache
+
+    def _execute_layers(
+        self,
+        hidden_states: torch.Tensor,
+        position_ids: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
+        kv_cache: list[tuple[torch.Tensor, torch.Tensor] | None],
+        mode: str,
+    ) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor] | None]]:
+        """Execute layers through compiled or eager path.
+
+        Args:
+            hidden_states: Input tensor [batch, seq_len, hidden_size].
+            position_ids: Position IDs [batch, seq_len].
+            position_embeddings: Precomputed rotary embeddings (cos, sin) or None.
+            kv_cache: KV cache list, one entry per local layer.
+            mode: "prefill" or "decode" for instrumentation classification.
+
+        Returns:
+            (output_hidden_states, updated_kv_cache) tuple.
+        """
+        if self._compiled_forward is not None:
+            try:
+                hidden_states, updated_kv_cache = self._compiled_forward(
+                    hidden_states, position_ids, position_embeddings, kv_cache
+                )
+            except Exception as compile_err:
+                # torch.compile wraps lazily — actual compilation happens on
+                # first invocation and can fail if triton/inductor is missing.
+                # Fall back to eager permanently.
+                logger.warning(
+                    f"torch.compile runtime failure on rank={self.config.rank}: "
+                    f"{compile_err}. Disabling compiled path permanently."
+                )
+                self._compiled_forward = None
+                hidden_states, updated_kv_cache = self._eager_forward(
+                    hidden_states, position_ids, position_embeddings, kv_cache
+                )
+        else:
+            hidden_states, updated_kv_cache = self._eager_forward(
+                hidden_states, position_ids, position_embeddings, kv_cache
+            )
+        return hidden_states, updated_kv_cache
 
     def _forward_layer(
         self,
@@ -428,6 +493,7 @@ class PipelineParallelShard:
             (output_hidden_states, new_kv_entry) tuple.
         """
         layer_type = self._layer_types[layer_index]
+        global_layer_index = self.config.start_layer + layer_index
 
         # Build kwargs for the layer call
         layer_kwargs: dict[str, Any] = {
@@ -454,8 +520,25 @@ class PipelineParallelShard:
         else:
             layer_kwargs["past_key_values"] = None
 
-        # Call the layer
-        layer_outputs = layer(hidden_states, **layer_kwargs)
+        # Determine mode from sequence length for per-layer instrumentation
+        seq_len = hidden_states.shape[1]
+        mode = "prefill" if seq_len > 1 else "decode"
+
+        # Call the layer with optional instrumentation
+        recorder = self.performance_recorder
+        if recorder is not None:
+            with recorder.span(
+                "layer_compute",
+                mode=mode,
+                metadata={
+                    "layer_index": global_layer_index,
+                    "layer_type": layer_type,
+                    "rank": self.config.rank,
+                },
+            ):
+                layer_outputs = layer(hidden_states, **layer_kwargs)
+        else:
+            layer_outputs = layer(hidden_states, **layer_kwargs)
 
         # Extract hidden states (always first element)
         if isinstance(layer_outputs, tuple):
