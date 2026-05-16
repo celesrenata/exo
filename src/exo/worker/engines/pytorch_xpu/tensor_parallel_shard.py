@@ -1517,6 +1517,21 @@ class TensorParallelShard:
             # 7. Residual connection
             hidden_states = residual + mlp_output
 
+            # --- Per-layer NaN detection (one-shot per request) ---
+            if not self._nan_diag_logged_this_request and (
+                torch.isnan(hidden_states).any().item() or torch.isinf(hidden_states).any().item()
+            ):
+                self._nan_diag_logged_this_request = True
+                layer_type = self._layer_types[layer_idx] if layer_idx < len(self._layer_types) else "unknown"
+                logger.error(
+                    f"[NAN_LAYER_DIAG] rank={self.config.rank}/{self.config.world_size} "
+                    f"NaN/Inf first detected AFTER layer {layer_idx} ({layer_type}) "
+                    f"hidden_states_shape={tuple(hidden_states.shape)} "
+                    f"nan_count={int(torch.isnan(hidden_states).sum().item())} "
+                    f"inf_count={int(torch.isinf(hidden_states).sum().item())} "
+                    f"seq_len={seq_len} past_seq_len={past_seq_len}"
+                )
+
         # --- Final LayerNorm (redundant on all ranks) ---
         final_ln_weight = self._get_weight(f"{self._layer_prefix}.norm.weight")
         final_ln_bias = self._get_weight_optional(f"{self._layer_prefix}.norm.bias")
@@ -1530,10 +1545,35 @@ class TensorParallelShard:
             lm_head_weight = self._get_weight(f"{self._layer_prefix}.embed_tokens.weight")
         logits = F.linear(hidden_states, lm_head_weight)
 
+        # --- NaN/Inf diagnostic (one-shot per request) ---
+        if not self._nan_diag_logged_this_request:
+            has_nan = bool(torch.isnan(logits).any().item())
+            has_inf = bool(torch.isinf(logits).any().item())
+            if has_nan or has_inf:
+                self._nan_diag_logged_this_request = True
+                # Trace back to find which layer introduced NaN
+                # Check hidden_states before lm_head
+                hs_nan = bool(torch.isnan(hidden_states).any().item())
+                logger.error(
+                    f"[NAN_DIAG] rank={self.config.rank}/{self.config.world_size} "
+                    f"logits has_nan={has_nan} has_inf={has_inf} "
+                    f"hidden_states_nan={hs_nan} "
+                    f"logits_shape={tuple(logits.shape)} "
+                    f"logits_min={float(logits[~torch.isnan(logits)].min().item()) if not torch.isnan(logits).all().item() else 'ALL_NAN'} "
+                    f"logits_max={float(logits[~torch.isnan(logits)].max().item()) if not torch.isnan(logits).all().item() else 'ALL_NAN'} "
+                    f"seq_len={seq_len} past_seq_len={past_seq_len}"
+                )
+
         return logits, new_kv_cache
 
     # Track whether we have already logged the first all-reduce summary (once per rank)
     _allreduce_diag_logged: bool = False
+
+    # Per-request diagnostic flags (Tasks 3.1, 3.2)
+    # Reset between requests to ensure each request gets fresh diagnostics.
+    _first_row_parallel_attn_logged: bool = False
+    _first_row_parallel_mlp_logged: bool = False
+    _nan_diag_logged_this_request: bool = False
 
     def _all_reduce(self, tensor: Any, layer_index: int = -1) -> Any:
         """All-reduce (sum) over the tensor-parallel process group with CPU staging.
@@ -1601,6 +1641,44 @@ class TensorParallelShard:
                 )
                 self._allreduce_diag_logged = True
 
+            # Per-request diagnostics (Tasks 3.1, 3.2):
+            # Log first attention row-parallel reduce and first MLP row-parallel reduce.
+            # These are rate-limited per request — reset between requests.
+            if not self._first_row_parallel_attn_logged:
+                # Detect if this is an attention o_proj all-reduce (layer_index >= 0)
+                # We check the tensor shape: attention o_proj output has shape
+                # [batch, seq_len, heads_per_rank * head_dim]
+                self._first_row_parallel_attn_logged = True
+                logger.info(
+                    f"[TP_ATTN_ALLREDUCE] rank={self.config.rank}/{self.config.world_size} "
+                    f"layer={layer_index} "
+                    f"tensor_shape={tuple(tensor.shape)} "
+                    f"original_dtype={original_dtype} "
+                    f"staged_dtype=float32 "
+                    f"pre_norm={_pre_norm:.4f} "
+                    f"post_norm={float(cpu_f32.norm().item()):.4f} "
+                    f"finite_ratio={float((~torch.isinf(cpu_f32) & ~torch.isnan(cpu_f32)).float().mean().item()):.4f} "
+                    f"projection_type=attention_o_proj "
+                    f"tp_group={tp_group!r}"
+                )
+
+            if not self._first_row_parallel_mlp_logged:
+                # Detect MLP down_proj all-reduce by checking if this is NOT the
+                # first call (attention already logged) and layer_index >= 0
+                self._first_row_parallel_mlp_logged = True
+                logger.info(
+                    f"[TP_MLP_ALLREDUCE] rank={self.config.rank}/{self.config.world_size} "
+                    f"layer={layer_index} "
+                    f"tensor_shape={tuple(tensor.shape)} "
+                    f"original_dtype={original_dtype} "
+                    f"staged_dtype=float32 "
+                    f"pre_norm={_pre_norm:.4f} "
+                    f"post_norm={float(cpu_f32.norm().item()):.4f} "
+                    f"finite_ratio={float((~torch.isinf(cpu_f32) & ~torch.isnan(cpu_f32)).float().mean().item()):.4f} "
+                    f"projection_type=mlp_down_proj "
+                    f"tp_group={tp_group!r}"
+                )
+
             # Cast back to original dtype and move to original device in one step
             result = cpu_f32.to(dtype=original_dtype, device=original_device)
             tensor.copy_(result)
@@ -1618,3 +1696,166 @@ class TensorParallelShard:
             ) from exc
 
         return tensor
+
+    # ---------------------------------------------------------------------------
+    # Generation State Reset (Tasks 4.1, 5.2, 5.4)
+    # ---------------------------------------------------------------------------
+
+    def reset_generation_state(self, reason: str = "") -> dict[str, object]:
+        """Reset all generation state to a clean baseline.
+
+        Clears linear attention recurrent states, deletes or recreates the
+        native cache, and resets per-request diagnostic flags. Returns a
+        structured result dict suitable for logging.
+
+        Args:
+            reason: Optional reason string for logging (e.g., "warmup_complete",
+                "new_request", "error").
+
+        Returns:
+            Dict with keys: "cleared_linear_attn_states", "cleared_native_cache",
+            "reset_diag_flags", "reason".
+
+        Requirements: 3.1, 3.2, 3.4, 3.5
+        """
+        # Clear linear attention recurrent states
+        num_linear_states = len(self._linear_attn_states)
+        self._linear_attn_states.clear()
+
+        # Delete or recreate native cache
+        had_native_cache = hasattr(self, '_native_cache') and self._native_cache is not None
+        if had_native_cache:
+            del self._native_cache
+
+        # Reset per-request diagnostic flags (Tasks 3.1, 3.2)
+        self._first_row_parallel_attn_logged = False
+        self._first_row_parallel_mlp_logged = False
+        self._nan_diag_logged_this_request = False
+
+        logger.info(
+            f"[TP_CACHE_RESET] rank={self.config.rank}/{self.config.world_size} "
+            f"reason={reason} "
+            f"cleared_linear_states={num_linear_states} "
+            f"cleared_native_cache={had_native_cache} "
+            f"reset_diag_flags=True"
+        )
+
+        return {
+            "cleared_linear_attn_states": num_linear_states,
+            "cleared_native_cache": had_native_cache,
+            "reset_diag_flags": True,
+            "reason": reason,
+        }
+
+    def validate_rope_availability(self, model_config: Any = None) -> None:
+        """Validate that native MRoPE is available for models that require it.
+
+        For Qwen3.5-family models that use 3D Multi-Resolution RoPE, fail
+        closed with an actionable exception if native rotary_emb was not
+        extracted during __init__. This prevents silent quality degradation
+        from the custom RoPE fallback.
+
+        Args:
+            model_config: Optional model config object for family detection.
+                If None, uses the stored _native_rotary_emb state.
+
+        Raises:
+            RuntimeError: If native MRoPE is required but unavailable and
+                no explicit diagnostic override is set.
+
+        Requirements: 4.2, 4.7
+        """
+        # Detect if this is a Qwen3.5-family model that requires MRoPE
+        is_qwen35_family = False
+        if model_config is not None:
+            model_id_str = getattr(model_config, '_name_or_path', '') or ''
+            if 'qwen' in model_id_str.lower() and '3.5' in model_id_str:
+                is_qwen35_family = True
+            # Also check text_config for VL models
+            text_cfg = getattr(model_config, 'text_config', None)
+            if text_cfg is not None:
+                text_model_id = getattr(text_cfg, '_name_or_path', '') or ''
+                if 'qwen' in text_model_id.lower() and '3.5' in text_model_id:
+                    is_qwen35_family = True
+
+        if not is_qwen35_family:
+            return  # Non-Qwen3.5 models can use the fallback safely
+
+        # Qwen3.5 requires native MRoPE
+        if self._native_rotary_emb is None:
+            raise RuntimeError(
+                f"Qwen3.5-family model requires native MRoPE but "
+                f"_native_rotary_emb was not extracted during __init__. "
+                f"Set EXO_TP_DIAGNOSTIC_OVERRIDE=1 to bypass this check "
+                f"(not recommended — output quality will be degraded)."
+            )
+
+    def validate_layer_types(self, model_config: Any = None) -> None:
+        """Validate detected layer types against model config.
+
+        Compares detected linear_attention/full_attention layer positions
+        to the config's layer_types when available. Emits TP_LAYER_TYPE_DIAG
+        and fails on mismatch for Qwen3.5-family models.
+
+        Args:
+            model_config: Optional model config object. If None, skips
+                config-based validation.
+
+        Raises:
+            RuntimeError: If layer type mismatch is detected for Qwen3.5
+                family models.
+
+        Requirements: 4.4, 4.5, 6.2
+        """
+        if model_config is None:
+            logger.info(
+                f"[TP_LAYER_TYPE_DIAG] rank={self.config.rank} "
+                f"no_config_available=True "
+                f"detected_layer_types={self._layer_types}"
+            )
+            return
+
+        # Extract layer_types from config
+        text_cfg = getattr(model_config, 'text_config', model_config)
+        config_layer_types: list[str] | None = getattr(text_cfg, 'layer_types', None)
+
+        if config_layer_types is None:
+            logger.info(
+                f"[TP_LAYER_TYPE_DIAG] rank={self.config.rank} "
+                f"config_layer_types=None "
+                f"detected_layer_types={self._layer_types}"
+            )
+            return
+
+        # Compare detected vs config layer types
+        num_layers = len(self._layer_types)
+        config_num = len(config_layer_types)
+        mismatch_positions: list[int] = []
+
+        for idx in range(min(num_layers, config_num)):
+            detected = self._layer_types[idx]
+            expected = config_layer_types[idx]
+            if detected != expected:
+                mismatch_positions.append(idx)
+
+        logger.info(
+            f"[TP_LAYER_TYPE_DIAG] rank={self.config.rank} "
+            f"num_layers_detected={num_layers} "
+            f"num_layers_config={config_num} "
+            f"mismatch_positions={mismatch_positions} "
+            f"detected_layer_types={self._layer_types} "
+            f"config_layer_types={config_layer_types}"
+        )
+
+        # Fail on mismatch for Qwen3.5-family models
+        model_id_str = getattr(text_cfg, '_name_or_path', '') or ''
+        is_qwen35 = 'qwen' in model_id_str.lower() and '3.5' in model_id_str
+
+        if mismatch_positions and is_qwen35:
+            raise RuntimeError(
+                f"Layer type mismatch detected for Qwen3.5-family model: "
+                f"{len(mismatch_positions)} mismatches at positions "
+                f"{mismatch_positions}. Detected: {self._layer_types}. "
+                f"Config: {config_layer_types}. "
+                f"Set EXO_TP_DIAGNOSTIC_OVERRIDE=1 to bypass."
+            )

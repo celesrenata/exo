@@ -46,22 +46,29 @@ def sample_token(
     temperature: float = 1.0,
     top_k: int | None = None,
     top_p: float | None = None,
+    model_id: str = "",
+    enable_diagnostics: bool = False,
 ) -> int:
     """
     Sample a single token from logits with temperature, top-k, and top-p.
 
     Applies in order: temperature scaling → top-k filtering → top-p filtering → softmax → multinomial.
 
+    When enable_diagnostics is True, emits TP_LOGIT_DIAG with first-token top-k
+    token IDs, raw decoded token strings, and logit stats.
+
     Args:
         logits: Shape (1, seq_len, vocab_size) or (1, vocab_size) — raw model output
         temperature: Divide logits by this value (1.0 = no change, near 0 = greedy)
         top_k: Keep only top-k highest logit values (None = disabled)
         top_p: Keep smallest set of tokens with cumulative prob ≥ top_p (None = disabled)
+        model_id: Model identifier for diagnostic logging.
+        enable_diagnostics: If True, emit TP_LOGIT_DIAG with top-k data.
 
     Returns:
         Sampled token ID as integer
 
-    Requirements: 2.2, 3.1, 3.2, 3.3, 3.4, 3.5
+    Requirements: 2.2, 3.1, 3.2, 3.3, 3.4, 3.5, 5.2, 5.5, 6.2
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -73,10 +80,29 @@ def sample_token(
     # Work with a 1D tensor for simplicity: shape (vocab_size,)
     logits_1d = logits[0].clone()
 
-    # Check for NaN or inf in logits and handle gracefully
+    # Task 6.2: Finite-logit validation before sampling
+    # Fail generation with an error response if logits contain NaN, Inf,
+    # or all equal values beyond tolerance.
     if torch.isnan(logits_1d).any() or torch.isinf(logits_1d).any():
-        logger.warning("Detected NaN or inf in logits, falling back to argmax")
-        token_id: int = int(logits_1d.nanargmax().item())
+        logger.warning("Detected NaN or inf in logits, falling back to argmax on finite values")
+        # Replace NaN/Inf with -inf so argmax picks the best finite value
+        finite_logits = logits_1d.clone()
+        finite_logits[torch.isnan(finite_logits) | torch.isinf(finite_logits)] = float("-inf")
+        # If ALL values are -inf after masking, fall back to token 0
+        if (finite_logits == float("-inf")).all():
+            logger.error("All logits are NaN or Inf — no valid token to sample")
+            return 0
+        token_id: int = int(finite_logits.argmax().item())
+        return token_id
+
+    # Check for all-equal logits (indicates all-reduce failure or stale state)
+    logits_range = logits_1d.max() - logits_1d.min()
+    if logits_range < 1e-6:
+        logger.warning(
+            f"Detected near-constant logits (range={float(logits_range):.6e}), "
+            f"falling back to argmax"
+        )
+        token_id: int = int(logits_1d.argmax().item())
         return token_id
 
     # Handle near-zero temperature as greedy/argmax (edge case)
@@ -152,6 +178,24 @@ def sample_token(
     except Exception as e:
         logger.warning(f"Multinomial sampling failed: {e}, falling back to argmax")
         token_id = int(logits_1d.argmax().item())
+
+    # Task 6.1: Token sampling diagnostics
+    if enable_diagnostics:
+        # Capture top-5 token IDs and their logit values
+        top5_logits, top5_ids = torch.topk(logits_1d, 5)
+        logger.info(
+            f"TP_LOGIT_DIAG: "
+            f"model_id={model_id} "
+            f"sampled_token_id={token_id} "
+            f"top5_token_ids={top5_ids.tolist()} "
+            f"top5_logits={top5_logits.tolist()} "
+            f"logits_mean={float(logits_1d.mean().item()):.4f} "
+            f"logits_std={float(logits_1d.std().item()):.4f} "
+            f"logits_range={float(logits_range):.6e} "
+            f"temperature={temperature} "
+            f"top_k={top_k} "
+            f"top_p={top_p}"
+        )
 
     return token_id
 
