@@ -89,6 +89,9 @@ class PyTorchXPUEngine(Engine):
                         input_data=dummy_input,
                         past_key_values=None,
                     )
+                    # Task 4.2: Call reset after warmup when the model supports it
+                    if hasattr(self.model, "reset_generation_state"):
+                        self.model.reset_generation_state(reason="warmup_complete")
                 elif hasattr(self.model, "__call__"):
                     # Standard HuggingFace model
                     dummy_input = torch.tensor(
@@ -166,15 +169,24 @@ class PyTorchXPUEngine(Engine):
 
             # If finished, clean up
             if response.finish_reason is not None:
+                # Task 4.5: Reset generation state on completion
+                if hasattr(self.model, "reset_generation_state"):
+                    self.model.reset_generation_state(reason="generation_complete")
                 output.append((task.task_id, FinishedResponse()))
                 self._active = None
 
         except StopIteration:
+            # Task 4.5: Reset generation state on cancellation/stop
+            if hasattr(self.model, "reset_generation_state"):
+                self.model.reset_generation_state(reason="generation_stopped")
             output.append((task.task_id, FinishedResponse()))
             self._active = None
 
         except Exception as e:
             logger.error(f"PyTorchXPUEngine.step error: {e}", exc_info=True)
+            # Task 4.5: Reset generation state on error
+            if hasattr(self.model, "reset_generation_state"):
+                self.model.reset_generation_state(reason="generation_error")
             model_id = ModelId(str(task.task_params.model))
             output.append(
                 (
@@ -201,35 +213,29 @@ class PyTorchXPUEngine(Engine):
         if task.task_params.input:
             prompt = task.task_params.input[0].content or ""
 
+        # Build messages list from task params, including system prompt if present
+        instructions = getattr(task.task_params, "instructions", None)
+        messages: list[dict[str, str]] = []
+        if instructions:
+            messages.append({"role": "system", "content": str(instructions)})
+        messages.append({"role": "user", "content": prompt})
+
         # Apply chat template if tokenizer supports it.
-        # enable_thinking controls whether Qwen3.5 thinking mode is active.
-        # When None (not set by caller), default to False — thinking tokens
-        # (<think>...</think>) are stripped by skip_special_tokens=True but consume
-        # max_tokens budget before the model produces any visible output.
-        # Callers can pass enable_thinking=True via the API to enable reasoning.
-        enable_thinking: bool = bool(getattr(task.task_params, "enable_thinking", None) or False)
+        # Do NOT pass enable_thinking — let the tokenizer use its default behavior.
+        # Passing enable_thinking=False causes Qwen3.5 to inject <think></think> tokens
+        # that confuse generation when the model wasn't prompted for reasoning.
         if hasattr(self.tokenizer, "apply_chat_template"):
             try:
-                messages = [{"role": "user", "content": prompt}]
-                try:
-                    prompt = self.tokenizer.apply_chat_template(
-                        messages,
-                        tokenize=False,
-                        add_generation_prompt=True,
-                        enable_thinking=enable_thinking,
-                    )
-                except TypeError:
-                    # Tokenizer doesn't support enable_thinking — fall back without it
-                    prompt = self.tokenizer.apply_chat_template(
-                        messages, tokenize=False, add_generation_prompt=True
-                    )
+                prompt = self.tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
             except Exception:
                 pass  # Fall back to raw prompt
 
-        # Log the final prompt suffix to verify enable_thinking is working
+        # Log the final prompt suffix for debugging
         from exo.worker.runner.bootstrap import logger as _runner_logger  # pyright: ignore[reportAny]
         _runner_logger.info(
-            f"PyTorchXPUEngine._build_generator: enable_thinking={enable_thinking} "
+            f"PyTorchXPUEngine._build_generator: "
             f"prompt_tail={repr(prompt[-120:]) if isinstance(prompt, str) else repr(prompt)}"
         )
 
