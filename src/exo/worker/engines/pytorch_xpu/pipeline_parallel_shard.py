@@ -184,6 +184,25 @@ class PipelineParallelShard:
             None
         ] * config.num_local_layers
 
+        # HuggingFace DynamicCache for native layer compatibility.
+        # Linear attention layers (GatedDeltaNet) store conv_state and recurrent_state
+        # inside this cache object. Without it, they have no memory between decode steps.
+        self._hf_cache: Any | None = None
+        try:
+            from transformers.cache_utils import DynamicCache as _DynamicCache
+            if text_model_config is not None:
+                self._hf_cache = _DynamicCache(config=text_model_config)
+            else:
+                self._hf_cache = _DynamicCache()
+            logger.info(
+                f"Pipeline shard rank={config.rank}: created DynamicCache for native layer state"
+            )
+        except ImportError:
+            logger.warning(
+                "Pipeline shard: could not import DynamicCache from transformers. "
+                "Linear attention layers will not maintain recurrent state between decode steps."
+            )
+
         # Detect layer types for hybrid attention models (Qwen3.5)
         self._layer_types: list[str] = self._detect_layer_types()
 
@@ -199,6 +218,7 @@ class PipelineParallelShard:
             f"final_norm={final_norm is not None}, "
             f"rotary_emb={rotary_emb is not None}, "
             f"layer_types={self._layer_types}, "
+            f"hf_cache={self._hf_cache is not None}, "
             f"compiled={self._compiled_forward is not None}"
         )
 
@@ -419,8 +439,13 @@ class PipelineParallelShard:
         if position_embeddings is not None:
             layer_kwargs["position_embeddings"] = position_embeddings
 
-        # For full attention layers, pass the KV cache
-        if layer_type == "full_attention" and layer_past is not None:
+        # Pass the HuggingFace DynamicCache to ALL layers (both full_attention
+        # and linear_attention). Linear attention layers (GatedDeltaNet) store
+        # conv_state and recurrent_state inside this cache object. Without it,
+        # they lose memory between decode steps and produce garbage.
+        if self._hf_cache is not None:
+            layer_kwargs["past_key_value"] = self._hf_cache
+        elif layer_type == "full_attention" and layer_past is not None:
             layer_kwargs["past_key_value"] = layer_past
         else:
             layer_kwargs["past_key_value"] = None
@@ -436,7 +461,11 @@ class PipelineParallelShard:
 
         # Extract KV cache update
         new_kv: tuple[torch.Tensor, torch.Tensor] | None = None
-        if layer_type == "full_attention":
+        if self._hf_cache is not None:
+            # When using HuggingFace DynamicCache, the cache is updated in-place
+            # by the layer. We don't need to extract KV entries manually.
+            pass
+        elif layer_type == "full_attention":
             if isinstance(layer_outputs, tuple) and len(layer_outputs) > 1:
                 cache_entry = layer_outputs[1]
                 if cache_entry is not None:
@@ -459,7 +488,8 @@ class PipelineParallelShard:
         """Get the past sequence length from the KV cache.
 
         Looks through the cache entries to find the first non-None entry
-        and returns its sequence length dimension.
+        and returns its sequence length dimension. Also checks the HF
+        DynamicCache if available.
 
         Args:
             kv_cache: List of (key, value) tuples or None entries.
@@ -467,6 +497,12 @@ class PipelineParallelShard:
         Returns:
             Past sequence length (0 if no cache entries exist).
         """
+        # Check HF DynamicCache first (it tracks seq_length internally)
+        if self._hf_cache is not None and hasattr(self._hf_cache, "get_seq_length"):
+            seq_len = self._hf_cache.get_seq_length()
+            if seq_len > 0:
+                return seq_len
+
         for entry in kv_cache:
             if entry is not None:
                 # key shape: [batch, num_kv_heads, seq_len, head_dim]
@@ -479,9 +515,19 @@ class PipelineParallelShard:
         Requirements: 5.3, 6.3
         """
         self._kv_cache = [None] * self.config.num_local_layers
+        # Reset the HuggingFace DynamicCache (clears linear attention recurrent state)
+        if self._hf_cache is not None:
+            try:
+                from transformers.cache_utils import DynamicCache as _DynamicCache
+                if self.text_model_config is not None:
+                    self._hf_cache = _DynamicCache(config=self.text_model_config)
+                else:
+                    self._hf_cache = _DynamicCache()
+            except ImportError:
+                self._hf_cache = None
         logger.debug(
             f"Pipeline stage rank={self.config.rank}: state reset "
-            f"({self.config.num_local_layers} cache entries cleared)"
+            f"({self.config.num_local_layers} cache entries cleared, hf_cache recreated)"
         )
 
     def __call__(
