@@ -410,8 +410,8 @@ class PipelineParallelShard:
 
         Handles both full attention and linear attention layers transparently.
         Each HuggingFace layer module expects:
-            layer(hidden_states, attention_mask=None, position_ids=None,
-                  past_key_value=None, use_cache=True, position_embeddings=None)
+            layer(hidden_states, position_embeddings=None, attention_mask=None,
+                  position_ids=None, past_key_values=None, use_cache=True)
 
         For linear attention layers (Qwen3.5 hybrid), the layer uses DynamicCache
         internally and the KV cache entry is None.
@@ -443,12 +443,16 @@ class PipelineParallelShard:
         # and linear_attention). Linear attention layers (GatedDeltaNet) store
         # conv_state and recurrent_state inside this cache object. Without it,
         # they lose memory between decode steps and produce garbage.
+        #
+        # CRITICAL: The kwarg name MUST be "past_key_values" (plural) to match
+        # Qwen3_5DecoderLayer.forward(). Using singular "past_key_value" causes
+        # the argument to be swallowed by **kwargs and silently ignored.
         if self._hf_cache is not None:
-            layer_kwargs["past_key_value"] = self._hf_cache
+            layer_kwargs["past_key_values"] = self._hf_cache
         elif layer_type == "full_attention" and layer_past is not None:
-            layer_kwargs["past_key_value"] = layer_past
+            layer_kwargs["past_key_values"] = layer_past
         else:
-            layer_kwargs["past_key_value"] = None
+            layer_kwargs["past_key_values"] = None
 
         # Call the layer
         layer_outputs = layer(hidden_states, **layer_kwargs)
