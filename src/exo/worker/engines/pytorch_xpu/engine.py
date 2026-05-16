@@ -221,21 +221,31 @@ class PyTorchXPUEngine(Engine):
         messages.append({"role": "user", "content": prompt})
 
         # Apply chat template if tokenizer supports it.
-        # Do NOT pass enable_thinking — let the tokenizer use its default behavior.
-        # Passing enable_thinking=False causes Qwen3.5 to inject <think></think> tokens
-        # that confuse generation when the model wasn't prompted for reasoning.
+        # enable_thinking=False tells Qwen3.5 to skip the <think>...</think> block.
+        # Without this, the model spends all max_tokens on internal reasoning
+        # that gets stripped by skip_special_tokens=True, producing no visible output.
+        enable_thinking: bool = bool(getattr(task.task_params, "enable_thinking", None) or False)
         if hasattr(self.tokenizer, "apply_chat_template"):
             try:
-                prompt = self.tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True
-                )
+                try:
+                    prompt = self.tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                        enable_thinking=enable_thinking,
+                    )
+                except TypeError:
+                    # Tokenizer doesn't support enable_thinking — fall back without it
+                    prompt = self.tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    )
             except Exception:
                 pass  # Fall back to raw prompt
 
         # Log the final prompt suffix for debugging
         from exo.worker.runner.bootstrap import logger as _runner_logger  # pyright: ignore[reportAny]
         _runner_logger.info(
-            f"PyTorchXPUEngine._build_generator: "
+            f"PyTorchXPUEngine._build_generator: enable_thinking={enable_thinking} "
             f"prompt_tail={repr(prompt[-120:]) if isinstance(prompt, str) else repr(prompt)}"
         )
 
