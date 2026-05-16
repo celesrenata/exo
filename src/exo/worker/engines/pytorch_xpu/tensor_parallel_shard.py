@@ -847,12 +847,16 @@ class TensorParallelShard:
         return self.sharded_state_dict.get(key)
 
     def _rms_norm(self, hidden_states: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
-        """Apply RMS normalization (used by Qwen models instead of LayerNorm)."""
+        """Apply RMS normalization (Qwen3.5 style: weight is (1 + learned_weight)).
+
+        Qwen3.5 RMSNorm initializes weight to zeros and applies as (1 + weight),
+        unlike Llama which initializes to ones and applies as weight directly.
+        """
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + eps)
-        return (weight * hidden_states).to(input_dtype)
+        return ((1.0 + weight.float()) * hidden_states).to(input_dtype)
 
     def _apply_norm(
         self,
