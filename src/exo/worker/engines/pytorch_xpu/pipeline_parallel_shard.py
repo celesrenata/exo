@@ -150,7 +150,7 @@ class PipelineParallelShard:
     This class does NOT inherit from nn.Module. It wraps HuggingFace layer
     modules and delegates forward passes to them directly.
 
-    Requirements: 2.1, 2.2, 2.3, 2.4, 5.1, 5.2, 6.1, 6.2
+    Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 5.1, 5.2, 6.1, 6.2
     """
 
     def __init__(
@@ -217,6 +217,13 @@ class PipelineParallelShard:
         # Attempt torch.compile() for kernel fusion (fallback to eager on failure)
         self._compiled_forward = self._try_compile()
 
+        # Decode shape stability tracking for fast-path communication.
+        # The fast path relies on decode activations having a stable shape
+        # (batch_size, 1, hidden_size) every step. These fields track whether
+        # the shard has entered steady-state decode mode and detect shape changes.
+        self._last_output_shape: tuple[int, ...] | None = None
+        self._in_decode_steady_state: bool = False
+
         logger.info(
             f"PipelineParallelShard initialized: rank={config.rank}/{config.world_size}, "
             f"layers=[{config.start_layer}, {config.end_layer}), "
@@ -280,6 +287,108 @@ class PipelineParallelShard:
                 f"Falling back to eager execution."
             )
             return None
+
+    @property
+    def decode_activation_shape(self) -> tuple[int, int, int]:
+        """Return the expected decode activation shape for single-request mode.
+
+        During decode, every step produces activations with shape
+        (1, 1, hidden_size). The pipeline generator uses this to validate
+        shapes before attempting fast-path send.
+
+        Returns:
+            (1, 1, hidden_size) tuple representing the expected decode shape.
+
+        Requirements: 2.1, 2.5
+        """
+        return (1, 1, self.config.hidden_size)
+
+    @property
+    def is_decode_shape_stable(self) -> bool:
+        """Whether the shard is in steady-state decode mode with stable shapes.
+
+        Returns True when the shard has completed prefill and is producing
+        fixed-shape decode activations (batch_size=1, seq_len=1). This signals
+        to the pipeline generator that the fast path is safe to use.
+
+        The shard enters steady-state decode after the first decode step
+        produces an output matching the expected decode shape. It exits
+        steady-state if the output shape changes (e.g., during a new prefill
+        or batch size change).
+
+        Requirements: 2.1, 2.2, 2.5
+        """
+        return self._in_decode_steady_state
+
+    def _validate_decode_output(self, output: torch.Tensor, batch_size: int, seq_len: int) -> torch.Tensor:
+        """Validate and prepare decode output for fast-path communication.
+
+        During decode (seq_len=1), validates that the output activation tensor:
+        - Has the expected shape (batch_size, 1, hidden_size)
+        - Is contiguous in memory (required by the fast path)
+        - Has the expected dtype (bfloat16)
+
+        If the output is not contiguous, makes it contiguous before returning.
+        Logs shape changes at debug level for diagnostics.
+
+        Args:
+            output: The output activation tensor from the forward pass.
+            batch_size: Expected batch size.
+            seq_len: Sequence length of this step.
+
+        Returns:
+            The validated (and possibly made contiguous) output tensor.
+
+        Requirements: 2.1, 2.5
+        """
+        current_shape = tuple(output.shape)
+
+        # Track shape changes for fast-path stability detection
+        if self._last_output_shape is not None and current_shape != self._last_output_shape:
+            logger.debug(
+                f"Pipeline stage rank={self.config.rank}: output shape changed "
+                f"from {self._last_output_shape} to {current_shape}. "
+                f"Fast path needs fallback to generic."
+            )
+            self._in_decode_steady_state = False
+
+        self._last_output_shape = current_shape
+
+        # Only validate and enforce stability for decode steps (seq_len=1)
+        if seq_len == 1:
+            expected_shape = (batch_size, 1, self.config.hidden_size)
+
+            if current_shape == expected_shape:
+                # Shape matches expected decode shape — enter steady state
+                self._in_decode_steady_state = True
+            else:
+                # Shape does not match expected decode shape — not stable
+                self._in_decode_steady_state = False
+                logger.debug(
+                    f"Pipeline stage rank={self.config.rank}: decode output shape "
+                    f"{current_shape} does not match expected {expected_shape}. "
+                    f"Fast path unavailable."
+                )
+
+            # Validate dtype (expected bfloat16 for decode activations)
+            if output.dtype != torch.bfloat16:
+                logger.debug(
+                    f"Pipeline stage rank={self.config.rank}: decode output dtype "
+                    f"{output.dtype} is not bfloat16. Fast path requires bfloat16."
+                )
+
+            # Ensure contiguity (required by fast-path Gloo send)
+            if not output.is_contiguous():
+                output = output.contiguous()
+                logger.debug(
+                    f"Pipeline stage rank={self.config.rank}: made decode output "
+                    f"contiguous for fast-path communication."
+                )
+        else:
+            # Prefill step — not in decode steady state
+            self._in_decode_steady_state = False
+
+        return output
 
     def _eager_forward(
         self,
@@ -416,6 +525,13 @@ class PipelineParallelShard:
 
             # Update internal KV cache state
             self._kv_cache = updated_kv_cache
+
+            # Validate decode output shape stability for fast-path communication.
+            # Only applies to non-last-stage shards (last stage returns logits).
+            if not self.config.is_last_stage:
+                hidden_states = self._validate_decode_output(
+                    hidden_states, batch_size, seq_len
+                )
 
             return hidden_states, updated_kv_cache
 
@@ -602,6 +718,9 @@ class PipelineParallelShard:
         Requirements: 5.3, 6.3
         """
         self._kv_cache = [None] * self.config.num_local_layers
+        # Reset decode shape stability tracking
+        self._last_output_shape = None
+        self._in_decode_steady_state = False
         # Reset the HuggingFace DynamicCache (clears linear attention recurrent state)
         if self._hf_cache is not None:
             try:
@@ -614,7 +733,8 @@ class PipelineParallelShard:
                 self._hf_cache = None
         logger.debug(
             f"Pipeline stage rank={self.config.rank}: state reset "
-            f"({self.config.num_local_layers} cache entries cleared, hf_cache recreated)"
+            f"({self.config.num_local_layers} cache entries cleared, hf_cache recreated, "
+            f"decode shape stability reset)"
         )
 
     def __call__(

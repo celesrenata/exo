@@ -18,8 +18,13 @@ Where:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn.functional as F
+
+if TYPE_CHECKING:
+    from exo.worker.engines.pytorch_xpu.instrumentation import PerformanceRecorder
 
 
 def l2_normalize(x: torch.Tensor, dim: int = -1, eps: float = 1e-12) -> torch.Tensor:
@@ -34,6 +39,9 @@ def gated_deltanet_recurrent_step(
     gate: torch.Tensor,    # (batch, num_v_heads) — log-space decay
     beta: torch.Tensor,    # (batch, num_v_heads) — update rate [0,1]
     state: torch.Tensor,   # (batch, num_v_heads, key_head_dim, value_head_dim)
+    *,
+    performance_recorder: PerformanceRecorder | None = None,
+    layer_index: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Single-step recurrent Gated DeltaNet update.
 
@@ -47,11 +55,35 @@ def gated_deltanet_recurrent_step(
         gate: log-space decay gate, shape (B, H)
         beta: sigmoid update rate, shape (B, H)
         state: recurrent state matrix, shape (B, H, d_k, d_v)
+        performance_recorder: optional recorder for timing spans
+        layer_index: optional layer index for metadata
 
     Returns:
         output: shape (B, H, d_v)
         new_state: shape (B, H, d_k, d_v)
     """
+    if performance_recorder is not None:
+        metadata: dict[str, int] = {"batch_size": q.shape[0], "num_heads": q.shape[1], "key_head_dim": q.shape[2]}
+        if layer_index is not None:
+            metadata["layer_index"] = layer_index
+        with performance_recorder.span(
+            "gated_deltanet_recurrent_decode_step",
+            mode="decode",
+            metadata=metadata,
+        ):
+            return _gated_deltanet_recurrent_step_impl(q, k, v, gate, beta, state)
+    return _gated_deltanet_recurrent_step_impl(q, k, v, gate, beta, state)
+
+
+def _gated_deltanet_recurrent_step_impl(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    state: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Implementation of the single-step recurrent Gated DeltaNet update."""
     initial_dtype = q.dtype
 
     # Cast to float32 for numerical stability (critical for state accumulation)
@@ -97,6 +129,9 @@ def gated_deltanet_chunk_prefill(
     beta: torch.Tensor,    # (batch, seq_len, num_v_heads) — update rate [0,1]
     initial_state: torch.Tensor | None = None,
     chunk_size: int = 64,
+    *,
+    performance_recorder: PerformanceRecorder | None = None,
+    layer_index: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Chunk-parallel prefill for Gated DeltaNet.
 
@@ -115,11 +150,43 @@ def gated_deltanet_chunk_prefill(
         beta: sigmoid update rates, shape (B, T, H)
         initial_state: optional initial state, shape (B, H, d_k, d_v)
         chunk_size: size of each chunk (default 64)
+        performance_recorder: optional recorder for timing spans
+        layer_index: optional layer index for metadata
 
     Returns:
         output: shape (B, T, H, d_v)
         final_state: shape (B, H, d_k, d_v)
     """
+    if performance_recorder is not None:
+        # Placeholder: chunked prefill is not yet the primary path.
+        # Increment a counter to track when this code path is entered.
+        performance_recorder.increment_counter("chunked_prefill_not_yet_implemented")
+        metadata: dict[str, int] = {
+            "sequence_length": q.shape[1],
+            "chunk_size": chunk_size,
+            "num_heads": q.shape[2],
+        }
+        if layer_index is not None:
+            metadata["layer_index"] = layer_index
+        with performance_recorder.span(
+            "gated_deltanet_chunk_prefill",
+            mode="prefill",
+            metadata=metadata,
+        ):
+            return _gated_deltanet_chunk_prefill_impl(q, k, v, gate, beta, initial_state, chunk_size)
+    return _gated_deltanet_chunk_prefill_impl(q, k, v, gate, beta, initial_state, chunk_size)
+
+
+def _gated_deltanet_chunk_prefill_impl(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    initial_state: torch.Tensor | None,
+    chunk_size: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Implementation of chunk-parallel prefill for Gated DeltaNet."""
     batch, seq_len, num_heads, d_k = q.shape
     d_v = v.shape[-1]
 
@@ -299,6 +366,9 @@ def gated_deltanet_prefill(
     beta: torch.Tensor,
     initial_state: torch.Tensor | None = None,
     chunk_size: int = 64,
+    *,
+    performance_recorder: PerformanceRecorder | None = None,
+    layer_index: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Prefill forward pass using chunk-parallel algorithm.
 
@@ -314,6 +384,8 @@ def gated_deltanet_prefill(
         beta: sigmoid update rates, shape (B, T, H)
         initial_state: optional initial state, shape (B, H, d_k, d_v)
         chunk_size: chunk size for parallel processing (default 64)
+        performance_recorder: optional recorder for timing spans
+        layer_index: optional layer index for metadata
 
     Returns:
         output: shape (B, T, H, d_v)
@@ -336,6 +408,33 @@ def gated_deltanet_prefill(
     else:
         state = initial_state.clone()
 
+    if performance_recorder is not None:
+        metadata: dict[str, int] = {
+            "sequence_length": seq_len,
+            "num_heads": num_heads,
+            "key_head_dim": d_k,
+        }
+        if layer_index is not None:
+            metadata["layer_index"] = layer_index
+        with performance_recorder.span(
+            "gated_deltanet_prefill_sequential",
+            mode="prefill",
+            metadata=metadata,
+        ):
+            return _gated_deltanet_prefill_sequential_impl(q, k, v, gate, beta, state, seq_len)
+    return _gated_deltanet_prefill_sequential_impl(q, k, v, gate, beta, state, seq_len)
+
+
+def _gated_deltanet_prefill_sequential_impl(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    state: torch.Tensor,
+    seq_len: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Implementation of sequential prefill for Gated DeltaNet."""
     outputs = []
     for t in range(seq_len):
         q_t = q[:, t]
@@ -344,7 +443,7 @@ def gated_deltanet_prefill(
         g_t = gate[:, t]
         b_t = beta[:, t]
 
-        out_t, state = gated_deltanet_recurrent_step(q_t, k_t, v_t, g_t, b_t, state)
+        out_t, state = _gated_deltanet_recurrent_step_impl(q_t, k_t, v_t, g_t, b_t, state)
         outputs.append(out_t)
 
     output = torch.stack(outputs, dim=1)

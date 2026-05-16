@@ -427,3 +427,134 @@ class TestRecvActivationFailure:
         assert "src_rank=2" in error_msg
         assert "local_rank=3" in error_msg
         assert "(4, 16, 256)" in error_msg
+
+
+# ---------------------------------------------------------------------------
+# Tests: Token Result Point-to-Point Communication (Task 2)
+# See test_distributed_token_results.py for full token result tests.
+# ---------------------------------------------------------------------------
+
+# Import the new token result functions and types
+TokenResultPacket = _mod.TokenResultPacket
+PipelineCommunicationError = _mod.PipelineCommunicationError
+_encode_finish_reason = _mod._encode_finish_reason
+_decode_finish_reason = _mod._decode_finish_reason
+
+
+class TestTokenResultFinishReasonEncoding:
+    """Finish reason encoding/decoding round-trips correctly.
+
+    **Validates: Requirements 2.7, 2.8, 2.9**
+    """
+
+    def test_none_round_trips(self) -> None:
+        """None finish reason encodes to 0 and decodes back to None."""
+        assert _encode_finish_reason(None) == 0
+        assert _decode_finish_reason(0) is None
+
+    def test_stop_round_trips(self) -> None:
+        """'stop' finish reason encodes to 1 and decodes back."""
+        assert _encode_finish_reason("stop") == 1
+        assert _decode_finish_reason(1) == "stop"
+
+    def test_length_round_trips(self) -> None:
+        """'length' finish reason encodes to 2 and decodes back."""
+        assert _encode_finish_reason("length") == 2
+        assert _decode_finish_reason(2) == "length"
+
+    def test_unknown_reason_encodes_as_other(self) -> None:
+        """Unknown finish reasons encode as 3 ('other')."""
+        assert _encode_finish_reason("content_filter") == 3
+        assert _decode_finish_reason(3) == "other"
+
+
+class TestSendTokenResultsRaisesOnOversizedRequestId:
+    """send_token_results_to_rank_zero validates request_id length.
+
+    **Validates: Requirements 2.7, 2.9**
+    """
+
+    def test_send_raises_on_oversized_request_id(self) -> None:
+        """Raises PipelineCommunicationError if request_id exceeds max bytes."""
+        send_token_results_to_rank_zero = _mod.send_token_results_to_rank_zero
+
+        mock_torch, mock_dist = _make_torch_mocks()
+        mock_dist.get_rank.return_value = 3
+
+        # Create a request_identifier that exceeds 256 bytes
+        long_id = "x" * 300
+        packet = TokenResultPacket(
+            request_identifier=long_id,
+            token_identifier=1,
+            position=0,
+            finished=False,
+            finish_reason=None,
+        )
+
+        with _patch_torch(mock_torch, mock_dist), pytest.raises(PipelineCommunicationError) as exc_info:
+            send_token_results_to_rank_zero(
+                packet=packet,
+                process_group=MagicMock(),
+                performance_recorder=None,
+            )
+
+        assert "exceeds maximum byte length" in str(exc_info.value)
+
+
+class TestSendTokenResultsRaisesOnDistFailure:
+    """send_token_results_to_rank_zero raises on dist.send failure.
+
+    **Validates: Requirements 2.7, 2.12**
+    """
+
+    def test_send_raises_on_dist_failure(self) -> None:
+        """Raises PipelineCommunicationError on dist.send failure."""
+        send_token_results_to_rank_zero = _mod.send_token_results_to_rank_zero
+
+        mock_torch, mock_dist = _make_torch_mocks()
+        mock_dist.get_rank.return_value = 3
+        mock_dist.send.side_effect = RuntimeError("Network error")
+
+        packet = TokenResultPacket(
+            request_identifier="req-fail",
+            token_identifier=1,
+            position=0,
+            finished=False,
+            finish_reason=None,
+        )
+
+        with _patch_torch(mock_torch, mock_dist), pytest.raises(PipelineCommunicationError) as exc_info:
+            send_token_results_to_rank_zero(
+                packet=packet,
+                process_group=MagicMock(),
+                performance_recorder=None,
+            )
+
+        assert "Failed to send token result" in str(exc_info.value)
+        assert exc_info.value.source_rank == 3
+        assert exc_info.value.destination_rank == 0
+
+
+class TestReceiveTokenResultsRaisesOnDistFailure:
+    """receive_token_results_from_final_rank raises on dist.recv failure.
+
+    **Validates: Requirements 2.7, 2.12**
+    """
+
+    def test_receive_raises_on_dist_failure(self) -> None:
+        """Raises PipelineCommunicationError on dist.recv failure."""
+        receive_token_results_from_final_rank = _mod.receive_token_results_from_final_rank
+
+        mock_torch, mock_dist = _make_torch_mocks()
+        mock_dist.recv.side_effect = RuntimeError("Connection lost")
+
+        with _patch_torch(mock_torch, mock_dist), pytest.raises(PipelineCommunicationError) as exc_info:
+            receive_token_results_from_final_rank(
+                process_group=MagicMock(),
+                world_size=4,
+                performance_recorder=None,
+            )
+
+        assert "Failed to receive token result" in str(exc_info.value)
+        assert exc_info.value.source_rank == 3
+        assert exc_info.value.destination_rank == 0

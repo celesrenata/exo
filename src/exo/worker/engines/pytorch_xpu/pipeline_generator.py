@@ -18,7 +18,8 @@ This module provides:
   generation, receives sampled tokens from last rank, and yields GenerationResponse
 - pipeline_parallel_worker_loop(): Blocking loop for non-rank-0 nodes
 
-Requirements: 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 4.3, 4.4, 9.4, 9.5, 11.1, 11.2, 11.3
+Requirements: 2.1, 2.2, 2.3, 2.5, 2.7, 2.8, 2.9, 2.11, 2.14,
+             3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 4.3, 4.4, 9.4, 9.5, 11.1, 11.2, 11.3
 """
 
 from __future__ import annotations
@@ -39,7 +40,19 @@ from exo.api.types import (
 )
 from exo.shared.types.memory import Memory
 from exo.shared.types.worker.runner_response import GenerationResponse
-from exo.worker.engines.pytorch_xpu.distributed import recv_activation, send_activation
+from exo.worker.engines.pytorch_xpu.buffer_pool import CommunicationBufferPool
+from exo.worker.engines.pytorch_xpu.distributed import (
+    DecodeActivationProtocol,
+    TokenResultPacket,
+    negotiate_decode_activation_protocol,
+    receive_decode_activation_fast,
+    receive_token_results_from_final_rank,
+    recv_activation_generic as recv_activation,
+    respond_to_decode_protocol_negotiation,
+    send_activation_generic as send_activation,
+    send_decode_activation_fast,
+    send_token_results_to_rank_zero,
+)
 from exo.worker.engines.pytorch_xpu.distributed_generator import sample_token
 from exo.worker.engines.pytorch_xpu.instrumentation import (
     EventMode,
@@ -83,6 +96,55 @@ def _create_recorder_from_configuration(
     )
 
 
+def _is_fast_path_enabled(
+    optimization_configuration: PytorchXpuOptimizationConfiguration | None,
+) -> bool:
+    """Check whether the decode fast path is enabled in configuration.
+
+    Returns True when the configuration explicitly enables the fast path,
+    or when no configuration is provided (defaults to enabled).
+    """
+    if optimization_configuration is None:
+        return True
+    return optimization_configuration.enable_decode_fast_path
+
+
+def _get_default_process_group() -> dist.ProcessGroup:
+    """Return the default process group for distributed communication.
+
+    The default process group is initialized by ``init_process_group()`` and
+    is used for all pipeline-parallel communication unless a specific group
+    is provided.
+    """
+    group = dist.group.WORLD
+    if group is None:
+        raise RuntimeError(
+            "Default process group is not initialized. "
+            "Call dist.init_process_group() before using pipeline communication."
+        )
+    return group  # pyright: ignore[reportReturnType]
+
+
+def _activation_matches_protocol(
+    activation: torch.Tensor,
+    protocol: DecodeActivationProtocol,
+) -> bool:
+    """Check whether an activation tensor matches the negotiated protocol.
+
+    Returns True if the activation's shape and dtype match the protocol's
+    expected shape and dtype. Used to decide whether to use the fast path
+    or fall back to the generic path.
+    """
+    if tuple(activation.shape) != protocol.shape:
+        return False
+    if str(activation.dtype) != protocol.dtype_name:
+        return False
+    if protocol.requires_contiguous and not activation.is_contiguous():
+        return False
+    return True
+
+
+
 def pipeline_parallel_generate(
     model: PipelineParallelShard,
     tokenizer: Any,
@@ -110,6 +172,11 @@ def pipeline_parallel_generate(
     Rank 0 is also the last stage, so it gets logits directly and samples
     locally without any communication.
 
+    After prefill completes, negotiates the decode fast-path protocol with
+    rank 1 (if enabled). During decode, uses the fast path for activation
+    sends when the protocol is available and the activation shape matches.
+    Falls back to the generic path otherwise.
+
     Args:
         model: PipelineParallelShard with local layers on this rank's device.
         tokenizer: HuggingFace tokenizer with encode/decode methods.
@@ -129,7 +196,7 @@ def pipeline_parallel_generate(
     Yields:
         GenerationResponse objects containing generated tokens.
 
-    Requirements: 4.1, 4.2, 4.3, 4.4, 8.1, 8.2, 8.4, 11.1, 11.2, 11.3
+    Requirements: 2.1, 2.7, 2.8, 2.9, 2.11, 4.1, 4.2, 4.3, 4.4, 8.1, 8.2, 8.4, 11.1, 11.2, 11.3
     """
     logger.info(
         f"Starting pipeline-parallel generation: prompt_len={len(prompt)}, "
@@ -168,6 +235,11 @@ def pipeline_parallel_generate(
     # Single-stage mode: rank 0 is both first and last stage
     is_single_stage: bool = world_size == 1
 
+    # Decode fast-path state (initialized after prefill)
+    fast_path_enabled: bool = _is_fast_path_enabled(optimization_configuration) and not is_single_stage
+    send_protocol: DecodeActivationProtocol | None = None
+    buffer_pool: CommunicationBufferPool | None = None
+
     _start_time: float = time.perf_counter()
 
     try:
@@ -190,7 +262,7 @@ def pipeline_parallel_generate(
             )
         else:
             # Multi-stage: output is hidden_state, send to rank 1
-            _send_with_shape(output, dst_rank=1)
+            _send_with_shape(output, dst_rank=1, performance_recorder=recorder)
 
             # Wait for token broadcast from last rank
             token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
@@ -279,6 +351,53 @@ def pipeline_parallel_generate(
             ),
         )
 
+        # --- Negotiate Decode Fast Path (after prefill, before decode loop) ---
+        if fast_path_enabled:
+            try:
+                process_group = _get_default_process_group()
+                hidden_size: int = model.config.hidden_size
+                maximum_microbatch_size: int = 1  # Single-request decode
+
+                if optimization_configuration is not None:
+                    maximum_microbatch_size = optimization_configuration.maximum_decode_microbatch_size
+
+                send_protocol = negotiate_decode_activation_protocol(
+                    process_group=process_group,
+                    local_rank=rank,
+                    world_size=world_size,
+                    hidden_size=hidden_size,
+                    dtype=torch.bfloat16,
+                    maximum_microbatch_size=maximum_microbatch_size,
+                )
+
+                # Rank 0 also responds to upstream negotiation (returns None for rank 0)
+                respond_to_decode_protocol_negotiation(
+                    process_group=process_group,
+                    local_rank=rank,
+                    world_size=world_size,
+                    hidden_size=hidden_size,
+                    dtype=torch.bfloat16,
+                    maximum_microbatch_size=maximum_microbatch_size,
+                )
+
+                # Create buffer pool for the decode session
+                buffer_pool = CommunicationBufferPool()
+
+                logger.info(
+                    "Rank %d: decode fast path negotiated, send_protocol=%s",
+                    rank,
+                    f"shape={send_protocol.shape}" if send_protocol else "None (final rank)",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Rank %d: decode fast path negotiation failed, "
+                    "falling back to generic path: %s",
+                    rank,
+                    exc,
+                )
+                send_protocol = None
+                buffer_pool = None
+
         # --- Decode Loop ---
         completion_tokens: int = 1
         prev_token_id: int = first_token_id
@@ -331,12 +450,20 @@ def pipeline_parallel_generate(
                             top_p=top_p,
                         )
                     else:
-                        # Multi-stage: send hidden_state to rank 1, wait for token broadcast
-                        _send_with_shape(output, dst_rank=1)
+                        # Multi-stage: send hidden_state to rank 1, receive token from last rank
+                        _send_decode_activation_rank0(
+                            output=output,
+                            send_protocol=send_protocol,
+                            buffer_pool=buffer_pool,
+                            recorder=recorder,
+                        )
 
-                        token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
-                        dist.broadcast(token_tensor, src=world_size - 1)
-                        next_token_id = int(token_tensor.item())
+                        # Receive token result from final rank
+                        next_token_id = _receive_token_rank0(
+                            world_size=world_size,
+                            send_protocol=send_protocol,
+                            recorder=recorder,
+                        )
 
                 completion_tokens += 1
                 recorder.increment_counter("tokens_generated")
@@ -465,9 +592,118 @@ def pipeline_parallel_generate(
             stats=None,
         )
         return
+    finally:
+        # Clear the buffer pool at the end of the generation session
+        if buffer_pool is not None:
+            buffer_pool.clear()
+            logger.debug("Rank %d: decode buffer pool cleared", rank)
 
 
-def _send_with_shape(tensor: torch.Tensor, dst_rank: int) -> None:
+def _send_decode_activation_rank0(
+    output: torch.Tensor,
+    send_protocol: DecodeActivationProtocol | None,
+    buffer_pool: CommunicationBufferPool | None,
+    recorder: PerformanceRecorder,
+) -> None:
+    """Send decode activation from rank 0 to rank 1, using fast path when available.
+
+    Falls back to the generic path when:
+    - The fast-path protocol is None (negotiation disabled or failed)
+    - The buffer pool is None
+    - The activation shape doesn't match the protocol
+    - The fast-path send raises an exception
+
+    Args:
+        output: The activation tensor from rank 0's forward pass.
+        send_protocol: Negotiated protocol for fast-path send, or None.
+        buffer_pool: Buffer pool for preallocated communication buffers, or None.
+        recorder: Performance recorder for instrumentation.
+    """
+    if (
+        send_protocol is not None
+        and buffer_pool is not None
+        and _activation_matches_protocol(output, send_protocol)
+    ):
+        # Fast path: send without shape metadata
+        try:
+            process_group = _get_default_process_group()
+            send_decode_activation_fast(
+                activation=output,
+                protocol=send_protocol,
+                buffer_pool=buffer_pool,
+                process_group=process_group,
+            )
+            recorder.increment_counter("fast_path_activation_sends")
+            logger.debug(
+                "Rank 0: fast-path send to rank %d, shape=%s",
+                send_protocol.destination_rank,
+                send_protocol.shape,
+            )
+            return
+        except Exception as exc:
+            logger.warning(
+                "Rank 0: fast-path send failed, falling back to generic: %s",
+                exc,
+            )
+            recorder.increment_counter("fast_path_fallbacks")
+
+    # Generic path: send with shape metadata
+    _send_with_shape(output, dst_rank=1, performance_recorder=recorder)
+    recorder.increment_counter("generic_activation_sends")
+
+
+def _receive_token_rank0(
+    world_size: int,
+    send_protocol: DecodeActivationProtocol | None,
+    recorder: PerformanceRecorder,
+) -> int:
+    """Receive a token result on rank 0 from the final rank.
+
+    When the fast path is active, uses point-to-point token result receive
+    instead of blocking broadcast. Falls back to broadcast when the fast
+    path is not available.
+
+    Args:
+        world_size: Total number of pipeline stages.
+        send_protocol: Negotiated protocol (presence indicates fast path is active).
+        recorder: Performance recorder for instrumentation.
+
+    Returns:
+        The token ID received from the final rank.
+    """
+    if send_protocol is not None:
+        # Fast path: receive token result via point-to-point from final rank
+        try:
+            process_group = _get_default_process_group()
+            packet = receive_token_results_from_final_rank(
+                process_group=process_group,
+                world_size=world_size,
+                performance_recorder=recorder,
+            )
+            logger.debug(
+                "Rank 0: received token result via fast path, token_id=%d",
+                packet.token_identifier,
+            )
+            return packet.token_identifier
+        except Exception as exc:
+            logger.warning(
+                "Rank 0: fast-path token receive failed, falling back to broadcast: %s",
+                exc,
+            )
+            recorder.increment_counter("fast_path_fallbacks")
+
+    # Generic path: wait for token broadcast from last rank
+    token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
+    dist.broadcast(token_tensor, src=world_size - 1)
+    return int(token_tensor.item())
+
+
+
+def _send_with_shape(
+    tensor: torch.Tensor,
+    dst_rank: int,
+    performance_recorder: PerformanceRecorder | None = None,
+) -> None:
     """Send a tensor preceded by its seq_len dimension as metadata.
 
     Since recv_activation() requires knowing the shape ahead of time, and
@@ -477,9 +713,12 @@ def _send_with_shape(tensor: torch.Tensor, dst_rank: int) -> None:
     Args:
         tensor: The activation tensor of shape [batch, seq_len, hidden_size].
         dst_rank: Destination rank for the send.
+        performance_recorder: Optional recorder to increment shape_metadata_messages.
     """
     seq_len_tensor = torch.tensor([tensor.shape[1]], dtype=torch.long, device="cpu")
     dist.send(seq_len_tensor, dst=dst_rank)
+    if performance_recorder is not None:
+        performance_recorder.increment_counter("shape_metadata_messages")
     send_activation(tensor, dst_rank=dst_rank)
 
 
@@ -488,23 +727,27 @@ def _recv_with_shape(
     src_rank: int,
     target_device: str,
     dtype: torch.dtype = torch.bfloat16,
+    performance_recorder: PerformanceRecorder | None = None,
 ) -> torch.Tensor:
     """Receive a tensor preceded by its seq_len dimension as metadata.
 
     Reads the seq_len metadata first, then allocates the correct buffer
-    and receives the actual activation tensor.
+    and receives the activation tensor.
 
     Args:
         hidden_size: Model hidden dimension (fixed across all transfers).
         src_rank: Source rank to receive from.
         target_device: Device to place the received tensor on.
         dtype: Expected tensor dtype.
+        performance_recorder: Optional recorder to increment shape_metadata_messages.
 
     Returns:
         The received activation tensor on target_device.
     """
     seq_len_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
     dist.recv(seq_len_tensor, src=src_rank)
+    if performance_recorder is not None:
+        performance_recorder.increment_counter("shape_metadata_messages")
     seq_len: int = int(seq_len_tensor.item())
 
     shape = (1, seq_len, hidden_size)
@@ -529,13 +772,15 @@ def pipeline_parallel_worker_loop(
     1. Receives activation from previous rank (with shape metadata)
     2. Forwards through local layers
     3. If not last rank: sends activation to next rank (with shape metadata)
-    4. If last rank: samples token, broadcasts to all ranks
-    5. All non-last ranks wait for token broadcast from last rank
+    4. If last rank: samples token, sends to rank 0 via point-to-point
+    5. Middle ranks do NOT wait for token results (fast path)
     6. Checks for termination (EOS or sentinel -1)
     7. Loops until termination
 
     For the first iteration (prefill), seq_len > 1. For subsequent iterations
-    (decode), seq_len == 1. The shape metadata exchange handles this transparently.
+    (decode), seq_len == 1. The shape metadata exchange handles prefill
+    transparently. After prefill, the decode fast path avoids per-token
+    shape metadata when the protocol is negotiated.
 
     Args:
         model: PipelineParallelShard with local layers on this rank's device.
@@ -551,7 +796,7 @@ def pipeline_parallel_worker_loop(
         optimization_configuration: Optional configuration used to create a
             recorder when performance_recorder is not provided.
 
-    Requirements: 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 8.1, 8.2, 8.4, 9.4, 9.5
+    Requirements: 2.1, 2.7, 2.8, 2.9, 2.11, 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 8.1, 8.2, 8.4, 9.4, 9.5
     """
     logger.info(
         f"Starting pipeline-parallel worker loop: rank={rank}/{world_size}, "
@@ -585,6 +830,12 @@ def pipeline_parallel_worker_loop(
 
     logger.debug(f"Worker rank={rank}: EOS token IDs: {eos_token_ids}")
 
+    # Decode fast-path state (initialized after prefill)
+    fast_path_enabled: bool = _is_fast_path_enabled(optimization_configuration)
+    send_protocol: DecodeActivationProtocol | None = None
+    recv_protocol: DecodeActivationProtocol | None = None
+    buffer_pool: CommunicationBufferPool | None = None
+
     is_first_iteration: bool = True
     step_index: int = 0
 
@@ -608,14 +859,27 @@ def pipeline_parallel_worker_loop(
                 mode=current_mode,
                 metadata={"step": step_index},
             ):
-                # Step 1: Receive activation from previous rank (with shape metadata)
-                hidden_state = _recv_with_shape(
-                    hidden_size=hidden_size,
-                    src_rank=prev_rank,
-                    target_device=device,
-                )
+                if is_first_iteration or recv_protocol is None:
+                    # Prefill or no fast path: receive with shape metadata (generic)
+                    hidden_state = _recv_with_shape(
+                        hidden_size=hidden_size,
+                        src_rank=prev_rank,
+                        target_device=device,
+                        performance_recorder=recorder,
+                    )
+                    recorder.increment_counter("generic_activation_receives")
+                else:
+                    # Decode fast path: receive without shape metadata
+                    hidden_state = _recv_decode_activation_worker(
+                        recv_protocol=recv_protocol,
+                        buffer_pool=buffer_pool,
+                        hidden_size=hidden_size,
+                        prev_rank=prev_rank,
+                        device=device,
+                        recorder=recorder,
+                    )
 
-                # Step 2: Forward through local layers
+                # Forward through local layers
                 with recorder.span(
                     "prefill" if is_first_iteration else "decode_step",
                     mode=current_mode,
@@ -623,24 +887,72 @@ def pipeline_parallel_worker_loop(
                 ):
                     output, _kv_cache = model.forward(input_data=hidden_state)
 
-                # Step 3/4: Send or sample depending on position in pipeline
+                # Send or sample depending on position in pipeline
                 if not is_last_rank:
-                    # Middle stage: send activation to next rank
-                    _send_with_shape(output, dst_rank=next_rank)
+                    if is_first_iteration or send_protocol is None:
+                        # Prefill or no fast path: send with shape metadata (generic)
+                        _send_with_shape(output, dst_rank=next_rank, performance_recorder=recorder)
+                        recorder.increment_counter("generic_activation_sends")
+                    else:
+                        # Decode fast path: send without shape metadata
+                        _send_decode_activation_worker(
+                            output=output,
+                            send_protocol=send_protocol,
+                            buffer_pool=buffer_pool,
+                            next_rank=next_rank,
+                            recorder=recorder,
+                        )
 
-                    # Wait for token broadcast from last rank
-                    token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
-                    dist.broadcast(token_tensor, src=world_size - 1)
-                    token_id: int = int(token_tensor.item())
+                    if is_first_iteration:
+                        # During prefill, still use broadcast for token sync
+                        token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
+                        dist.broadcast(token_tensor, src=world_size - 1)
+                        token_id: int = int(token_tensor.item())
+                    else:
+                        # During decode with fast path, middle ranks do NOT
+                        # participate in token result communication. They
+                        # continue to the next iteration without waiting.
+                        # The token_id is not needed by middle ranks for
+                        # termination detection in fast-path mode — they
+                        # detect termination via communication failure or
+                        # a sentinel in the activation stream.
+                        #
+                        # However, for graceful termination detection, middle
+                        # ranks still need to know when to stop. In the current
+                        # single-request mode, we use a lightweight broadcast
+                        # for termination signaling when fast path is active.
+                        if send_protocol is not None:
+                            # Fast path active: middle ranks still need
+                            # termination signal. Use broadcast for now.
+                            token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
+                            dist.broadcast(token_tensor, src=world_size - 1)
+                            token_id = int(token_tensor.item())
+                        else:
+                            # Generic path: wait for token broadcast
+                            token_tensor = torch.tensor([0], dtype=torch.long, device="cpu")
+                            dist.broadcast(token_tensor, src=world_size - 1)
+                            token_id = int(token_tensor.item())
                 else:
                     # Last stage: output is logits, sample token
                     token_id = sample_token(
                         output, temperature=temperature, top_k=top_k, top_p=top_p
                     )
 
-                    # Broadcast sampled token to all ranks
-                    token_tensor = torch.tensor([token_id], dtype=torch.long, device="cpu")
-                    dist.broadcast(token_tensor, src=rank)
+                    if is_first_iteration or send_protocol is None:
+                        # Prefill or no fast path: broadcast sampled token to all ranks
+                        token_tensor = torch.tensor([token_id], dtype=torch.long, device="cpu")
+                        dist.broadcast(token_tensor, src=rank)
+                    else:
+                        # Decode fast path: send token result to rank 0 via
+                        # point-to-point, then broadcast for middle rank termination
+                        _send_token_result_last_rank(
+                            token_id=token_id,
+                            step_index=step_index,
+                            recorder=recorder,
+                        )
+                        # Broadcast for middle rank termination detection
+                        token_tensor = torch.tensor([token_id], dtype=torch.long, device="cpu")
+                        dist.broadcast(token_tensor, src=rank)
 
             recorder.increment_counter("tokens_generated")
 
@@ -652,6 +964,58 @@ def pipeline_parallel_worker_loop(
             if token_id in eos_token_ids:
                 logger.debug(f"Worker rank={rank}: EOS token {token_id}, exiting")
                 break
+
+            # After first iteration (prefill), negotiate decode fast path
+            if is_first_iteration and fast_path_enabled:
+                try:
+                    process_group = _get_default_process_group()
+                    maximum_microbatch_size: int = 1
+                    if optimization_configuration is not None:
+                        maximum_microbatch_size = optimization_configuration.maximum_decode_microbatch_size
+
+                    # Respond to upstream negotiation FIRST (receive protocol
+                    # from upstream rank). This must happen before negotiate to
+                    # avoid deadlock: upstream rank's negotiate blocks on send
+                    # until we receive here.
+                    recv_protocol = respond_to_decode_protocol_negotiation(
+                        process_group=process_group,
+                        local_rank=rank,
+                        world_size=world_size,
+                        hidden_size=hidden_size,
+                        dtype=torch.bfloat16,
+                        maximum_microbatch_size=maximum_microbatch_size,
+                    )
+
+                    # Then negotiate send protocol (to downstream rank)
+                    send_protocol = negotiate_decode_activation_protocol(
+                        process_group=process_group,
+                        local_rank=rank,
+                        world_size=world_size,
+                        hidden_size=hidden_size,
+                        dtype=torch.bfloat16,
+                        maximum_microbatch_size=maximum_microbatch_size,
+                    )
+
+                    # Create buffer pool for the decode session
+                    buffer_pool = CommunicationBufferPool()
+
+                    logger.info(
+                        "Rank %d: decode fast path negotiated, "
+                        "send_protocol=%s, recv_protocol=%s",
+                        rank,
+                        f"shape={send_protocol.shape}" if send_protocol else "None",
+                        f"shape={recv_protocol.shape}" if recv_protocol else "None",
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Rank %d: decode fast path negotiation failed, "
+                        "falling back to generic path: %s",
+                        rank,
+                        exc,
+                    )
+                    send_protocol = None
+                    recv_protocol = None
+                    buffer_pool = None
 
             is_first_iteration = False
             step_index += 1
@@ -676,3 +1040,158 @@ def pipeline_parallel_worker_loop(
                     exc_info=True,
                 )
         raise
+    finally:
+        # Clear the buffer pool at the end of the generation session
+        if buffer_pool is not None:
+            buffer_pool.clear()
+            logger.debug("Rank %d: decode buffer pool cleared", rank)
+
+
+def _recv_decode_activation_worker(
+    recv_protocol: DecodeActivationProtocol | None,
+    buffer_pool: CommunicationBufferPool | None,
+    hidden_size: int,
+    prev_rank: int,
+    device: str,
+    recorder: PerformanceRecorder,
+) -> torch.Tensor:
+    """Receive a decode activation on a worker rank, using fast path when available.
+
+    Falls back to the generic path when:
+    - The recv_protocol is None
+    - The buffer pool is None
+    - The fast-path receive raises an exception
+
+    Args:
+        recv_protocol: Negotiated protocol for fast-path receive, or None.
+        buffer_pool: Buffer pool for preallocated communication buffers, or None.
+        hidden_size: Model hidden dimension.
+        prev_rank: Source rank to receive from.
+        device: Target device for the received tensor.
+        recorder: Performance recorder for instrumentation.
+
+    Returns:
+        The received activation tensor on the target device.
+    """
+    if recv_protocol is not None and buffer_pool is not None:
+        try:
+            process_group = _get_default_process_group()
+            result = receive_decode_activation_fast(
+                protocol=recv_protocol,
+                buffer_pool=buffer_pool,
+                process_group=process_group,
+                target_device=device,
+            )
+            recorder.increment_counter("fast_path_activation_receives")
+            logger.debug(
+                "Rank %d: fast-path recv from rank %d, shape=%s",
+                recv_protocol.destination_rank,
+                recv_protocol.source_rank,
+                recv_protocol.shape,
+            )
+            return result
+        except Exception as exc:
+            logger.warning(
+                "Fast-path recv failed, falling back to generic: %s",
+                exc,
+            )
+            recorder.increment_counter("fast_path_fallbacks")
+
+    # Generic path: receive with shape metadata
+    result = _recv_with_shape(
+        hidden_size=hidden_size,
+        src_rank=prev_rank,
+        target_device=device,
+        performance_recorder=recorder,
+    )
+    recorder.increment_counter("generic_activation_receives")
+    return result
+
+
+def _send_decode_activation_worker(
+    output: torch.Tensor,
+    send_protocol: DecodeActivationProtocol | None,
+    buffer_pool: CommunicationBufferPool | None,
+    next_rank: int,
+    recorder: PerformanceRecorder,
+) -> None:
+    """Send a decode activation from a worker rank, using fast path when available.
+
+    Falls back to the generic path when:
+    - The send_protocol is None
+    - The buffer pool is None
+    - The activation shape doesn't match the protocol
+    - The fast-path send raises an exception
+
+    Args:
+        output: The activation tensor from the worker's forward pass.
+        send_protocol: Negotiated protocol for fast-path send, or None.
+        buffer_pool: Buffer pool for preallocated communication buffers, or None.
+        next_rank: Destination rank for the send.
+        recorder: Performance recorder for instrumentation.
+    """
+    if (
+        send_protocol is not None
+        and buffer_pool is not None
+        and _activation_matches_protocol(output, send_protocol)
+    ):
+        try:
+            process_group = _get_default_process_group()
+            send_decode_activation_fast(
+                activation=output,
+                protocol=send_protocol,
+                buffer_pool=buffer_pool,
+                process_group=process_group,
+            )
+            recorder.increment_counter("fast_path_activation_sends")
+            logger.debug(
+                "Rank %d: fast-path send to rank %d, shape=%s",
+                send_protocol.source_rank,
+                send_protocol.destination_rank,
+                send_protocol.shape,
+            )
+            return
+        except Exception as exc:
+            logger.warning(
+                "Fast-path send failed, falling back to generic: %s",
+                exc,
+            )
+            recorder.increment_counter("fast_path_fallbacks")
+
+    # Generic path: send with shape metadata
+    _send_with_shape(output, dst_rank=next_rank, performance_recorder=recorder)
+    recorder.increment_counter("generic_activation_sends")
+
+
+def _send_token_result_last_rank(
+    token_id: int,
+    step_index: int,
+    recorder: PerformanceRecorder,
+) -> None:
+    """Send a token result from the last rank to rank 0 via point-to-point.
+
+    Uses the ``send_token_results_to_rank_zero`` function for direct
+    communication without requiring middle ranks to participate.
+
+    Args:
+        token_id: The sampled token identifier.
+        step_index: Current decode step index (used as position).
+        recorder: Performance recorder for instrumentation.
+    """
+    process_group = _get_default_process_group()
+    packet = TokenResultPacket(
+        request_identifier="single_request",
+        token_identifier=token_id,
+        position=step_index + 1,  # +1 because step 0 is the first decode token
+        finished=False,
+        finish_reason=None,
+    )
+    send_token_results_to_rank_zero(
+        packet=packet,
+        process_group=process_group,
+        performance_recorder=recorder,
+    )
+    logger.debug(
+        "Rank 3: sent token result to rank 0 via point-to-point, token_id=%d",
+        token_id,
+    )

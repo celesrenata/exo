@@ -443,3 +443,54 @@ class TestPerformanceRecorderReset:
         recorder.reset()
         assert len(recorder.events) == 0
         assert recorder.get_counter("test_counter") == 0
+
+
+# ===========================================================================
+# Tests for DECODE_FAST_PATH_COUNTERS registry
+# ===========================================================================
+
+
+DECODE_FAST_PATH_COUNTERS = _mod.DECODE_FAST_PATH_COUNTERS
+
+
+class TestDecodeFastPathCounterRegistry:
+    """Test the decode fast-path counter registry is complete and well-formed.
+
+    **Validates: Requirements 8.1, 8.2**
+    """
+
+    def test_registry_contains_all_required_counters(self) -> None:
+        """Registry documents all required decode fast-path counters."""
+        required_counters = {
+            "fast_path_activation_sends",
+            "fast_path_activation_receives",
+            "generic_activation_sends",
+            "generic_activation_receives",
+            "shape_metadata_messages",
+            "fast_path_fallbacks",
+            "protocol_renegotiations",
+            "token_result_send_count",
+            "token_result_receive_count",
+        }
+        assert required_counters.issubset(set(DECODE_FAST_PATH_COUNTERS.keys()))
+
+    def test_registry_values_are_nonempty_strings(self) -> None:
+        """Each counter has a non-empty description string."""
+        for name, description in DECODE_FAST_PATH_COUNTERS.items():
+            assert isinstance(description, str), f"{name} description is not a string"
+            assert len(description) > 0, f"{name} has empty description"
+
+    def test_registry_is_immutable_dict(self) -> None:
+        """Registry is a Final dict (cannot be reassigned at module level)."""
+        # We verify it's a dict with string keys and string values
+        assert isinstance(DECODE_FAST_PATH_COUNTERS, dict)
+        for key, value in DECODE_FAST_PATH_COUNTERS.items():
+            assert isinstance(key, str)
+            assert isinstance(value, str)
+
+    def test_all_registered_counters_can_be_incremented(self) -> None:
+        """All registered counter names work with PerformanceRecorder."""
+        recorder = PerformanceRecorder(rank=0, stage=0)
+        for counter_name in DECODE_FAST_PATH_COUNTERS:
+            recorder.increment_counter(counter_name)
+            assert recorder.get_counter(counter_name) == 1

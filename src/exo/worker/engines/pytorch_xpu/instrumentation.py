@@ -26,6 +26,72 @@ EventMode = Literal["prefill", "decode"]
 
 
 # ---------------------------------------------------------------------------
+# Decode Fast-Path Counter Registry
+# ---------------------------------------------------------------------------
+
+DECODE_FAST_PATH_COUNTERS: Final[dict[str, str]] = {
+    "fast_path_activation_sends": (
+        "Number of decode activation tensors sent via the fast path "
+        "(no per-token shape metadata). Incremented in "
+        "_send_decode_activation_rank0() and _send_decode_activation_worker()."
+    ),
+    "fast_path_activation_receives": (
+        "Number of decode activation tensors received via the fast path "
+        "(no per-token shape metadata). Incremented in "
+        "_recv_decode_activation_worker()."
+    ),
+    "generic_activation_sends": (
+        "Number of activation tensors sent via the generic path "
+        "(includes shape metadata). Incremented when the fast path is "
+        "unavailable or falls back."
+    ),
+    "generic_activation_receives": (
+        "Number of activation tensors received via the generic path "
+        "(includes shape metadata). Incremented when the fast path is "
+        "unavailable or falls back."
+    ),
+    "shape_metadata_messages": (
+        "Number of shape metadata tensors sent or received. Each call to "
+        "_send_with_shape() or _recv_with_shape() that transmits the seq_len "
+        "tensor increments this counter."
+    ),
+    "fast_path_fallbacks": (
+        "Number of times the fast path failed and fell back to the generic "
+        "path. Incremented on fast-path send/receive exceptions or protocol "
+        "mismatch."
+    ),
+    "protocol_renegotiations": (
+        "Number of protocol renegotiation events. Currently always 0 because "
+        "renegotiation is not yet implemented — the protocol is negotiated "
+        "once after prefill and remains fixed. This counter exists for future "
+        "use when dynamic microbatch size changes trigger renegotiation."
+    ),
+    "token_result_send_count": (
+        "Number of token result packets sent from the final rank to rank 0 "
+        "via point-to-point communication. Incremented in "
+        "send_token_results_to_rank_zero()."
+    ),
+    "token_result_receive_count": (
+        "Number of token result packets received on rank 0 from the final "
+        "rank via point-to-point communication. Incremented in "
+        "receive_token_results_from_final_rank()."
+    ),
+}
+"""Registry of all decode fast-path instrumentation counter names and their meanings.
+
+After a generation run, these counters provide complete observability of the
+communication path:
+- How many messages used the fast path vs generic path
+- How many shape metadata messages were sent
+- How many fallbacks occurred
+- How many token results were exchanged via point-to-point
+
+Use ``PerformanceRecorder.get_counter(name)`` to query individual counters,
+or ``PerformanceRecorder.summarize().counters`` for the full snapshot.
+"""
+
+
+# ---------------------------------------------------------------------------
 # PerformanceEvent — immutable record of a single timed span
 # ---------------------------------------------------------------------------
 

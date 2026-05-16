@@ -3,7 +3,7 @@
 Distributed Generation Pipeline for Pipeline-Parallel Inference
 
 Coordinates autoregressive text generation across multiple ranks using the
-Gloo-based send_activation/recv_activation primitives from distributed.py.
+Gloo-based send_activation_generic/recv_activation_generic primitives from distributed.py.
 
 This module provides three entry points:
 - distributed_generate(): Python generator called by rank 0 that orchestrates
@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Generator
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -33,7 +33,13 @@ from exo.api.types import (
 )
 from exo.shared.types.memory import Memory
 from exo.shared.types.worker.runner_response import GenerationResponse
-from exo.worker.engines.pytorch_xpu.distributed import recv_activation, send_activation  # pyright: ignore[reportUnknownVariableType]
+from exo.worker.engines.pytorch_xpu.distributed import (  # pyright: ignore[reportUnknownVariableType]
+    recv_activation_generic as recv_activation,
+    send_activation_generic as send_activation,
+)
+
+if TYPE_CHECKING:
+    from exo.worker.engines.pytorch_xpu.instrumentation import PerformanceRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +54,18 @@ def sample_token(
     top_p: float | None = None,
     model_id: str = "",
     enable_diagnostics: bool = False,
+    performance_recorder: PerformanceRecorder | None = None,
 ) -> int:
     """
     Sample a single token from logits with temperature, top-k, and top-p.
 
-    Applies in order: temperature scaling → top-k filtering → top-p filtering → softmax → multinomial.
+    Routes to specialized implementations based on sampling configuration:
+    - **Greedy**: ``torch.argmax`` when temperature is near zero or do_sample=False
+    - **Top-K**: ``torch.topk`` when top_k is set without top_p
+    - **Fallback**: Full pipeline (temperature + top-k + top-p + multinomial)
+
+    The public signature is preserved for backward compatibility. Internally,
+    this delegates to ``route_and_sample_token()`` in the ``sampling`` module.
 
     When enable_diagnostics is True, emits TP_LOGIT_DIAG with first-token top-k
     token IDs, raw decoded token strings, and logit stats.
@@ -64,140 +77,60 @@ def sample_token(
         top_p: Keep smallest set of tokens with cumulative prob ≥ top_p (None = disabled)
         model_id: Model identifier for diagnostic logging.
         enable_diagnostics: If True, emit TP_LOGIT_DIAG with top-k data.
+        performance_recorder: Optional recorder for timing spans. When None,
+            no instrumentation overhead is added.
 
     Returns:
         Sampled token ID as integer
 
-    Requirements: 2.2, 3.1, 3.2, 3.3, 3.4, 3.5, 5.2, 5.5, 6.2
+    Requirements: 2.2, 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 5.2, 5.5, 6.2
     """
-    import logging
-    logger = logging.getLogger(__name__)
+    from exo.worker.engines.pytorch_xpu.sampling import route_and_sample_token
 
+    # --- Logits shape normalization ---
     # Extract last-position logits only (Requirement 2.2)
     if logits.dim() == 3:
         logits = logits[:, -1, :]  # Shape: (1, vocab_size)
 
     # Work with a 1D tensor for simplicity: shape (vocab_size,)
-    logits_1d = logits[0].clone()
+    logits_one_dimensional = logits[0].clone()
 
-    # Task 6.2: Finite-logit validation before sampling
-    # Fail generation with an error response if logits contain NaN, Inf,
-    # or all equal values beyond tolerance.
-    if torch.isnan(logits_1d).any() or torch.isinf(logits_1d).any():
-        logger.warning("Detected NaN or inf in logits, falling back to argmax on finite values")
-        # Replace NaN/Inf with -inf so argmax picks the best finite value
-        finite_logits = logits_1d.clone()
-        finite_logits[torch.isnan(finite_logits) | torch.isinf(finite_logits)] = float("-inf")
-        # If ALL values are -inf after masking, fall back to token 0
-        if (finite_logits == float("-inf")).all():
-            logger.error("All logits are NaN or Inf — no valid token to sample")
-            return 0
-        token_id: int = int(finite_logits.argmax().item())
-        return token_id
+    # --- Route to specialized sampling implementation ---
+    # Logit validation is enabled by default for backward compatibility.
+    # The validate_logits flag controls NaN/inf checking (Requirement 4.5).
+    token_identifier, route_used = route_and_sample_token(
+        logits=logits_one_dimensional,
+        temperature=temperature,
+        top_k=top_k,
+        top_p=top_p,
+        validate_logits=True,
+        performance_recorder=performance_recorder,
+    )
 
-    # Check for all-equal logits (indicates all-reduce failure or stale state)
-    logits_range = logits_1d.max() - logits_1d.min()
-    if logits_range < 1e-6:
-        logger.warning(
-            f"Detected near-constant logits (range={float(logits_range):.6e}), "
-            f"falling back to argmax"
-        )
-        token_id: int = int(logits_1d.argmax().item())
-        return token_id
-
-    # Handle near-zero temperature as greedy/argmax (edge case)
-    if temperature <= 1e-7:
-        token_id: int = int(logits_1d.argmax().item())
-        return token_id
-
-    # Temperature scaling (Requirement 3.1)
-    if temperature != 1.0:
-        logits_1d = logits_1d / temperature
-
-    # Check for NaN or inf after temperature scaling
-    if torch.isnan(logits_1d).any() or torch.isinf(logits_1d).any():
-        logger.warning("Detected NaN or inf after temperature scaling, falling back to argmax")
-        token_id: int = int(logits_1d.nanargmax().item())
-        return token_id
-
-    # Top-k filtering (Requirement 3.2): set values below k-th largest to -inf
-    if top_k is not None and top_k > 0:
-        if top_k < logits_1d.size(0):
-            top_k_values, _ = torch.topk(logits_1d, top_k)
-            threshold = top_k_values[-1]
-            logits_1d = logits_1d.masked_fill(logits_1d < threshold, float("-inf"))
-
-    # Top-p (nucleus) filtering (Requirement 3.3):
-    # Sort by descending probability, compute cumulative sum, mask tokens above threshold
-    if top_p is not None and 0.0 < top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits_1d, descending=True)
-
-        # Check for NaN or inf in sorted logits before softmax
-        if torch.isnan(sorted_logits).any() or torch.isinf(sorted_logits).any():
-            logger.warning("Detected NaN or inf in sorted logits, skipping top-p filtering")
-            sorted_probs = torch.softmax(sorted_logits, dim=-1)
-        else:
-            sorted_probs = torch.softmax(sorted_logits, dim=-1)
-
-        cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-
-        # Find tokens where cumulative probability exceeds top_p
-        # We keep the first token that crosses the threshold (so cumulative >= top_p is satisfied)
-        # Shift right so the token that crosses the threshold is kept
-        sorted_mask = torch.zeros_like(cumulative_probs, dtype=torch.bool)
-        sorted_mask[1:] = cumulative_probs[:-1] >= top_p
-
-        # Set masked logits to -inf in the sorted order
-        sorted_logits = sorted_logits.masked_fill(sorted_mask, float("-inf"))
-
-        # Scatter back to original positions
-        logits_1d = torch.zeros_like(logits_1d).scatter(0, sorted_indices, sorted_logits)
-
-    # Softmax → multinomial sampling (Requirements 3.4, 3.5)
-    # Clamp logits to prevent numerical instability
-    logits_1d = torch.clamp(logits_1d, min=-1e9, max=1e9)
-    probs = torch.softmax(logits_1d, dim=-1)
-
-    # Ensure probabilities are valid (no NaN, no inf, sum to 1)
-    if torch.isnan(probs).any() or torch.isinf(probs).any():
-        logger.warning("Detected NaN or inf in probabilities, falling back to argmax")
-        token_id: int = int(logits_1d.argmax().item())
-        return token_id
-
-    # Normalize probabilities to ensure they sum to 1
-    probs = probs / probs.sum()
-
-    # Check if all probabilities are zero
-    if probs.sum() == 0:
-        logger.warning("All probabilities are zero, falling back to argmax")
-        token_id: int = int(logits_1d.argmax().item())
-        return token_id
-
-    try:
-        token_id = int(torch.multinomial(probs.unsqueeze(0), num_samples=1).squeeze().item())
-    except Exception as e:
-        logger.warning(f"Multinomial sampling failed: {e}, falling back to argmax")
-        token_id = int(logits_1d.argmax().item())
-
-    # Task 6.1: Token sampling diagnostics
+    # --- Diagnostic logging (preserved from original implementation) ---
     if enable_diagnostics:
-        # Capture top-5 token IDs and their logit values
-        top5_logits, top5_ids = torch.topk(logits_1d, 5)
+        top5_logits, top5_ids = torch.topk(logits_one_dimensional, min(5, logits_one_dimensional.size(0)))
+        logits_range = logits_one_dimensional.max() - logits_one_dimensional.min()
         logger.info(
             f"TP_LOGIT_DIAG: "
             f"model_id={model_id} "
-            f"sampled_token_id={token_id} "
+            f"sampled_token_id={token_identifier} "
             f"top5_token_ids={top5_ids.tolist()} "
             f"top5_logits={top5_logits.tolist()} "
-            f"logits_mean={float(logits_1d.mean().item()):.4f} "
-            f"logits_std={float(logits_1d.std().item()):.4f} "
+            f"logits_mean={float(logits_one_dimensional.mean().item()):.4f} "
+            f"logits_std={float(logits_one_dimensional.std().item()):.4f} "
             f"logits_range={float(logits_range):.6e} "
             f"temperature={temperature} "
             f"top_k={top_k} "
-            f"top_p={top_p}"
+            f"top_p={top_p} "
+            f"route={route_used}"
         )
 
-    return token_id
+    # --- Instrumentation: record sampling latency via parent span ---
+    if performance_recorder is not None:
+        performance_recorder.increment_counter("sample_token_calls")
+
+    return token_identifier
 
 
 def distributed_generate(
