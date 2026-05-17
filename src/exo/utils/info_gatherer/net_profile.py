@@ -110,7 +110,7 @@ async def check_reachable(
                 await send.send((target_ip, expected_node_id))
 
     def _is_usable_remote_ip(ip: str) -> bool:
-        """Filter out loopback, link-local, and other non-routable addresses."""
+        """Filter out loopback, link-local, and container/overlay network addresses."""
         if ip.startswith("127."):
             return False
         if ip == "::1":
@@ -118,6 +118,18 @@ async def check_reachable(
         if ip.startswith("fe80:"):
             return False
         if ip.startswith("169.254."):
+            return False
+        # Filter container/overlay networks (Docker, Flannel, CNI, etc.)
+        if ip.startswith("172.17."):  # Docker default bridge
+            return False
+        if ip.startswith("10.42."):  # Flannel/K8s pod network
+            return False
+        if ip.startswith("10.43."):  # K8s service network
+            return False
+        if ip.startswith("10.244."):  # K8s pod CIDR
+            return False
+        # Filter IPv6 that isn't global unicast
+        if ":" in ip and not ip.startswith("2") and not ip.startswith("3"):
             return False
         return True
 
