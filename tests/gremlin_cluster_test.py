@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-End-to-end cluster test for 4-node Qwen3.5-27B pipeline parallel inference on torch+xpu.
+End-to-end cluster test for 4-node Qwen3.5-27B tensor parallel inference on torch+xpu.
 
 This script:
-1. Downloads the Qwen3.5-4B model on one node (master), which distributes to all others
+1. Downloads the Qwen3.5-27B model on one node (master), which distributes to all others
 2. Creates a tensor-parallel instance across 4 nodes
 3. Waits for all shards to be loaded successfully
 4. Validates the model is sharded across all 4 nodes
@@ -250,7 +250,7 @@ class ClusterTestResult:
     success: bool = False
     error: str | None = None
     model_id: str = ""
-    sharding: str = "Pipeline"
+    sharding: str = "Tensor"
     instance_meta: str = "PyTorchXPURing"
     node_count: int = 0
     nodes: list[str] = field(default_factory=list)
@@ -950,11 +950,11 @@ async def run_test(
                     f" {'ERROR: ' + error if error else ''}"
                 )
 
-            # Find a valid pipeline parallel placement with PyTorchXPURing
+            # Find a valid tensor parallel placement with PyTorchXPURing
             valid_placement = None
             for p in preview_list:
                 if (
-                    p.get("sharding") == "Pipeline"
+                    p.get("sharding") == "Tensor"
                     and p.get("instance_meta") == "PyTorchXPURing"
                     and p.get("error") is None
                 ):
@@ -963,9 +963,9 @@ async def run_test(
 
             if valid_placement is None:
                 result.error = (
-                    "No valid pipeline parallel placement found with PyTorchXPURing. "
+                    "No valid tensor parallel placement found with PyTorchXPURing. "
                     "The model may not be downloaded on the cluster nodes, "
-                    "or the cluster may not support pipeline parallelism."
+                    "or the cluster may not support tensor parallelism."
                 )
                 return result
 
@@ -1033,9 +1033,9 @@ async def run_test(
                 print(f"  All runners already ready!")
         else:
             # Create new instance
-            print(f"  No existing instance found. Creating new pipeline-parallel instance...")
+            print(f"  No existing instance found. Creating new tensor-parallel instance...")
             try:
-                placement_result = await create_pipeline_instance(
+                placement_result = await create_tensor_instance(
                     client, api_host, api_port, model_id
                 )
                 command_id = placement_result.get("command_id", "")
@@ -2150,12 +2150,12 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("  GREMLIN CLUSTER TEST - Qwen3.5-27B (torch+xpu, pipeline)")
+    print("  GREMLIN CLUSTER TEST - Qwen3.5-27B (torch+xpu, tensor)")
     print(f"  Target: {args.model}")
     print(f"  Nodes:  {args.node_count}")
     print(f"  Host:   {args.api_host}")
     print(f"  Port:   {args.api_port}")
-    print(f"  Config: Pipeline sharding / PyTorchXPURing")
+    print(f"  Config: Tensor sharding / PyTorchXPURing")
     print(f"  Test:   {args.test_type}")
     print("=" * 60)
 
