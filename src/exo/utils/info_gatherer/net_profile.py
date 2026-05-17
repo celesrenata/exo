@@ -109,6 +109,18 @@ async def check_reachable(
             if expected_node_id in out:
                 await send.send((target_ip, expected_node_id))
 
+    def _is_usable_remote_ip(ip: str) -> bool:
+        """Filter out loopback, link-local, and other non-routable addresses."""
+        if ip.startswith("127."):
+            return False
+        if ip == "::1":
+            return False
+        if ip.startswith("fe80:"):
+            return False
+        if ip.startswith("169.254."):
+            return False
+        return True
+
     async with (
         httpx.AsyncClient(timeout=timeout, limits=limits, verify=False) as client,
         create_task_group() as tg,
@@ -119,7 +131,8 @@ async def check_reachable(
             if node_id == self_node_id:
                 continue
             for iface in node_network[node_id].interfaces:
-                tg.start_soon(_probe, iface.ip_address, node_id, client, send.clone())
+                if _is_usable_remote_ip(iface.ip_address):
+                    tg.start_soon(_probe, iface.ip_address, node_id, client, send.clone())
         send.close()
 
         with recv:
