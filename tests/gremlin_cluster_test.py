@@ -950,23 +950,22 @@ async def run_test(
                     f" {'ERROR: ' + error if error else ''}"
                 )
 
-            # Find a valid tensor parallel placement with PyTorchXPURing
+            # Find a valid pipeline parallel placement with PyTorchXPURing
             valid_placement = None
             for p in preview_list:
                 if (
-                    p.get("sharding") == "Tensor"
+                    p.get("sharding") == "Pipeline"
                     and p.get("instance_meta") == "PyTorchXPURing"
                     and p.get("error") is None
-                    and p.get("instance") is not None
                 ):
                     valid_placement = p
                     break
 
             if valid_placement is None:
                 result.error = (
-                    "No valid tensor parallel placement found with PyTorchXPURing. "
+                    "No valid pipeline parallel placement found with PyTorchXPURing. "
                     "The model may not be downloaded on the cluster nodes, "
-                    "or the cluster may not support tensor parallelism."
+                    "or the cluster may not support pipeline parallelism."
                 )
                 return result
 
@@ -1042,22 +1041,27 @@ async def run_test(
                 command_id = placement_result.get("command_id", "")
                 print(f"  Command created: {command_id}")
 
-                # Wait a moment for the instance to be created, then get the instance ID from state
-                await asyncio.sleep(1)
-                state = await get_state(client, api_host, api_port)
-                instances = state.get("instances", {})
-                
-                # Find the instance that was just created by matching model_id
+                # Wait for the instance to appear in state (may take time if downloading)
                 instance_id = None
-                for inst_id, inst in instances.items():
-                    for key, value in inst.items():
-                        if 'PyTorch' in key:
-                            shard_assignments = value.get('shardAssignments', {})
-                            if shard_assignments.get('modelId') == model_id:
-                                instance_id = inst_id
-                                break
+                for wait_attempt in range(30):
+                    await asyncio.sleep(2)
+                    state = await get_state(client, api_host, api_port)
+                    instances = state.get("instances", {})
+                    
+                    # Find the instance that was just created by matching model_id
+                    for inst_id, inst in instances.items():
+                        for key, value in inst.items():
+                            if 'PyTorch' in key:
+                                shard_assignments = value.get('shardAssignments', {})
+                                if shard_assignments.get('modelId') == model_id:
+                                    instance_id = inst_id
+                                    break
+                        if instance_id:
+                            break
                     if instance_id:
                         break
+                    if wait_attempt % 5 == 4:
+                        print(f"    Waiting for instance to appear... ({(wait_attempt+1)*2}s)")
                 
                 if not instance_id:
                     result.error = "Failed to find the created instance in state"
