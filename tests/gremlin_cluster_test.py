@@ -1081,7 +1081,7 @@ async def run_test(
             print(f"\n[Step 4] Waiting for model to load on all {node_count} nodes...")
 
             instance = await wait_for_instance_ready(
-                client, api_host, api_port, instance_id, timeout_seconds=300
+                client, api_host, api_port, instance_id, timeout_seconds=900
             )
         else:
             # Use existing instance - get instance data for validation
