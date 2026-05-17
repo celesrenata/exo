@@ -77,6 +77,7 @@ class BenchmarkConfig:
     benchmark_mode: BenchmarkMode = "single-request-decode"
     pipeline_layer_distribution: PipelineLayerDistribution | None = None
     recommend_layer_distribution: bool = False
+    concurrent_requests: int = 4
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,24 @@ class BenchmarkJsonOutput:
     metadata: dict[str, Any]
     metrics: dict[str, Any]
     raw_events: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class ContinuousBatchingBenchmarkResult:
+    """Benchmark result for continuous batching throughput measurement.
+
+    Reports aggregate and per-request tokens per second for a given
+    concurrency level, along with pipeline utilization metrics.
+    """
+
+    concurrent_requests: int
+    total_tokens_generated: int
+    total_decode_steps: int
+    wall_clock_seconds: float
+    aggregate_tokens_per_second: float  # total_tokens / wall_clock
+    per_request_tokens_per_second: float  # aggregate / concurrent_requests
+    average_microbatch_size: float
+    pipeline_occupancy: float
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +295,16 @@ def parse_args(argv: list[str] | None = None) -> BenchmarkConfig:
             "table showing current vs recommended distribution."
         ),
     )
+    parser.add_argument(
+        "--concurrent-requests",
+        type=int,
+        default=4,
+        help=(
+            "Number of concurrent requests for continuous-batching mode "
+            "(default: 4). Only used when --benchmark-mode is "
+            "continuous-batching."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -326,6 +355,7 @@ def parse_args(argv: list[str] | None = None) -> BenchmarkConfig:
         benchmark_mode=args.benchmark_mode,
         pipeline_layer_distribution=pipeline_layer_distribution,
         recommend_layer_distribution=args.recommend_layer_distribution,
+        concurrent_requests=args.concurrent_requests,
     )
 
 
@@ -1101,6 +1131,66 @@ def format_distribution_comparison(
         lines.append("Bottleneck reduction:         N/A (no timing data)")
 
     lines.append("")
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Continuous Batching Report Formatting
+# ---------------------------------------------------------------------------
+
+
+def format_continuous_batching_report(
+    result: ContinuousBatchingBenchmarkResult,
+) -> str:
+    """Format continuous batching benchmark result as a readable report section.
+
+    Displays aggregate throughput, per-request throughput, and pipeline
+    utilization metrics for the continuous batching benchmark mode.
+
+    Args:
+        result: The continuous batching benchmark result to format.
+
+    Returns:
+        A multi-line string report section suitable for terminal output.
+    """
+    lines: list[str] = []
+    lines.append("")
+    lines.append("=" * 60)
+    lines.append("CONTINUOUS BATCHING BENCHMARK RESULTS")
+    lines.append("=" * 60)
+    lines.append("")
+
+    # Concurrency and workload
+    lines.append("--- Workload ---")
+    lines.append(f"Concurrent requests:     {result.concurrent_requests}")
+    lines.append(f"Total tokens generated:  {result.total_tokens_generated}")
+    lines.append(f"Total decode steps:      {result.total_decode_steps}")
+    lines.append(f"Wall clock time:         {result.wall_clock_seconds:.3f} s")
+    lines.append("")
+
+    # Throughput
+    lines.append("--- Throughput ---")
+    lines.append(
+        f"Aggregate tokens/sec:    "
+        f"{result.aggregate_tokens_per_second:.2f} tok/s"
+    )
+    lines.append(
+        f"Per-request tokens/sec:  "
+        f"{result.per_request_tokens_per_second:.2f} tok/s"
+    )
+    lines.append("")
+
+    # Pipeline utilization
+    lines.append("--- Pipeline Utilization ---")
+    lines.append(
+        f"Average microbatch size: {result.average_microbatch_size:.2f}"
+    )
+    lines.append(
+        f"Pipeline occupancy:      {result.pipeline_occupancy * 100:.1f}%"
+    )
+    lines.append("")
+
     lines.append("=" * 60)
     return "\n".join(lines)
 
