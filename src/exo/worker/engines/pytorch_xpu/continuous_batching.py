@@ -1021,3 +1021,102 @@ class PerRequestCacheManager:
             True if a cache is registered for the request.
         """
         return request_id in self._caches
+
+
+# ---------------------------------------------------------------------------
+# BatchedDecodeProtocol — protocol metadata for batched decode fast-path
+# ---------------------------------------------------------------------------
+
+
+@final
+@dataclass(frozen=True)
+class BatchedDecodeProtocol:
+    """Protocol metadata for batched decode fast-path communication.
+
+    Extends the single-request DecodeActivationProtocol to support
+    variable-size microbatches. Buffers are allocated for max_batch_size,
+    but only active_slot_count elements are meaningful in each step.
+
+    The protocol is negotiated once when continuous batching begins. The
+    max_batch_size determines buffer allocation size and remains fixed.
+    The active_slot_count varies per decode step as requests join and leave
+    the decode batch.
+
+    The existing CommunicationBufferPool from Task 2 allocates buffers
+    sized for [max_batch_size, 1, hidden_size]. Only the first
+    active_slot_count rows contain valid activation data in each step.
+
+    Requirements: 2.11, 3.3, 3.6
+    """
+
+    max_batch_size: int
+    """Maximum number of slots in the decode microbatch.
+
+    Determines the buffer allocation size. Buffers are always allocated
+    for this many slots regardless of how many are active.
+    """
+
+    hidden_size: int
+    """Hidden dimension size of the model activations.
+
+    Combined with max_batch_size, determines the full buffer shape:
+    [max_batch_size, 1, hidden_size].
+    """
+
+    active_slot_count: int
+    """Number of active slots in the current decode step.
+
+    Updated each step. Only the first active_slot_count rows of the
+    activation buffer contain valid data. Must satisfy:
+    0 <= active_slot_count <= max_batch_size.
+    """
+
+    protocol_version: int = 1
+    """Version of the batched decode protocol for forward compatibility."""
+
+
+# ---------------------------------------------------------------------------
+# BatchedActivationMessage — metadata for a batched activation transfer
+# ---------------------------------------------------------------------------
+
+
+@final
+@dataclass(frozen=True)
+class BatchedActivationMessage:
+    """Metadata for a batched activation transfer between pipeline ranks.
+
+    The activation tensor has shape [max_batch_size, 1, hidden_size] but
+    only the first active_slot_count rows contain valid data. This message
+    accompanies the activation tensor as a lightweight control message
+    (or is sent as a single int when only active_slot_count changes).
+
+    The slot_indices and slot_generations tuples enable the receiver to:
+    1. Know which logical slots are active in this step.
+    2. Detect stale messages from slots that have been reassigned.
+
+    Both tuples must have length equal to active_slot_count.
+
+    Requirements: 3.2, 3.10
+    """
+
+    active_slot_count: int
+    """Number of active slots in this transfer.
+
+    Determines how many rows of the activation tensor are valid.
+    Must equal len(slot_indices) and len(slot_generations).
+    """
+
+    slot_indices: tuple[int, ...]
+    """Which slots are active in this decode step.
+
+    Maps positions in the activation tensor to logical batch slots.
+    Length must equal active_slot_count.
+    """
+
+    slot_generations: tuple[int, ...]
+    """Generation counters for each active slot.
+
+    Used by receivers to detect and discard stale messages from slots
+    that have been reassigned to new requests since the message was sent.
+    Length must equal active_slot_count.
+    """
