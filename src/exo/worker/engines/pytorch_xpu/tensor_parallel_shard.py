@@ -158,6 +158,8 @@ class TensorParallelShard:
         model: dict[str, torch.Tensor] | Any,
         config: TPShardConfig,
         device: str,
+        *,
+        pre_sharded: bool = False,
     ) -> None:
         """Initialize with sharded weights extracted from the full model.
 
@@ -169,6 +171,8 @@ class TensorParallelShard:
                    state_dict() method. Weights should be on CPU.
             config: TPShardConfig defining rank, world_size, and model dimensions.
             device: Target device string (e.g., "xpu:0", "cpu", "cuda:0").
+            pre_sharded: If True, the state dict is already sharded (from streaming
+                loader) and shard_weights() will be skipped.
         """
         self.config = config
         self.device = device
@@ -192,7 +196,11 @@ class TensorParallelShard:
                 f"got {type(model).__name__}"
             )
 
-        self.shard_weights(state_dict)
+        if pre_sharded:
+            # State dict is already sharded by the streaming loader — just store it
+            self.sharded_state_dict = state_dict
+        else:
+            self.shard_weights(state_dict)
 
         # Move native linear attention layers to target device and set eval mode
         for _layer_idx, native_layer in self._native_linear_attn_layers.items():
@@ -549,21 +557,29 @@ class TensorParallelShard:
         if self._matches_mlp_key(param_name, "gate_proj.weight"):
             # gate_proj: shape (intermediate_size, hidden_size)
             # Each rank gets intermediate_per_rank rows
-            start = rank * intermediate_per_rank
-            return param_tensor.narrow(0, start, intermediate_per_rank).clone()
+            # Use actual tensor dim to handle hybrid models where linear attention
+            # layers have smaller intermediate sizes than full attention layers.
+            actual_intermediate = param_tensor.shape[0]
+            actual_per_rank = actual_intermediate // world_size
+            start = rank * actual_per_rank
+            return param_tensor.narrow(0, start, actual_per_rank).clone()
 
         if self._matches_mlp_key(param_name, "up_proj.weight"):
             # up_proj: shape (intermediate_size, hidden_size)
             # Each rank gets intermediate_per_rank rows
-            start = rank * intermediate_per_rank
-            return param_tensor.narrow(0, start, intermediate_per_rank).clone()
+            actual_intermediate = param_tensor.shape[0]
+            actual_per_rank = actual_intermediate // world_size
+            start = rank * actual_per_rank
+            return param_tensor.narrow(0, start, actual_per_rank).clone()
 
         # MLP down projection: row-parallel (split input dim)
         if self._matches_mlp_key(param_name, "down_proj.weight"):
             # down_proj: shape (hidden_size, intermediate_size)
             # Each rank gets intermediate_per_rank columns
-            start = rank * intermediate_per_rank
-            return param_tensor.narrow(1, start, intermediate_per_rank).clone()
+            actual_intermediate = param_tensor.shape[1]
+            actual_per_rank = actual_intermediate // world_size
+            start = rank * actual_per_rank
+            return param_tensor.narrow(1, start, actual_per_rank).clone()
 
         # Handle bias terms with the same sharding as their corresponding weights
         if self._matches_attn_key(param_name, "q_proj.bias"):
@@ -586,12 +602,16 @@ class TensorParallelShard:
             return param_tensor.clone()
 
         if self._matches_mlp_key(param_name, "gate_proj.bias"):
-            start = rank * intermediate_per_rank
-            return param_tensor.narrow(0, start, intermediate_per_rank).clone()
+            actual_intermediate = param_tensor.shape[0]
+            actual_per_rank = actual_intermediate // world_size
+            start = rank * actual_per_rank
+            return param_tensor.narrow(0, start, actual_per_rank).clone()
 
         if self._matches_mlp_key(param_name, "up_proj.bias"):
-            start = rank * intermediate_per_rank
-            return param_tensor.narrow(0, start, intermediate_per_rank).clone()
+            actual_intermediate = param_tensor.shape[0]
+            actual_per_rank = actual_intermediate // world_size
+            start = rank * actual_per_rank
+            return param_tensor.narrow(0, start, actual_per_rank).clone()
 
         if self._matches_mlp_key(param_name, "down_proj.bias"):
             # down_proj bias is NOT sharded — it's added after all-reduce
@@ -645,9 +665,13 @@ class TensorParallelShard:
         gate_full = param_tensor.narrow(0, 0, total_intermediate)
         up_full = param_tensor.narrow(0, total_intermediate, total_intermediate)
 
+        # Compute actual per-rank size from tensor dimension to handle hybrid
+        # models where linear attention layers have smaller intermediate sizes.
+        actual_per_rank = total_intermediate // self.config.world_size
+
         # Shard each part for this rank (column-parallel: slice output dim)
-        gate_shard = gate_full.narrow(0, rank * intermediate_per_rank, intermediate_per_rank).clone()
-        up_shard = up_full.narrow(0, rank * intermediate_per_rank, intermediate_per_rank).clone()
+        gate_shard = gate_full.narrow(0, rank * actual_per_rank, actual_per_rank).clone()
+        up_shard = up_full.narrow(0, rank * actual_per_rank, actual_per_rank).clone()
 
         # Construct canonical key names
         suffix = "bias" if is_bias else "weight"
