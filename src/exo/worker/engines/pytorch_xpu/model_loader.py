@@ -409,6 +409,7 @@ class ModelLoader:
             model=sharded_state_dict,
             config=tp_config,
             device=str(device),
+            pre_sharded=True,
         )
 
         # Attach native linear_attn layers if any
@@ -571,6 +572,7 @@ class ModelLoader:
                 model=sharded_state_dict,
                 config=tp_config,
                 device=str(device),
+                pre_sharded=True,
             )
 
             # Attach native linear_attn layers if any
