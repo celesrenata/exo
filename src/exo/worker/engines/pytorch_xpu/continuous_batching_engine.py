@@ -42,6 +42,60 @@ logger_module = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# ContinuousBatchingMetrics — extended metrics for performance monitoring
+# ---------------------------------------------------------------------------
+
+
+@final
+@dataclass(frozen=True)
+class ContinuousBatchingMetrics:
+    """Extended metrics for continuous batching performance monitoring.
+
+    Provides derived metrics beyond the raw scheduler counters, including
+    running averages and per-step rates useful for performance dashboards
+    and capacity planning.
+
+    **Validates: Requirements 3.11**
+    """
+
+    active_requests: int
+    """Number of requests currently active (admitted + prefilling + decoding)."""
+
+    admission_queue_size: int
+    """Number of requests waiting in the admission queue."""
+
+    decode_ready_count: int
+    """Number of requests ready for the next decode step."""
+
+    completed_count: int
+    """Total number of requests that have completed generation."""
+
+    cancelled_count: int
+    """Total number of requests that have been cancelled."""
+
+    total_decode_steps: int
+    """Total number of decode steps executed since engine creation."""
+
+    total_tokens_generated: int
+    """Total number of tokens generated across all requests."""
+
+    total_admitted: int
+    """Total number of requests admitted since engine creation."""
+
+    average_microbatch_size: float
+    """Mean decode batch size across all steps. Zero if no steps executed."""
+
+    pipeline_occupancy: float
+    """Ratio of active decode slots to max_batch_size [0.0, 1.0]."""
+
+    admission_rate_per_step: float
+    """Requests admitted per decode step. Zero if no steps executed."""
+
+    completion_rate_per_step: float
+    """Requests completed per decode step. Zero if no steps executed."""
+
+
+# ---------------------------------------------------------------------------
 # _PendingRequest — internal bookkeeping for a submitted request
 # ---------------------------------------------------------------------------
 
@@ -137,6 +191,12 @@ class ContinuousBatchingEngine:
         # Completed request IDs (for reporting)
         self._completed_requests: set[str] = set()
 
+        # Extended metrics counters
+        self._total_decode_steps: int = 0
+        self._total_tokens_generated: int = 0
+        self._total_admitted: int = 0
+        self._cumulative_batch_sizes: int = 0
+
     # -------------------------------------------------------------------
     # Public API: Request submission
     # -------------------------------------------------------------------
@@ -188,6 +248,9 @@ class ContinuousBatchingEngine:
             on_token=on_token,
         )
         self._requests[request_id] = pending
+
+        # Track admission for metrics
+        self._total_admitted += 1
 
         # Admit to scheduler
         self._scheduler.admit_request(
@@ -416,6 +479,7 @@ class ContinuousBatchingEngine:
             max_tokens or generated EOS).
         """
         completed: list[str] = []
+        tokens_in_step: int = 0
 
         for idx in range(len(results.token_ids)):
             token_id = results.token_ids[idx]
@@ -445,6 +509,7 @@ class ContinuousBatchingEngine:
             # Update request state
             pending.tokens_generated += 1
             pending.last_token_id = token_id
+            tokens_in_step += 1
 
             # Invoke callback
             if pending.on_token is not None:
@@ -462,11 +527,75 @@ class ContinuousBatchingEngine:
                 pending.is_finished = True
                 completed.append(request_id)
 
+        # Update extended metrics counters
+        if tokens_in_step > 0:
+            self._total_decode_steps += 1
+            self._total_tokens_generated += tokens_in_step
+            self._cumulative_batch_sizes += tokens_in_step
+
         # Finalize completed requests
         for request_id in completed:
             self._finalize_request(request_id)
 
         return completed
+
+    # -------------------------------------------------------------------
+    # Public API: Extended metrics
+    # -------------------------------------------------------------------
+
+    def get_extended_metrics(self) -> ContinuousBatchingMetrics:
+        """Compute extended metrics for continuous batching performance monitoring.
+
+        Returns a frozen snapshot of current and derived metrics including
+        running averages and per-step rates.
+
+        Returns:
+            A ContinuousBatchingMetrics instance with all computed fields.
+        """
+        scheduler_metrics = self._scheduler.get_metrics()
+        total_steps = self._total_decode_steps
+        completed_count = scheduler_metrics.completed_count
+
+        # Average microbatch size: cumulative batch sizes / total steps
+        average_microbatch_size = (
+            self._cumulative_batch_sizes / total_steps
+            if total_steps > 0
+            else 0.0
+        )
+
+        # Pipeline occupancy: decode-ready slots / max_batch_size
+        pipeline_occupancy = (
+            scheduler_metrics.decode_ready_count / self._max_batch_size
+        )
+
+        # Admission rate: total admitted / total steps
+        admission_rate_per_step = (
+            self._total_admitted / total_steps
+            if total_steps > 0
+            else 0.0
+        )
+
+        # Completion rate: completed / total steps
+        completion_rate_per_step = (
+            completed_count / total_steps
+            if total_steps > 0
+            else 0.0
+        )
+
+        return ContinuousBatchingMetrics(
+            active_requests=scheduler_metrics.active_requests,
+            admission_queue_size=scheduler_metrics.admission_queue_size,
+            decode_ready_count=scheduler_metrics.decode_ready_count,
+            completed_count=completed_count,
+            cancelled_count=scheduler_metrics.cancelled_count,
+            total_decode_steps=total_steps,
+            total_tokens_generated=self._total_tokens_generated,
+            total_admitted=self._total_admitted,
+            average_microbatch_size=average_microbatch_size,
+            pipeline_occupancy=pipeline_occupancy,
+            admission_rate_per_step=admission_rate_per_step,
+            completion_rate_per_step=completion_rate_per_step,
+        )
 
     # -------------------------------------------------------------------
     # Properties

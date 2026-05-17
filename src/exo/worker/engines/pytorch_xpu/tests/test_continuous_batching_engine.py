@@ -437,6 +437,178 @@ class TestCancellation:
         # Cancel after completion — should not raise
         engine.cancel_request("req-1")
 
+    def test_cancel_then_inflight_message_discarded(self) -> None:
+        """Cancel a decoding request, then simulate in-flight message arrival.
+
+        Demonstrates the full cancellation + stale message discard flow:
+        1. Request is decoding with a known slot and generation
+        2. Cancel the request (increments slot generation)
+        3. An in-flight token result arrives with the OLD generation
+        4. The result is silently discarded (not processed, no error)
+
+        This confirms that the generation-based staleness detection handles
+        the drain/discard requirement without needing an explicit "cancelling"
+        intermediate state.
+        """
+        engine = _make_engine()
+        engine.submit_request(
+            request_id="req-1",
+            prompt_tokens=[1, 2, 3],
+            max_tokens=10,
+            sampling_config=_DEFAULT_SAMPLING,
+        )
+        engine.get_prefill_request()
+        engine.mark_prefill_done("req-1")
+
+        # Capture slot info before cancellation
+        microbatch = engine.get_decode_microbatch()
+        assert microbatch is not None
+        slot_state = microbatch.slot_states[0]
+        old_slot_index = slot_state.slot_index
+        old_slot_generation = slot_state.slot_generation
+
+        # Cancel the request — this increments the slot generation
+        engine.cancel_request("req-1")
+        assert engine.active_request_count == 0
+
+        # Simulate in-flight message arriving with the OLD generation
+        # (as would happen in a distributed pipeline where the message
+        # was already in transit when cancellation occurred)
+        stale_results = TokenResultBatch(
+            token_ids=(999,),
+            slot_indices=(old_slot_index,),
+            slot_generations=(old_slot_generation,),
+        )
+        completed = engine.report_token_results(stale_results)
+
+        # The stale message is discarded — no completions, no errors
+        assert completed == []
+        assert engine.active_request_count == 0
+
+    def test_cancel_does_not_affect_other_requests(self) -> None:
+        """Cancelling one request does not discard messages for others.
+
+        Verifies that the generation-based staleness detection is
+        per-slot: cancelling request A does not interfere with request B
+        on a different slot.
+        """
+        engine = _make_engine(max_batch_size=4)
+
+        # Submit and prefill two requests
+        engine.submit_request(
+            request_id="req-a",
+            prompt_tokens=[1, 2],
+            max_tokens=10,
+            sampling_config=_DEFAULT_SAMPLING,
+        )
+        engine.submit_request(
+            request_id="req-b",
+            prompt_tokens=[3, 4],
+            max_tokens=10,
+            sampling_config=_DEFAULT_SAMPLING,
+        )
+        engine.get_prefill_request()
+        engine.mark_prefill_done("req-a")
+        engine.get_prefill_request()
+        engine.mark_prefill_done("req-b")
+
+        # Get slot info for both
+        microbatch = engine.get_decode_microbatch()
+        assert microbatch is not None
+        assert microbatch.active_slot_count == 2
+
+        slot_a = next(
+            s for s in microbatch.slot_states if s.request_id == "req-a"
+        )
+        slot_b = next(
+            s for s in microbatch.slot_states if s.request_id == "req-b"
+        )
+
+        # Cancel req-a
+        engine.cancel_request("req-a")
+        assert engine.active_request_count == 1
+
+        # Token result for req-b (valid generation) still works
+        valid_results = TokenResultBatch(
+            token_ids=(42,),
+            slot_indices=(slot_b.slot_index,),
+            slot_generations=(slot_b.slot_generation,),
+        )
+        completed = engine.report_token_results(valid_results)
+        assert completed == []  # not yet at max_tokens
+
+        # Stale result for req-a (old generation) is discarded
+        stale_results = TokenResultBatch(
+            token_ids=(999,),
+            slot_indices=(slot_a.slot_index,),
+            slot_generations=(slot_a.slot_generation,),
+        )
+        completed = engine.report_token_results(stale_results)
+        assert completed == []
+
+    def test_slot_reuse_after_cancel_with_new_generation(self) -> None:
+        """After cancellation, the slot can be reused with a new generation.
+
+        Verifies that:
+        1. Cancel increments generation
+        2. New request gets the same slot with higher generation
+        3. Old-generation messages are discarded
+        4. New-generation messages are processed correctly
+        """
+        engine = _make_engine(max_batch_size=1)
+
+        # First request uses the only slot
+        engine.submit_request(
+            request_id="req-1",
+            prompt_tokens=[1],
+            max_tokens=10,
+            sampling_config=_DEFAULT_SAMPLING,
+        )
+        engine.get_prefill_request()
+        engine.mark_prefill_done("req-1")
+
+        microbatch = engine.get_decode_microbatch()
+        assert microbatch is not None
+        old_gen = microbatch.slot_states[0].slot_generation
+        slot_idx = microbatch.slot_states[0].slot_index
+
+        # Cancel — frees the slot, increments generation
+        engine.cancel_request("req-1")
+
+        # New request reuses the same slot
+        engine.submit_request(
+            request_id="req-2",
+            prompt_tokens=[2],
+            max_tokens=5,
+            sampling_config=_DEFAULT_SAMPLING,
+        )
+        engine.get_prefill_request()
+        engine.mark_prefill_done("req-2")
+
+        microbatch2 = engine.get_decode_microbatch()
+        assert microbatch2 is not None
+        new_gen = microbatch2.slot_states[0].slot_generation
+        assert new_gen > old_gen  # generation was incremented
+
+        # Old-generation message is discarded
+        stale_results = TokenResultBatch(
+            token_ids=(999,),
+            slot_indices=(slot_idx,),
+            slot_generations=(old_gen,),
+        )
+        completed = engine.report_token_results(stale_results)
+        assert completed == []
+
+        # New-generation message is processed
+        valid_results = TokenResultBatch(
+            token_ids=(42,),
+            slot_indices=(slot_idx,),
+            slot_generations=(new_gen,),
+        )
+        completed = engine.report_token_results(valid_results)
+        assert completed == []  # not yet at max_tokens
+        assert engine.active_request_count == 1
+
 
 # ---------------------------------------------------------------------------
 # Test: Multiple concurrent requests form a batch
