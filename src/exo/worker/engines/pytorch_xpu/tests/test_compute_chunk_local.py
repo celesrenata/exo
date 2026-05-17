@@ -155,7 +155,7 @@ class TestComputeChunkLocalTransformShapes:
 
         assert chunk_transform.cumulative_log_decay.shape == (batch_size, num_heads)
         assert chunk_transform.correction_keys.shape == (batch_size, num_heads, chunk_size, key_dim)
-        assert chunk_transform.correction_weights.shape == (batch_size, num_heads, chunk_size)
+        assert chunk_transform.correction_core.shape == (batch_size, num_heads, chunk_size, chunk_size)
         assert chunk_transform.additive_term.shape == (batch_size, num_heads, key_dim, value_dim)
 
     def test_transform_all_fp32(self) -> None:
@@ -168,7 +168,7 @@ class TestComputeChunkLocalTransformShapes:
 
         assert chunk_transform.cumulative_log_decay.dtype == torch.float32
         assert chunk_transform.correction_keys.dtype == torch.float32
-        assert chunk_transform.correction_weights.dtype == torch.float32
+        assert chunk_transform.correction_core.dtype == torch.float32
         assert chunk_transform.additive_term.dtype == torch.float32
 
     def test_transform_passes_validation(self) -> None:
@@ -215,7 +215,7 @@ class TestComputeChunkLocalTransformShapes:
         assert chunk_output.activations.dtype == torch.float32
         assert chunk_transform.cumulative_log_decay.dtype == torch.float32
         assert chunk_transform.correction_keys.dtype == torch.float32
-        assert chunk_transform.correction_weights.dtype == torch.float32
+        assert chunk_transform.correction_core.dtype == torch.float32
         assert chunk_transform.additive_term.dtype == torch.float32
 
 

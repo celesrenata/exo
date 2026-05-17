@@ -65,7 +65,7 @@ def _make_valid_chunk_transform(
     return ChunkTransform(
         cumulative_log_decay=torch.zeros(batch_size, num_heads, dtype=torch.float32),
         correction_keys=torch.zeros(batch_size, num_heads, chunk_size, key_dim, dtype=torch.float32),
-        correction_weights=torch.zeros(batch_size, num_heads, chunk_size, dtype=torch.float32),
+        correction_core=torch.zeros(batch_size, num_heads, chunk_size, chunk_size, dtype=torch.float32),
         additive_term=torch.zeros(batch_size, num_heads, key_dim, value_dim, dtype=torch.float32),
         chunk_size=chunk_size,
         num_heads=num_heads,
@@ -88,7 +88,7 @@ class TestChunkTransformShapes:
 
         assert transform.cumulative_log_decay.shape == (batch_size, num_heads)
         assert transform.correction_keys.shape == (batch_size, num_heads, chunk_size, key_dim)
-        assert transform.correction_weights.shape == (batch_size, num_heads, chunk_size)
+        assert transform.correction_core.shape == (batch_size, num_heads, chunk_size, chunk_size)
         assert transform.additive_term.shape == (batch_size, num_heads, key_dim, value_dim)
 
     def test_metadata_fields_match_tensor_shapes(self) -> None:
@@ -104,7 +104,7 @@ class TestChunkTransformShapes:
 
         assert transform.cumulative_log_decay.dtype == torch.float32
         assert transform.correction_keys.dtype == torch.float32
-        assert transform.correction_weights.dtype == torch.float32
+        assert transform.correction_core.dtype == torch.float32
         assert transform.additive_term.dtype == torch.float32
 
     def test_single_batch_single_head(self) -> None:
@@ -112,7 +112,7 @@ class TestChunkTransformShapes:
 
         assert transform.cumulative_log_decay.shape == (1, 1)
         assert transform.correction_keys.shape == (1, 1, 4, 8)
-        assert transform.correction_weights.shape == (1, 1, 4)
+        assert transform.correction_core.shape == (1, 1, 4, 4)
         assert transform.additive_term.shape == (1, 1, 8, 8)
 
 
@@ -167,11 +167,11 @@ class TestValidateChunkTransformShapesDtypeErrors:
         with pytest.raises(ChunkTransformValidationError, match="correction_keys must be fp32"):
             validate_chunk_transform_shapes(transform)
 
-    def test_rejects_bf16_correction_weights(self) -> None:
+    def test_rejects_bf16_correction_core(self) -> None:
         transform = _make_valid_chunk_transform()
-        transform.correction_weights = transform.correction_weights.to(torch.bfloat16)
+        transform.correction_core = transform.correction_core.to(torch.bfloat16)
 
-        with pytest.raises(ChunkTransformValidationError, match="correction_weights must be fp32"):
+        with pytest.raises(ChunkTransformValidationError, match="correction_core must be fp32"):
             validate_chunk_transform_shapes(transform)
 
     def test_rejects_fp16_additive_term(self) -> None:
@@ -222,12 +222,12 @@ class TestValidateChunkTransformShapesMismatchErrors:
         with pytest.raises(ChunkTransformValidationError, match="correction_keys d_k dimension"):
             validate_chunk_transform_shapes(transform)
 
-    def test_rejects_wrong_chunk_size_in_correction_weights(self) -> None:
+    def test_rejects_wrong_chunk_size_in_correction_core(self) -> None:
         transform = _make_valid_chunk_transform(batch_size=2, num_heads=4, chunk_size=8)
         # Replace with wrong C dimension
-        transform.correction_weights = torch.zeros(2, 4, 16, dtype=torch.float32)
+        transform.correction_core = torch.zeros(2, 4, 16, 16, dtype=torch.float32)
 
-        with pytest.raises(ChunkTransformValidationError, match="correction_weights C dimension"):
+        with pytest.raises(ChunkTransformValidationError, match="correction_core row dimension"):
             validate_chunk_transform_shapes(transform)
 
     def test_rejects_wrong_key_dim_in_additive_term(self) -> None:

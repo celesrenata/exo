@@ -44,17 +44,20 @@ class ChunkTransform:
     the full d_k × d_k matrix. The composed transform is stored as:
         - cumulative_log_decay: total log-decay across the chunk (scalar per head)
         - correction_keys: accumulated key vectors for rank-1 corrections (C × d_k)
-        - correction_weights: accumulated weights for corrections (C × 1)
+        - correction_core: dense WY core matrix (C × C), block-lower-triangular after composition
         - additive_term: B_composed (d_k × d_v) — the accumulated additive state
 
     All tensors are fp32 for numerical stability.
 
     The WY representation encodes A_composed implicitly as:
-        A_composed = exp(cumulative_log_decay) * (I - correction_keys^T @ diag(correction_weights) @ correction_keys)
+        A_composed(S) = exp(cumulative_log_decay) * (S - K^T @ T @ (K @ S))
 
-    This avoids materializing the full (d_k × d_k) matrix while supporting
-    efficient application via:
-        A_composed @ x = exp(decay) * (x - correction_keys^T @ (correction_weights * (correction_keys @ x)))
+    where K = correction_keys and T = correction_core.
+
+    For a single chunk, T = diag(correction_weights). After composing
+    multiple chunks, T becomes block-lower-triangular. This representation
+    avoids materializing the full (d_k × d_k) matrix while supporting
+    efficient application and associative composition.
     """
 
     cumulative_log_decay: torch.Tensor
@@ -67,11 +70,20 @@ class ChunkTransform:
     the rank-1 corrections to the identity in the WY decomposition.
     """
 
-    correction_weights: torch.Tensor
-    """Accumulated weights for WY corrections, shape (B, H, C).
+    correction_core: torch.Tensor
+    """Dense WY core matrix, shape (B, H, C, C).
 
-    Each weight combines the token's β value and relative decay factor
-    within the chunk.
+    For a single chunk, this is diag(correction_weights) — a diagonal matrix
+    where each diagonal entry combines the token's β value and relative decay
+    factor within the chunk.
+
+    After composition of multiple chunks, this becomes block-lower-triangular:
+        T_composed = [[T1,    0   ],
+                      [cross, T2  ]]
+    where cross = -T2 @ (K2 @ K1^T) @ T1.
+
+    The WY representation encodes A_composed implicitly as:
+        A_composed(S) = exp(cumulative_log_decay) * (S - K^T @ T @ (K @ S))
     """
 
     additive_term: torch.Tensor
@@ -139,7 +151,7 @@ def validate_chunk_transform_shapes(transform: ChunkTransform) -> None:
         1. All tensors are fp32
         2. cumulative_log_decay has shape (B, H) matching num_heads
         3. correction_keys has shape (B, H, C, d_k) matching key_dim and chunk_size
-        4. correction_weights has shape (B, H, C) matching chunk_size
+        4. correction_core has shape (B, H, C, C) matching chunk_size
         5. additive_term has shape (B, H, d_k, d_v) matching key_dim and value_dim
         6. Batch dimensions are consistent across all tensors
 
@@ -158,9 +170,9 @@ def validate_chunk_transform_shapes(transform: ChunkTransform) -> None:
         raise ChunkTransformValidationError(
             f"correction_keys must be fp32, got {transform.correction_keys.dtype}"
         )
-    if transform.correction_weights.dtype != torch.float32:
+    if transform.correction_core.dtype != torch.float32:
         raise ChunkTransformValidationError(
-            f"correction_weights must be fp32, got {transform.correction_weights.dtype}"
+            f"correction_core must be fp32, got {transform.correction_core.dtype}"
         )
     if transform.additive_term.dtype != torch.float32:
         raise ChunkTransformValidationError(
@@ -210,25 +222,30 @@ def validate_chunk_transform_shapes(transform: ChunkTransform) -> None:
             f"expected key_dim={transform.key_dim}"
         )
 
-    # correction_weights: (B, H, C)
-    weights_shape = transform.correction_weights.shape
-    if len(weights_shape) != 3:
+    # correction_core: (B, H, C, C)
+    core_shape = transform.correction_core.shape
+    if len(core_shape) != 4:
         raise ChunkTransformValidationError(
-            f"correction_weights must be 3D (B, H, C), got shape {weights_shape}"
+            f"correction_core must be 4D (B, H, C, C), got shape {core_shape}"
         )
-    if weights_shape[0] != batch_size:
+    if core_shape[0] != batch_size:
         raise ChunkTransformValidationError(
-            f"correction_weights batch dimension is {weights_shape[0]}, "
+            f"correction_core batch dimension is {core_shape[0]}, "
             f"expected {batch_size}"
         )
-    if weights_shape[1] != transform.num_heads:
+    if core_shape[1] != transform.num_heads:
         raise ChunkTransformValidationError(
-            f"correction_weights H dimension is {weights_shape[1]}, "
+            f"correction_core H dimension is {core_shape[1]}, "
             f"expected num_heads={transform.num_heads}"
         )
-    if weights_shape[2] != transform.chunk_size:
+    if core_shape[2] != transform.chunk_size:
         raise ChunkTransformValidationError(
-            f"correction_weights C dimension is {weights_shape[2]}, "
+            f"correction_core row dimension is {core_shape[2]}, "
+            f"expected chunk_size={transform.chunk_size}"
+        )
+    if core_shape[3] != transform.chunk_size:
+        raise ChunkTransformValidationError(
+            f"correction_core column dimension is {core_shape[3]}, "
             f"expected chunk_size={transform.chunk_size}"
         )
 
@@ -422,6 +439,10 @@ def compute_chunk_local(
     # Permute to (B, H, C) for the ChunkTransform
     correction_weights_final = correction_weights_final.permute(0, 2, 1)  # (B, H, C)
 
+    # Build the dense correction core matrix: diag(correction_weights)
+    # For a single chunk, the core is diagonal — shape (B, H, C, C)
+    correction_core = torch.diag_embed(correction_weights_final)  # (B, H, C, C)
+
     # Additive term: the accumulated B terms with decay
     # B_composed = sum_t(exp(G_total - G_t) * beta_t * k_t ⊗ v_t)
     # This is the local_state at the end of the chunk (which started from zero).
@@ -430,7 +451,7 @@ def compute_chunk_local(
     chunk_transform = ChunkTransform(
         cumulative_log_decay=total_log_decay,
         correction_keys=correction_keys,
-        correction_weights=correction_weights_final,
+        correction_core=correction_core,
         additive_term=additive_term,
         chunk_size=chunk_size,
         num_heads=num_heads,
@@ -445,3 +466,250 @@ def compute_chunk_local(
     )
 
     return chunk_output, chunk_transform
+
+
+# ---------------------------------------------------------------------------
+# Chunk transform application and composition
+# ---------------------------------------------------------------------------
+
+
+def apply_chunk_transform(
+    incoming_state: torch.Tensor,
+    transform: ChunkTransform,
+) -> torch.Tensor:
+    """Apply a chunk's composed transform to an incoming state.
+
+    Computes: S_out = A_composed * S_in + B_composed
+
+    Using the WY representation with dense core matrix T:
+        S_out = exp(decay) * (S_in - K^T @ T @ (K @ S_in)) + additive_term
+
+    The correction term accounts for the rank-1 perturbations accumulated
+    across all tokens in the chunk. The dense core matrix T encodes the
+    coupling between corrections (diagonal for single chunks, block-lower-
+    triangular after composition).
+
+    All computation is done in fp32 for numerical stability.
+
+    Args:
+        incoming_state: State from previous chunk, shape (B, H, d_k, d_v), fp32.
+        transform: The ChunkTransform representing the chunk's composed affine transform.
+
+    Returns:
+        Output state after applying the transform, shape (B, H, d_k, d_v), fp32.
+
+    **Validates: Requirements 7.1, 7.5, 7.6, 7.7**
+    """
+    # Ensure fp32 computation
+    state = incoming_state.float()
+
+    # Extract transform components
+    decay = transform.cumulative_log_decay  # (B, H)
+    keys = transform.correction_keys       # (B, H, C, d_k)
+    core = transform.correction_core       # (B, H, C, C)
+    additive = transform.additive_term     # (B, H, d_k, d_v)
+
+    # Compute corrections using the dense core matrix T:
+    # Step 1: K @ S_in — project state onto key directions
+    # keys: (B, H, C, d_k), state: (B, H, d_k, d_v) -> (B, H, C, d_v)
+    projected = torch.einsum("bhck,bhkv->bhcv", keys, state)
+
+    # Step 2: T @ (K @ S_in) — apply core matrix in correction space
+    # core: (B, H, C, C), projected: (B, H, C, d_v) -> (B, H, C, d_v)
+    weighted = torch.einsum("bhij,bhjv->bhiv", core, projected)
+
+    # Step 3: K^T @ T @ (K @ S_in) — project back to state space
+    # keys: (B, H, C, d_k), weighted: (B, H, C, d_v) -> (B, H, d_k, d_v)
+    correction = torch.einsum("bhck,bhcv->bhkv", keys, weighted)
+
+    # Apply decay and subtract corrections, then add the additive term
+    # S_out = exp(decay) * (S_in - correction) + additive_term
+    decay_factor = decay.exp().unsqueeze(-1).unsqueeze(-1)  # (B, H, 1, 1)
+    output_state = decay_factor * (state - correction) + additive
+
+    return output_state
+
+
+def apply_transform_linear(
+    transform: ChunkTransform,
+    state: torch.Tensor,
+) -> torch.Tensor:
+    """Apply only the linear part A of a chunk transform to a state matrix.
+
+    Computes: A(S) = exp(decay) * (S - K^T @ T @ (K @ S))
+
+    This is the same as apply_chunk_transform but WITHOUT the additive term.
+    Used during transform composition to compute A_2(B_1).
+
+    All computation is done in fp32 for numerical stability.
+
+    Args:
+        transform: The ChunkTransform whose linear part to apply.
+        state: State matrix to transform, shape (B, H, d_k, d_v), fp32.
+
+    Returns:
+        Transformed state, shape (B, H, d_k, d_v), fp32.
+
+    **Validates: Requirements 7.1, 7.5, 7.6, 7.7**
+    """
+    state = state.float()
+
+    decay = transform.cumulative_log_decay  # (B, H)
+    keys = transform.correction_keys       # (B, H, C, d_k)
+    core = transform.correction_core       # (B, H, C, C)
+
+    # K @ S: project state onto key directions
+    projected = torch.einsum("bhck,bhkv->bhcv", keys, state)  # (B, H, C, d_v)
+
+    # T @ (K @ S): apply core matrix
+    weighted = torch.einsum("bhij,bhjv->bhiv", core, projected)  # (B, H, C, d_v)
+
+    # K^T @ T @ (K @ S): project back to state space
+    correction = torch.einsum("bhck,bhcv->bhkv", keys, weighted)  # (B, H, d_k, d_v)
+
+    # A(S) = exp(decay) * (S - correction)
+    decay_factor = decay.exp().unsqueeze(-1).unsqueeze(-1)  # (B, H, 1, 1)
+    return decay_factor * (state - correction)
+
+
+def compose_two_transforms(
+    t1: ChunkTransform,
+    t2: ChunkTransform,
+) -> ChunkTransform:
+    """Compose two chunk transforms: apply t1 first, then t2.
+
+    The composition of affine transforms (A_1, B_1) then (A_2, B_2) is:
+        A_composed = A_2 ∘ A_1
+        B_composed = A_2(B_1) + B_2
+
+    The composed WY representation uses block-structured core:
+        K_composed = [K1; K2]  (concatenated along C dimension)
+        T_composed = [[T1,    0   ],
+                      [cross, T2  ]]
+        where cross = -T2 @ (K2 @ K1^T) @ T1
+
+    This preserves the WY form and enables further composition.
+
+    All computation is done in fp32 for numerical stability.
+
+    Args:
+        t1: First transform to apply (earlier in sequence).
+        t2: Second transform to apply (later in sequence).
+
+    Returns:
+        Composed ChunkTransform representing t2 ∘ t1.
+
+    **Validates: Requirements 7.1, 7.5, 7.6, 7.7**
+    """
+    # 1. Composed log-decay: sum of individual decays
+    decay_composed = t1.cumulative_log_decay + t2.cumulative_log_decay  # (B, H)
+
+    # 2. Composed keys: concatenate along C dimension
+    keys_composed = torch.cat([t1.correction_keys, t2.correction_keys], dim=-2)  # (B, H, C1+C2, d_k)
+
+    # 3. Composed core: block-lower-triangular matrix
+    # cross = -T2 @ (K2 @ K1^T) @ T1
+    # K2 @ K1^T: (B, H, C2, d_k) @ (B, H, d_k, C1) -> (B, H, C2, C1)
+    k2_k1t = torch.einsum("bhck,bhdk->bhcd", t2.correction_keys, t1.correction_keys)  # (B, H, C2, C1)
+
+    # (K2 @ K1^T) @ T1: (B, H, C2, C1) @ (B, H, C1, C1) -> (B, H, C2, C1)
+    k2k1t_t1 = torch.einsum("bhij,bhjk->bhik", k2_k1t, t1.correction_core)  # (B, H, C2, C1)
+
+    # T2 @ (K2 @ K1^T) @ T1: (B, H, C2, C2) @ (B, H, C2, C1) -> (B, H, C2, C1)
+    cross = -torch.einsum("bhij,bhjk->bhik", t2.correction_core, k2k1t_t1)  # (B, H, C2, C1)
+
+    # Build block matrix: [[T1, 0], [cross, T2]]
+    batch_size = t1.cumulative_log_decay.shape[0]
+    num_heads = t1.num_heads
+    c1 = t1.chunk_size
+    c2 = t2.chunk_size
+    c_total = c1 + c2
+    device = t1.correction_core.device
+
+    core_composed = torch.zeros(
+        batch_size, num_heads, c_total, c_total,
+        dtype=torch.float32, device=device,
+    )
+    # Top-left: T1
+    core_composed[:, :, :c1, :c1] = t1.correction_core
+    # Bottom-left: cross
+    core_composed[:, :, c1:, :c1] = cross
+    # Bottom-right: T2
+    core_composed[:, :, c1:, c1:] = t2.correction_core
+
+    # 4. Composed additive: A_2(B_1) + B_2
+    additive_composed = apply_transform_linear(t2, t1.additive_term) + t2.additive_term
+
+    return ChunkTransform(
+        cumulative_log_decay=decay_composed,
+        correction_keys=keys_composed,
+        correction_core=core_composed,
+        additive_term=additive_composed,
+        chunk_size=c_total,
+        num_heads=num_heads,
+        key_dim=t1.key_dim,
+        value_dim=t1.value_dim,
+    )
+
+
+def compose_chunk_transforms(
+    transforms: list[ChunkTransform],
+) -> list[torch.Tensor]:
+    """Compose chunk transforms sequentially to compute prefix states.
+
+    Given N chunk transforms, computes the incoming state for each chunk
+    by sequentially applying transforms starting from zero state.
+
+    The composition is associative: applying transform_i to state_i produces
+    state_{i+1}. This function computes the full prefix scan:
+        state_0 = 0
+        state_1 = apply_chunk_transform(state_0, transform_0)
+        state_2 = apply_chunk_transform(state_1, transform_1)
+        ...
+        state_N = apply_chunk_transform(state_{N-1}, transform_{N-1})
+
+    Returns N+1 states: the initial zero state plus the output state after
+    each chunk transform. state_i is the incoming state for chunk i (for
+    i < N), and state_N is the final recurrent state after all chunks.
+
+    All computation is done in fp32 for numerical stability.
+
+    Args:
+        transforms: List of N ChunkTransforms, one per chunk in sequence order.
+
+    Returns:
+        List of N+1 state tensors, each shape (B, H, d_k, d_v) in fp32.
+        states[0] is the zero initial state, states[i] for i >= 1 is the
+        state after applying transforms[0] through transforms[i-1].
+
+    Raises:
+        ValueError: If transforms list is empty.
+
+    **Validates: Requirements 7.1, 7.5, 7.6, 7.7**
+    """
+    if not transforms:
+        raise ValueError("transforms list must not be empty")
+
+    # Infer dimensions from the first transform
+    first = transforms[0]
+    batch_size = first.cumulative_log_decay.shape[0]
+    num_heads = first.num_heads
+    key_dim = first.key_dim
+    value_dim = first.value_dim
+    device = first.additive_term.device
+
+    # Initial state is zero
+    zero_state = torch.zeros(
+        batch_size, num_heads, key_dim, value_dim,
+        dtype=torch.float32, device=device,
+    )
+
+    # Compute prefix states sequentially
+    states: list[torch.Tensor] = [zero_state]
+    current_state = zero_state
+
+    for transform in transforms:
+        current_state = apply_chunk_transform(current_state, transform)
+        states.append(current_state)
+
+    return states
