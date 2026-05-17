@@ -22,10 +22,18 @@ All tensors are stored in fp32 for numerical stability during composition.
 
 from __future__ import annotations
 
+import logging
+import time
+import warnings
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 import torch
+
+if TYPE_CHECKING:
+    from exo.worker.engines.pytorch_xpu.instrumentation import PerformanceRecorder
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # ChunkTransform — composed affine transform for a chunk of tokens
@@ -953,3 +961,444 @@ def chunked_gated_deltanet_prefill(
     )
 
     return outputs, final_state
+
+# ---------------------------------------------------------------------------
+# Fallback logic (Subtask 7)
+# ---------------------------------------------------------------------------
+
+# Supported dtypes for chunked prefill computation
+_SUPPORTED_DTYPES: frozenset[torch.dtype] = frozenset({
+    torch.float32,
+    torch.float16,
+    torch.bfloat16,
+})
+
+
+class ChunkedPrefillUnsupportedError(ValueError):
+    """Raised when chunked prefill encounters an unsupported configuration.
+
+    This structured error is raised when ``fallback_on_unsupported_shape=False``
+    and the input dtype, shape, or parameter combination is not supported by
+    the chunked prefill implementation.
+
+    Attributes:
+        reason: Human-readable description of why the configuration is unsupported.
+        dtype: The unsupported dtype (if dtype was the issue).
+        shape: The unsupported shape (if shape was the issue).
+    """
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        dtype: torch.dtype | None = None,
+        shape: tuple[int, ...] | None = None,
+    ) -> None:
+        self.reason = reason
+        self.dtype = dtype
+        self.shape = shape
+        super().__init__(reason)
+
+
+class ChunkedPrefillFallbackWarning(UserWarning):
+    """Warning emitted when chunked prefill falls back to sequential.
+
+    This structured warning is emitted when ``fallback_on_unsupported_shape=True``
+    and the input configuration is not supported, causing a fallback to
+    sequential prefill.
+    """
+
+
+def _validate_chunked_prefill_inputs(
+    *,
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    chunk_size: int,
+) -> str | None:
+    """Validate inputs for chunked prefill support.
+
+    Returns None if inputs are supported, or a reason string if unsupported.
+    """
+    # Check sequence length
+    if q.shape[1] < 1:
+        return f"Sequence length must be >= 1, got {q.shape[1]}"
+
+    # Check dtypes
+    for name, tensor in [("q", q), ("k", k), ("v", v)]:
+        if tensor.dtype not in _SUPPORTED_DTYPES:
+            return (
+                f"Unsupported dtype for {name}: {tensor.dtype}. "
+                f"Supported: {sorted(str(d) for d in _SUPPORTED_DTYPES)}"
+            )
+
+    # Check gate and beta dtypes
+    if gate.dtype not in _SUPPORTED_DTYPES:
+        return f"Unsupported dtype for gate: {gate.dtype}"
+    if beta.dtype not in _SUPPORTED_DTYPES:
+        return f"Unsupported dtype for beta: {beta.dtype}"
+
+    # Check shape consistency
+    if q.ndim != 4:
+        return f"q must be 4D (B, T, H, d_k), got {q.ndim}D"
+    if k.ndim != 4:
+        return f"k must be 4D (B, T, H, d_k), got {k.ndim}D"
+    if v.ndim != 4:
+        return f"v must be 4D (B, T, H, d_v), got {v.ndim}D"
+    if gate.ndim != 3:
+        return f"gate must be 3D (B, T, H), got {gate.ndim}D"
+    if beta.ndim != 3:
+        return f"beta must be 3D (B, T, H), got {beta.ndim}D"
+
+    # Check batch/seq/head consistency
+    batch_size, seq_len, num_heads, key_dim = q.shape
+    if k.shape[:3] != (batch_size, seq_len, num_heads):
+        return f"k shape {k.shape} inconsistent with q shape {q.shape}"
+    if v.shape[:3] != (batch_size, seq_len, num_heads):
+        return f"v shape {v.shape} inconsistent with q shape {q.shape}"
+    if gate.shape != (batch_size, seq_len, num_heads):
+        return f"gate shape {gate.shape} inconsistent with q shape {q.shape}"
+    if beta.shape != (batch_size, seq_len, num_heads):
+        return f"beta shape {beta.shape} inconsistent with q shape {q.shape}"
+
+    # Check chunk_size validity
+    if chunk_size < 1:
+        return f"chunk_size must be >= 1, got {chunk_size}"
+
+    return None
+
+
+def _sequential_prefill_fallback(
+    *,
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    initial_state: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Sequential prefill fallback — processes tokens one at a time.
+
+    This is the safe fallback path used when chunked prefill cannot handle
+    the input configuration. It runs the full sequential recurrence.
+
+    Returns (outputs, final_state) matching the chunked prefill interface.
+    """
+    batch_size, seq_len, num_heads, key_dim = q.shape
+    value_dim = v.shape[-1]
+
+    q_fp32 = q.float()
+    k_fp32 = k.float()
+    v_fp32 = v.float()
+    gate_fp32 = gate.float()
+    beta_fp32 = beta.float()
+
+    scale = key_dim ** -0.5
+    q_fp32 = q_fp32 * scale
+
+    if initial_state is not None:
+        state = initial_state.float().clone()
+    else:
+        state = torch.zeros(
+            batch_size, num_heads, key_dim, value_dim,
+            dtype=torch.float32, device=q.device,
+        )
+
+    outputs = torch.zeros(
+        batch_size, seq_len, num_heads, value_dim,
+        dtype=torch.float32, device=q.device,
+    )
+
+    for t in range(seq_len):
+        q_t = q_fp32[:, t, :, :]
+        k_t = k_fp32[:, t, :, :]
+        v_t = v_fp32[:, t, :, :]
+        g_t = gate_fp32[:, t, :]
+        b_t = beta_fp32[:, t, :]
+
+        decay = g_t.exp().unsqueeze(-1).unsqueeze(-1)
+        state = state * decay
+
+        k_expanded = k_t.unsqueeze(-1)
+        retrieved = (state * k_expanded).sum(dim=-2)
+
+        beta_expanded = b_t.unsqueeze(-1)
+        delta = beta_expanded * (v_t - retrieved)
+
+        delta_expanded = delta.unsqueeze(-2)
+        state = state + k_expanded * delta_expanded
+
+        q_expanded = q_t.unsqueeze(-1)
+        output_t = (state * q_expanded).sum(dim=-2)
+        outputs[:, t, :, :] = output_t
+
+    return outputs, state
+
+
+def chunked_prefill_with_fallback(
+    *,
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    chunk_size: int = 64,
+    initial_state: torch.Tensor | None = None,
+    fallback_on_unsupported_shape: bool = True,
+    performance_recorder: PerformanceRecorder | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Chunked GatedDeltaNet prefill with fallback logic.
+
+    Validates inputs and either runs chunked prefill or falls back to
+    sequential prefill depending on the ``fallback_on_unsupported_shape`` flag.
+
+    When inputs are unsupported:
+    - If ``fallback_on_unsupported_shape=True``: emits a structured warning
+      and uses sequential prefill.
+    - If ``fallback_on_unsupported_shape=False``: raises
+      ``ChunkedPrefillUnsupportedError``.
+
+    Args:
+        q: L2-normalized queries, shape (B, T, H, d_k).
+        k: L2-normalized keys, shape (B, T, H, d_k).
+        v: Values, shape (B, T, H, d_v).
+        gate: Log-space decay gates, shape (B, T, H).
+        beta: Sigmoid update rates, shape (B, T, H).
+        chunk_size: Number of tokens per chunk (default 64).
+        initial_state: Optional initial recurrent state, shape (B, H, d_k, d_v).
+        fallback_on_unsupported_shape: Whether to fall back to sequential
+            prefill on unsupported inputs (True) or raise an error (False).
+        performance_recorder: Optional recorder for instrumentation spans.
+
+    Returns:
+        (outputs, final_state) where:
+        - outputs: (B, T, H, d_v) — per-token outputs in sequence order
+        - final_state: (B, H, d_k, d_v) — final recurrent state for decode
+
+    Raises:
+        ChunkedPrefillUnsupportedError: When inputs are unsupported and
+            ``fallback_on_unsupported_shape=False``.
+
+    **Validates: Requirements 7.1, 7.5, 7.6, 7.7**
+    """
+    # Validate inputs
+    unsupported_reason = _validate_chunked_prefill_inputs(
+        q=q, k=k, v=v, gate=gate, beta=beta, chunk_size=chunk_size,
+    )
+
+    if unsupported_reason is not None:
+        if fallback_on_unsupported_shape:
+            warnings.warn(
+                f"Chunked prefill unsupported: {unsupported_reason}. "
+                f"Falling back to sequential prefill.",
+                ChunkedPrefillFallbackWarning,
+                stacklevel=2,
+            )
+            logger.warning(
+                "Chunked prefill fallback to sequential: %s",
+                unsupported_reason,
+            )
+            if performance_recorder is not None:
+                with performance_recorder.span(
+                    "chunked_prefill_sequential_fallback",
+                    mode="prefill",
+                    metadata={"reason": unsupported_reason},
+                ):
+                    return _sequential_prefill_fallback(
+                        q=q, k=k, v=v, gate=gate, beta=beta,
+                        initial_state=initial_state,
+                    )
+            return _sequential_prefill_fallback(
+                q=q, k=k, v=v, gate=gate, beta=beta,
+                initial_state=initial_state,
+            )
+        else:
+            raise ChunkedPrefillUnsupportedError(
+                unsupported_reason,
+                dtype=q.dtype if q.dtype not in _SUPPORTED_DTYPES else None,
+                shape=tuple(q.shape) if q.ndim != 4 else None,
+            )
+
+    # Inputs are valid — run instrumented chunked prefill
+    if performance_recorder is not None:
+        return _chunked_prefill_instrumented(
+            q=q, k=k, v=v, gate=gate, beta=beta,
+            chunk_size=chunk_size,
+            initial_state=initial_state,
+            recorder=performance_recorder,
+        )
+
+    return chunked_gated_deltanet_prefill(
+        q=q, k=k, v=v, gate=gate, beta=beta,
+        chunk_size=chunk_size,
+        initial_state=initial_state,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Instrumented chunked prefill (Subtask 9)
+# ---------------------------------------------------------------------------
+
+
+def _chunked_prefill_instrumented(
+    *,
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    chunk_size: int,
+    initial_state: torch.Tensor | None,
+    recorder: PerformanceRecorder,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Chunked prefill with performance instrumentation.
+
+    Records timing spans for:
+    - chunk_local_computation: Time spent computing intra-chunk outputs/transforms
+    - transform_composition: Time spent composing transforms into prefix states
+    - output_materialization: Time spent materializing final outputs
+    - chunked_prefill_total: Total end-to-end time
+
+    Also records a sequential_prefill_comparison span for comparison timing.
+
+    Args:
+        q, k, v, gate, beta: Input tensors (same as chunked_gated_deltanet_prefill).
+        chunk_size: Tokens per chunk.
+        initial_state: Optional initial state.
+        recorder: PerformanceRecorder to record spans into.
+
+    Returns:
+        (outputs, final_state) matching the chunked prefill interface.
+    """
+    batch_size, seq_len, num_heads, key_dim = q.shape
+    value_dim = v.shape[-1]
+
+    with recorder.span("chunked_prefill_total", mode="prefill", metadata={
+        "seq_len": seq_len,
+        "chunk_size": chunk_size,
+        "num_chunks": (seq_len + chunk_size - 1) // chunk_size,
+    }):
+        # Phase 1: Chunk-local computation
+        chunk_outputs: list[ChunkOutput] = []
+        transforms: list[ChunkTransform] = []
+        q_chunks: list[torch.Tensor] = []
+        k_chunks: list[torch.Tensor] = []
+        gate_chunks: list[torch.Tensor] = []
+        beta_chunks: list[torch.Tensor] = []
+
+        with recorder.span("chunk_local_computation", mode="prefill"):
+            offset = 0
+            chunk_index = 0
+            while offset < seq_len:
+                end = min(offset + chunk_size, seq_len)
+
+                q_c = q[:, offset:end]
+                k_c = k[:, offset:end]
+                v_c = v[:, offset:end]
+                gate_c = gate[:, offset:end]
+                beta_c = beta[:, offset:end]
+
+                chunk_out, chunk_transform = compute_chunk_local(
+                    q_chunk=q_c,
+                    k_chunk=k_c,
+                    v_chunk=v_c,
+                    gate_chunk=gate_c,
+                    beta_chunk=beta_c,
+                    chunk_index=chunk_index,
+                )
+
+                chunk_outputs.append(chunk_out)
+                transforms.append(chunk_transform)
+                q_chunks.append(q_c)
+                k_chunks.append(k_c)
+                gate_chunks.append(gate_c)
+                beta_chunks.append(beta_c)
+
+                offset = end
+                chunk_index += 1
+
+        # Phase 2: Transform composition
+        with recorder.span("transform_composition", mode="prefill"):
+            prefix_states = compose_chunk_transforms(transforms)
+
+            if initial_state is not None:
+                initial = initial_state.float()
+                shifted_states: list[torch.Tensor] = [initial]
+                current = initial
+                for transform in transforms:
+                    current = apply_chunk_transform(current, transform)
+                    shifted_states.append(current)
+                prefix_states = shifted_states
+
+        # Phase 3: Output materialization
+        with recorder.span("output_materialization", mode="prefill"):
+            outputs, final_state = materialize_chunk_outputs(
+                chunk_outputs=chunk_outputs,
+                prefix_states=prefix_states,
+                q_chunks=q_chunks,
+                k_chunks=k_chunks,
+                gate_chunks=gate_chunks,
+                beta_chunks=beta_chunks,
+            )
+
+    # Record sequential comparison timing (for performance analysis)
+    seq_start = time.perf_counter()
+    _sequential_prefill_fallback(
+        q=q, k=k, v=v, gate=gate, beta=beta, initial_state=initial_state,
+    )
+    seq_end = time.perf_counter()
+    recorder.increment_counter("sequential_prefill_comparison_runs")
+    # Store the comparison time as metadata on a zero-duration event
+    # by using a span that captures the sequential time
+    with recorder.span(
+        "sequential_prefill_comparison",
+        mode="prefill",
+        metadata={
+            "sequential_time_seconds": seq_end - seq_start,
+            "seq_len": seq_len,
+        },
+    ):
+        pass  # Already timed above; span records the metadata
+
+    return outputs, final_state
+
+
+# ---------------------------------------------------------------------------
+# Pipeline integration hook (Subtask 8)
+# ---------------------------------------------------------------------------
+
+# TODO(pipeline-integration): When enable_chunked_gated_deltanet_prefill is True
+# in PytorchXpuOptimizationConfiguration, the pipeline_parallel_shard.py should:
+#
+# 1. During prefill, for each GatedDeltaNet (linear_attention) layer:
+#    - Call chunked_prefill_with_fallback() instead of the sequential path
+#    - Pass the chunk_size from ChunkedGatedDeltaNetPrefillConfiguration
+#    - Pass the fallback_on_unsupported_shape flag from config
+#    - Pass the performance_recorder for instrumentation
+#
+# 2. For full-attention layers: keep unchanged (they use standard HF attention)
+#
+# 3. Store the resulting final_state in the DynamicCache for decode continuation
+#    (the GatedDeltaNetCache wrapper handles this transparently)
+#
+# Integration point in pipeline_parallel_shard.py._forward_layer():
+#   if (
+#       mode == "prefill"
+#       and layer_type == "linear_attention"
+#       and self._optimization_config is not None
+#       and self._optimization_config.enable_chunked_gated_deltanet_prefill
+#   ):
+#       from exo.worker.engines.pytorch_xpu.chunked_prefill import (
+#           chunked_prefill_with_fallback,
+#       )
+#       config = self._optimization_config.chunked_gated_deltanet_prefill
+#       outputs, final_state = chunked_prefill_with_fallback(
+#           q=q, k=k, v=v, gate=gate, beta=beta,
+#           chunk_size=config.chunk_size,
+#           fallback_on_unsupported_shape=config.fallback_on_unsupported_shape,
+#           performance_recorder=self.performance_recorder,
+#       )
+#       # Store final_state in DynamicCache via the GatedDeltaNetCache wrapper
+#       # The cache key uses the global layer index for correct decode lookup

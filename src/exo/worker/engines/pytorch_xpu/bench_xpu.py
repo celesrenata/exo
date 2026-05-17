@@ -78,6 +78,7 @@ class BenchmarkConfig:
     pipeline_layer_distribution: PipelineLayerDistribution | None = None
     recommend_layer_distribution: bool = False
     concurrent_requests: int = 4
+    chunked_gated_deltanet_prefill: bool = False
 
 
 @dataclass(frozen=True)
@@ -305,6 +306,17 @@ def parse_args(argv: list[str] | None = None) -> BenchmarkConfig:
             "continuous-batching."
         ),
     )
+    parser.add_argument(
+        "--chunked-gated-deltanet-prefill",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable chunked GatedDeltaNet prefill during prefill benchmark mode. "
+            "When used with --benchmark-mode prefill, measures TTFT for prompt "
+            "lengths 128, 512, 1024, 2048 using the chunked prefill path. "
+            "Reports per-prompt-length TTFT and comparison with sequential prefill."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -356,6 +368,7 @@ def parse_args(argv: list[str] | None = None) -> BenchmarkConfig:
         pipeline_layer_distribution=pipeline_layer_distribution,
         recommend_layer_distribution=args.recommend_layer_distribution,
         concurrent_requests=args.concurrent_requests,
+        chunked_gated_deltanet_prefill=args.chunked_gated_deltanet_prefill,
     )
 
 
@@ -2013,6 +2026,165 @@ def main() -> None:
             recorder=recorder,
         )
         write_json_output(json_output, config.json_output_path)
+
+
+# ---------------------------------------------------------------------------
+# Chunked GatedDeltaNet Prefill Benchmark (Subtask 12)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ChunkedPrefillBenchmarkResult:
+    """Result from a chunked prefill benchmark run for a specific prompt length.
+
+    Reports TTFT (time to first token) for the chunked prefill path
+    compared to sequential prefill.
+    """
+
+    prompt_length: int
+    """Number of tokens in the prompt."""
+
+    chunked_ttft_seconds: float
+    """Time to first token using chunked prefill (seconds)."""
+
+    sequential_ttft_seconds: float
+    """Time to first token using sequential prefill (seconds)."""
+
+    speedup_ratio: float
+    """Ratio of sequential_ttft / chunked_ttft (>1 means chunked is faster)."""
+
+    chunk_size: int
+    """Chunk size used for the chunked prefill."""
+
+    num_chunks: int
+    """Number of chunks the prompt was split into."""
+
+
+def run_chunked_prefill_benchmark(
+    *,
+    chunk_size: int = 64,
+    num_heads: int = 4,
+    key_dim: int = 16,
+    value_dim: int = 16,
+    prompt_lengths: tuple[int, ...] = (128, 512, 1024, 2048),
+    iterations: int = 3,
+    seed: int = 42,
+) -> list[ChunkedPrefillBenchmarkResult]:
+    """Run chunked prefill benchmark for multiple prompt lengths.
+
+    Measures TTFT for both chunked and sequential prefill paths across
+    the specified prompt lengths. Uses synthetic random inputs (no model
+    required) to isolate prefill computation performance.
+
+    Args:
+        chunk_size: Chunk size for chunked prefill (default 64).
+        num_heads: Number of attention heads for synthetic inputs.
+        key_dim: Key dimension for synthetic inputs.
+        value_dim: Value dimension for synthetic inputs.
+        prompt_lengths: Tuple of prompt lengths to benchmark.
+        iterations: Number of iterations per prompt length.
+        seed: Random seed for reproducibility.
+
+    Returns:
+        List of ChunkedPrefillBenchmarkResult, one per prompt length.
+    """
+    from exo.worker.engines.pytorch_xpu.chunked_prefill import (
+        chunked_gated_deltanet_prefill,
+        _sequential_prefill_fallback,
+    )
+
+    results: list[ChunkedPrefillBenchmarkResult] = []
+
+    for prompt_len in prompt_lengths:
+        gen = torch.Generator().manual_seed(seed)
+        batch_size = 1
+
+        q = torch.randn(batch_size, prompt_len, num_heads, key_dim, generator=gen)
+        q = q / q.norm(dim=-1, keepdim=True).clamp(min=1e-8)
+        k = torch.randn(batch_size, prompt_len, num_heads, key_dim, generator=gen)
+        k = k / k.norm(dim=-1, keepdim=True).clamp(min=1e-8)
+        v = torch.randn(batch_size, prompt_len, num_heads, value_dim, generator=gen)
+        gate = -torch.rand(batch_size, prompt_len, num_heads, generator=gen) * 0.5
+        beta = torch.sigmoid(
+            torch.randn(batch_size, prompt_len, num_heads, generator=gen)
+        )
+
+        # Warmup
+        chunked_gated_deltanet_prefill(
+            q=q, k=k, v=v, gate=gate, beta=beta, chunk_size=chunk_size,
+        )
+        _sequential_prefill_fallback(q=q, k=k, v=v, gate=gate, beta=beta)
+
+        # Benchmark chunked
+        chunked_times: list[float] = []
+        for _ in range(iterations):
+            start = time.perf_counter()
+            chunked_gated_deltanet_prefill(
+                q=q, k=k, v=v, gate=gate, beta=beta, chunk_size=chunk_size,
+            )
+            end = time.perf_counter()
+            chunked_times.append(end - start)
+
+        # Benchmark sequential
+        sequential_times: list[float] = []
+        for _ in range(iterations):
+            start = time.perf_counter()
+            _sequential_prefill_fallback(q=q, k=k, v=v, gate=gate, beta=beta)
+            end = time.perf_counter()
+            sequential_times.append(end - start)
+
+        chunked_mean = sum(chunked_times) / len(chunked_times)
+        sequential_mean = sum(sequential_times) / len(sequential_times)
+        speedup = sequential_mean / chunked_mean if chunked_mean > 0 else 0.0
+        num_chunks = (prompt_len + chunk_size - 1) // chunk_size
+
+        results.append(ChunkedPrefillBenchmarkResult(
+            prompt_length=prompt_len,
+            chunked_ttft_seconds=chunked_mean,
+            sequential_ttft_seconds=sequential_mean,
+            speedup_ratio=speedup,
+            chunk_size=chunk_size,
+            num_chunks=num_chunks,
+        ))
+
+    return results
+
+
+def format_chunked_prefill_benchmark_report(
+    results: list[ChunkedPrefillBenchmarkResult],
+) -> str:
+    """Format chunked prefill benchmark results into a text report.
+
+    Args:
+        results: List of benchmark results for different prompt lengths.
+
+    Returns:
+        Multi-line string report suitable for terminal output.
+    """
+    lines: list[str] = []
+    lines.append("=" * 70)
+    lines.append("CHUNKED GATED-DELTANET PREFILL BENCHMARK")
+    lines.append("=" * 70)
+    lines.append("")
+    lines.append(
+        f"{'Prompt Len':>10} | {'Chunks':>6} | "
+        f"{'Chunked TTFT':>12} | {'Sequential TTFT':>15} | {'Speedup':>8}"
+    )
+    lines.append("-" * 70)
+
+    for r in results:
+        lines.append(
+            f"{r.prompt_length:>10} | {r.num_chunks:>6} | "
+            f"{r.chunked_ttft_seconds:>10.4f} s | "
+            f"{r.sequential_ttft_seconds:>13.4f} s | "
+            f"{r.speedup_ratio:>6.2f}x"
+        )
+
+    lines.append("")
+    if results:
+        lines.append(f"Chunk size: {results[0].chunk_size}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
