@@ -187,21 +187,51 @@ class TestChunkedGatedDeltaNetPrefillConfiguration:
             config.enabled = True  # type: ignore[misc]
 
     def test_custom_chunk_size(self) -> None:
-        """Custom chunk_size is accepted."""
+        """Custom chunk_size is accepted when valid (power of 2, >= 16)."""
         config = ChunkedGatedDeltaNetPrefillConfiguration(
             enabled=True, chunk_size=128
         )
         assert config.chunk_size == 128
 
+    def test_accepts_minimum_chunk_size(self) -> None:
+        """chunk_size of 16 (minimum valid) is accepted."""
+        config = ChunkedGatedDeltaNetPrefillConfiguration(chunk_size=16)
+        assert config.chunk_size == 16
+
+    def test_accepts_large_power_of_two(self) -> None:
+        """Large power-of-2 chunk_size is accepted."""
+        config = ChunkedGatedDeltaNetPrefillConfiguration(chunk_size=256)
+        assert config.chunk_size == 256
+
+    def test_rejects_chunk_size_below_16(self) -> None:
+        """chunk_size below 16 is rejected."""
+        with pytest.raises(ValueError, match="must be >= 16"):
+            ChunkedGatedDeltaNetPrefillConfiguration(chunk_size=8)
+
+    def test_rejects_chunk_size_of_1(self) -> None:
+        """chunk_size of 1 is rejected (below minimum)."""
+        with pytest.raises(ValueError, match="must be >= 16"):
+            ChunkedGatedDeltaNetPrefillConfiguration(chunk_size=1)
+
     def test_rejects_zero_chunk_size(self) -> None:
         """Zero chunk_size is rejected."""
-        with pytest.raises(ValueError, match="must be positive"):
+        with pytest.raises(ValueError, match="must be >= 16"):
             ChunkedGatedDeltaNetPrefillConfiguration(chunk_size=0)
 
     def test_rejects_negative_chunk_size(self) -> None:
         """Negative chunk_size is rejected."""
-        with pytest.raises(ValueError, match="must be positive"):
+        with pytest.raises(ValueError, match="must be >= 16"):
             ChunkedGatedDeltaNetPrefillConfiguration(chunk_size=-1)
+
+    def test_rejects_non_power_of_two(self) -> None:
+        """chunk_size that is not a power of 2 is rejected."""
+        with pytest.raises(ValueError, match="must be a power of 2"):
+            ChunkedGatedDeltaNetPrefillConfiguration(chunk_size=48)
+
+    def test_rejects_non_power_of_two_large(self) -> None:
+        """Large non-power-of-2 chunk_size is rejected."""
+        with pytest.raises(ValueError, match="must be a power of 2"):
+            ChunkedGatedDeltaNetPrefillConfiguration(chunk_size=100)
 
 
 # ===========================================================================
@@ -254,6 +284,25 @@ class TestPytorchXpuOptimizationConfiguration:
         assert config.chunked_prefill_configuration.enabled is False
         assert config.chunked_prefill_configuration.chunk_size == 64
         assert config.chunked_prefill_configuration.fallback_on_unsupported_shape is True
+
+    def test_chunked_gated_deltanet_prefill_accessible(self) -> None:
+        """chunked_gated_deltanet_prefill field is accessible with correct defaults."""
+        config = PytorchXpuOptimizationConfiguration()
+        assert config.chunked_gated_deltanet_prefill.enabled is False
+        assert config.chunked_gated_deltanet_prefill.chunk_size == 64
+        assert config.chunked_gated_deltanet_prefill.fallback_on_unsupported_shape is True
+
+    def test_chunked_gated_deltanet_prefill_custom(self) -> None:
+        """chunked_gated_deltanet_prefill accepts custom configuration."""
+        custom = ChunkedGatedDeltaNetPrefillConfiguration(
+            enabled=True, chunk_size=32, fallback_on_unsupported_shape=False
+        )
+        config = PytorchXpuOptimizationConfiguration(
+            chunked_gated_deltanet_prefill=custom,
+        )
+        assert config.chunked_gated_deltanet_prefill.enabled is True
+        assert config.chunked_gated_deltanet_prefill.chunk_size == 32
+        assert config.chunked_gated_deltanet_prefill.fallback_on_unsupported_shape is False
 
     def test_custom_distribution(self) -> None:
         """Custom pipeline_layer_distribution is accepted."""

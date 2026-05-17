@@ -341,10 +341,16 @@ class ChunkedGatedDeltaNetPrefillConfiguration(BaseModel):
 
     @field_validator("chunk_size")
     @classmethod
-    def validate_chunk_size_positive(cls, value: int) -> int:
-        """Validate that chunk_size is positive."""
-        if value <= 0:
-            raise ValueError(f"chunk_size must be positive, got {value}")
+    def validate_chunk_size(cls, value: int) -> int:
+        """Validate that chunk_size is >= 16 and a power of 2."""
+        if value < 16:
+            raise ValueError(
+                f"chunk_size must be >= 16, got {value}"
+            )
+        if value & (value - 1) != 0:
+            raise ValueError(
+                f"chunk_size must be a power of 2, got {value}"
+            )
         return value
 
 
@@ -453,6 +459,11 @@ class PytorchXpuOptimizationConfiguration(BaseModel):
         ChunkedGatedDeltaNetPrefillConfiguration()
     )
     """Configuration for chunked GatedDeltaNet prefill."""
+
+    chunked_gated_deltanet_prefill: ChunkedGatedDeltaNetPrefillConfiguration = (
+        ChunkedGatedDeltaNetPrefillConfiguration()
+    )
+    """Configuration for chunked GatedDeltaNet prefill optimization."""
 
     @field_validator("maximum_decode_microbatch_size")
     @classmethod
