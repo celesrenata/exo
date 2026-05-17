@@ -1,4 +1,4 @@
-"""Chunk-level transform representation for GatedDeltaNet chunked prefill.
+"""Chunk-level transform representation and computation for GatedDeltaNet chunked prefill.
 
 Defines internal types for representing the composed affine transform of a chunk
 of tokens in the GatedDeltaNet recurrence. The recurrence has the form:
@@ -258,3 +258,190 @@ def validate_chunk_transform_shapes(transform: ChunkTransform) -> None:
             f"additive_term d_v dimension is {additive_shape[3]}, "
             f"expected value_dim={transform.value_dim}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Chunk-local computation
+# ---------------------------------------------------------------------------
+
+
+def compute_chunk_local(
+    *,
+    q_chunk: torch.Tensor,      # (B, C, H, d_k) — queries for this chunk
+    k_chunk: torch.Tensor,      # (B, C, H, d_k) — keys for this chunk
+    v_chunk: torch.Tensor,      # (B, C, H, d_v) — values for this chunk
+    gate_chunk: torch.Tensor,   # (B, C, H) — log-space decay gates
+    beta_chunk: torch.Tensor,   # (B, C, H) — sigmoid update rates
+    chunk_index: int,
+) -> tuple[ChunkOutput, ChunkTransform]:
+    """Compute intra-chunk outputs and the chunk's composed transform.
+
+    This function processes all tokens within a single chunk:
+    1. Computes the cumulative log-decay within the chunk
+    2. Builds the decay-weighted causal attention matrix L[i,j] = exp(G[i] - G[j])
+    3. Computes intra-chunk outputs using the causal attention
+    4. Builds the ChunkTransform representing the composed affine transform
+
+    The intra-chunk outputs do NOT include the contribution from the incoming
+    state (which is unknown during parallel chunk processing). That contribution
+    is added during the output materialization phase.
+
+    All computation is done in fp32 for numerical stability.
+
+    Args:
+        q_chunk: L2-normalized queries, shape (B, C, H, d_k)
+        k_chunk: L2-normalized keys, shape (B, C, H, d_k)
+        v_chunk: values, shape (B, C, H, d_v)
+        gate_chunk: log-space decay gates, shape (B, C, H)
+        beta_chunk: sigmoid update rates, shape (B, C, H)
+        chunk_index: zero-based index of this chunk within the sequence
+
+    Returns:
+        Tuple of (ChunkOutput, ChunkTransform):
+        - ChunkOutput contains intra-chunk activations of shape (B, C, H, d_v)
+        - ChunkTransform contains the composed affine transform for the chunk
+
+    **Validates: Requirements 7.1, 7.5, 7.6, 7.7**
+    """
+    batch_size, chunk_size, num_heads, key_dim = q_chunk.shape
+    value_dim = v_chunk.shape[-1]
+
+    # Cast all inputs to fp32 for numerical stability
+    q = q_chunk.float()
+    k = k_chunk.float()
+    v = v_chunk.float()
+    gate = gate_chunk.float()
+    beta = beta_chunk.float()
+
+    # Scale queries: scale = 1/sqrt(d_k)
+    scale = key_dim ** -0.5
+    q = q * scale
+
+    # -----------------------------------------------------------------------
+    # Compute cumulative log-decay within the chunk
+    # G[i] = sum(gate[0:i+1]) — cumulative sum of log-decays
+    # gate is in log-space (negative values), so exp(G[i]) is the total decay
+    # from the start of the chunk to position i.
+    # -----------------------------------------------------------------------
+    # gate shape: (B, C, H)
+    cumulative_log_decay = gate.cumsum(dim=1)  # (B, C, H)
+
+    # -----------------------------------------------------------------------
+    # Sequential intra-chunk computation for correctness
+    #
+    # We iterate over tokens in the chunk, maintaining a local state that
+    # starts at zero (the incoming state contribution is handled separately
+    # during output materialization).
+    #
+    # For each token t in [0, C-1]:
+    #   local_state = exp(g_t) * local_state + beta_t * k_t ⊗ (v_t - exp(g_t) * local_state^T k_t)
+    #   o_intra[t] = q_t^T @ local_state
+    #
+    # This matches the recurrence in _gated_deltanet_recurrent_step_impl but
+    # with initial state = 0 (the inter-chunk state contribution is added later).
+    # -----------------------------------------------------------------------
+
+    # Initialize local state to zero — shape (B, H, d_k, d_v)
+    local_state = torch.zeros(
+        batch_size, num_heads, key_dim, value_dim,
+        dtype=torch.float32, device=q.device,
+    )
+
+    # Output activations — shape (B, C, H, d_v)
+    outputs = torch.zeros(
+        batch_size, chunk_size, num_heads, value_dim,
+        dtype=torch.float32, device=q.device,
+    )
+
+    # Correction keys for the WY representation
+    # correction_keys: (B, H, C, d_k) — key vectors at each position
+    correction_keys = torch.zeros(
+        batch_size, num_heads, chunk_size, key_dim,
+        dtype=torch.float32, device=q.device,
+    )
+
+    for t in range(chunk_size):
+        # Extract token-level tensors
+        q_t = q[:, t, :, :]       # (B, H, d_k)
+        k_t = k[:, t, :, :]       # (B, H, d_k)
+        v_t = v[:, t, :, :]       # (B, H, d_v)
+        g_t = gate[:, t, :]       # (B, H)
+        b_t = beta[:, t, :]       # (B, H)
+
+        # Step 1: Decay local state
+        decay = g_t.exp().unsqueeze(-1).unsqueeze(-1)  # (B, H, 1, 1)
+        local_state = local_state * decay  # (B, H, d_k, d_v)
+
+        # Step 2: Retrieve what state predicts for this key
+        k_expanded = k_t.unsqueeze(-1)  # (B, H, d_k, 1)
+        retrieved = (local_state * k_expanded).sum(dim=-2)  # (B, H, d_v)
+
+        # Step 3: Compute delta (error correction)
+        beta_expanded = b_t.unsqueeze(-1)  # (B, H, 1)
+        delta = beta_expanded * (v_t - retrieved)  # (B, H, d_v)
+
+        # Step 4: Write correction into state (outer product update)
+        delta_expanded = delta.unsqueeze(-2)  # (B, H, 1, d_v)
+        local_state = local_state + k_expanded * delta_expanded  # (B, H, d_k, d_v)
+
+        # Step 5: Read output (scale already applied to q)
+        q_expanded = q_t.unsqueeze(-1)  # (B, H, d_k, 1)
+        output_t = (local_state * q_expanded).sum(dim=-2)  # (B, H, d_v)
+
+        # Store output: outputs is (B, C, H, d_v)
+        outputs[:, t, :, :] = output_t
+
+        # Store correction keys and weights for WY representation
+        # correction_keys[b, h, t, :] = k_t[b, h, :]
+        correction_keys[:, :, t, :] = k_t
+
+        # correction_weights[b, h, t] = beta_t * exp(G_total - G_t)
+        # This is the relative decay from position t to the end of the chunk.
+        # We compute this after the loop using cumulative_log_decay.
+
+    # -----------------------------------------------------------------------
+    # Build ChunkTransform
+    # -----------------------------------------------------------------------
+
+    # Total cumulative log-decay across the chunk: sum of all gates
+    # cumulative_log_decay[:, -1, :] is G[C-1] = sum(gate[0:C])
+    total_log_decay = cumulative_log_decay[:, -1, :]  # (B, H)
+
+    # Correction weights: beta_t * exp(G_total - G_t)
+    # This represents how much each token's correction contributes to the
+    # final composed transform, accounting for decay from that position to
+    # the end of the chunk.
+    # G_total shape: (B, 1, H), cumulative_log_decay shape: (B, C, H)
+    relative_decay_to_end = (
+        total_log_decay.unsqueeze(1) - cumulative_log_decay
+    ).exp()  # (B, C, H)
+
+    # correction_weights = beta * relative_decay_to_end
+    # beta shape: (B, C, H), relative_decay_to_end shape: (B, C, H)
+    correction_weights_final = beta * relative_decay_to_end  # (B, C, H)
+    # Permute to (B, H, C) for the ChunkTransform
+    correction_weights_final = correction_weights_final.permute(0, 2, 1)  # (B, H, C)
+
+    # Additive term: the accumulated B terms with decay
+    # B_composed = sum_t(exp(G_total - G_t) * beta_t * k_t ⊗ v_t)
+    # This is the local_state at the end of the chunk (which started from zero).
+    additive_term = local_state  # (B, H, d_k, d_v)
+
+    chunk_transform = ChunkTransform(
+        cumulative_log_decay=total_log_decay,
+        correction_keys=correction_keys,
+        correction_weights=correction_weights_final,
+        additive_term=additive_term,
+        chunk_size=chunk_size,
+        num_heads=num_heads,
+        key_dim=key_dim,
+        value_dim=value_dim,
+    )
+
+    chunk_output = ChunkOutput(
+        activations=outputs,
+        chunk_index=chunk_index,
+        chunk_size=chunk_size,
+    )
+
+    return chunk_output, chunk_transform
