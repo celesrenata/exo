@@ -26,7 +26,11 @@ if TYPE_CHECKING:
         GatedDeltaNetCache,
     )
     from exo.worker.engines.pytorch_xpu.instrumentation import PerformanceRecorder
+    from exo.worker.engines.pytorch_xpu.local_shard_loader import (
+        LocalShardModules,
+    )
     from exo.worker.engines.pytorch_xpu.pipeline_config import (
+        PipelineStageAssignment,
         PytorchXpuOptimizationConfiguration,
     )
 
@@ -195,6 +199,13 @@ class PipelineParallelShard:
         """
         self.layers = layers
         self.config = config
+
+        # Validate that only the assigned layers are present — no extra layers loaded.
+        assert len(layers) == config.num_local_layers, (
+            f"Expected {config.num_local_layers} layers for rank {config.rank}, "
+            f"got {len(layers)}"
+        )
+
         self.embed_tokens = embed_tokens
         self.lm_head = lm_head
         self.final_norm = final_norm
@@ -1014,6 +1025,69 @@ class PipelineParallelShard:
     def decode_output_buffer_pool(self) -> DecodeOutputBufferPool | None:
         """Access the decode output buffer pool (for external diagnostics)."""
         return self._decode_output_buffer_pool
+
+    @property
+    def stage_assignment(self) -> PipelineStageAssignment:
+        """Return the PipelineStageAssignment for this shard.
+
+        Derives a PipelineStageAssignment from the existing PipelineStageConfig,
+        bridging the dataclass-based config to the Pydantic model used by the
+        local shard loader.
+        """
+        from exo.worker.engines.pytorch_xpu.pipeline_config import (
+            PipelineStageAssignment as _PipelineStageAssignment,
+        )
+
+        return _PipelineStageAssignment(
+            rank=self.config.rank,
+            start_layer=self.config.start_layer,
+            end_layer=self.config.end_layer,
+            owns_embedding=self.config.is_first_stage,
+            owns_lm_head=self.config.is_last_stage,
+        )
+
+    @property
+    def loaded_layer_range(self) -> tuple[int, int]:
+        """Return (start_layer, end_layer) for the layers loaded on this rank."""
+        return (self.config.start_layer, self.config.end_layer)
+
+    @classmethod
+    def from_local_shard_modules(
+        cls,
+        modules: LocalShardModules,
+        config: PipelineStageConfig,
+        text_model_config: Any | None = None,
+        performance_recorder: PerformanceRecorder | None = None,
+        optimization_config: PytorchXpuOptimizationConfiguration | None = None,
+    ) -> PipelineParallelShard:
+        """Create a PipelineParallelShard from pre-built local shard modules.
+
+        This factory method provides a cleaner path from the local shard loader
+        output (LocalShardModules) to a fully initialized PipelineParallelShard.
+        It extracts layers, embedding, lm_head, final_norm, and rotary_emb from
+        the LocalShardModules and passes them to the standard constructor.
+
+        Args:
+            modules: Pre-built local shard modules from build_local_shard_modules().
+            config: Pipeline stage configuration (PipelineStageConfig).
+            text_model_config: Optional HuggingFace model config for layer types.
+            performance_recorder: Optional performance instrumentation recorder.
+            optimization_config: Optional optimization configuration flags.
+
+        Returns:
+            A fully initialized PipelineParallelShard.
+        """
+        return cls(
+            layers=modules.layers,
+            config=config,
+            embed_tokens=modules.embed_tokens,
+            lm_head=modules.lm_head,
+            final_norm=modules.final_norm,
+            rotary_emb=modules.rotary_emb,
+            text_model_config=text_model_config,
+            performance_recorder=performance_recorder,
+            optimization_config=optimization_config,
+        )
 
     def __call__(
         self,

@@ -359,6 +359,65 @@ class TestResolveTensorOwnership:
         assert "model.layers.6.self_attn.q_proj.weight" not in owned_3
         assert "lm_head.weight" in owned_3
 
+    def test_nonuniform_produces_different_ownership_than_default(self) -> None:
+        """A non-uniform distribution produces different tensor ownership than balanced default.
+
+        This test explicitly demonstrates that the configured distribution
+        (not the default balanced one) determines tensor ownership. With 8
+        layers and 4 ranks:
+        - Default balanced: (2, 2, 2, 2) → rank 1 owns layers [2, 4)
+        - Non-uniform:      (3, 2, 2, 1) → rank 1 owns layers [3, 5)
+
+        The ownership sets differ, proving the distribution is respected.
+        """
+        weight_map = _build_synthetic_weight_map(num_layers=8)
+
+        # Default balanced distribution: (2, 2, 2, 2)
+        balanced = PipelineLayerDistribution(
+            layers_per_rank=(2, 2, 2, 2),
+            total_layer_count=8,
+            rank_count=4,
+        )
+
+        # Non-uniform distribution: (3, 2, 2, 1)
+        nonuniform = PipelineLayerDistribution(
+            layers_per_rank=(3, 2, 2, 1),
+            total_layer_count=8,
+            rank_count=4,
+        )
+
+        # Compare rank 1 ownership under both distributions
+        balanced_a1 = balanced.get_stage_assignment(1)
+        nonuniform_a1 = nonuniform.get_stage_assignment(1)
+
+        balanced_owned_1 = set(resolve_tensor_ownership(weight_map, balanced_a1))
+        nonuniform_owned_1 = set(resolve_tensor_ownership(weight_map, nonuniform_a1))
+
+        # The two distributions produce different ownership for rank 1
+        assert balanced_owned_1 != nonuniform_owned_1, (
+            "Non-uniform distribution must produce different tensor ownership "
+            "than the default balanced distribution"
+        )
+
+        # Balanced rank 1 owns layers [2, 4) — has layer 2 tensors
+        assert "model.layers.2.self_attn.q_proj.weight" in balanced_owned_1
+        assert "model.layers.3.self_attn.q_proj.weight" in balanced_owned_1
+
+        # Non-uniform rank 1 owns layers [3, 5) — has layer 3 and 4 tensors
+        assert "model.layers.3.self_attn.q_proj.weight" in nonuniform_owned_1
+        assert "model.layers.4.self_attn.q_proj.weight" in nonuniform_owned_1
+        # Non-uniform rank 1 does NOT own layer 2 (that's rank 0's)
+        assert "model.layers.2.self_attn.q_proj.weight" not in nonuniform_owned_1
+
+        # Both distributions still cover all tensors (partition property)
+        for dist in (balanced, nonuniform):
+            all_owned: set[str] = set()
+            for rank in range(4):
+                assignment = dist.get_stage_assignment(rank)
+                owned = resolve_tensor_ownership(weight_map, assignment)
+                all_owned.update(owned)
+            assert all_owned == set(weight_map.keys())
+
 
 # ---------------------------------------------------------------------------
 # Tests for load_qwen_local_shard_from_safetensors
@@ -543,3 +602,512 @@ class TestLoadQwenLocalShardFromSafetensors:
         assert manifest_1.tensor_to_file == manifest_2.tensor_to_file
         assert manifest_1.local_tensor_count == manifest_2.local_tensor_count
         assert manifest_1.total_tensor_count == manifest_2.total_tensor_count
+
+
+
+# ---------------------------------------------------------------------------
+# Tests for load_tensors_from_manifest and validate_loaded_tensors
+# ---------------------------------------------------------------------------
+
+# Import the new functions from the loader module
+load_tensors_from_manifest = _loader_mod.load_tensors_from_manifest
+validate_loaded_tensors = _loader_mod.validate_loaded_tensors
+
+
+def _has_safetensors() -> bool:
+    """Check if safetensors and torch are available."""
+    try:
+        import safetensors.torch  # noqa: F401
+        import torch  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+_requires_safetensors = pytest.mark.skipif(
+    not _has_safetensors(),
+    reason="safetensors and torch required",
+)
+
+
+def _create_synthetic_safetensors_files(
+    tmp_path: Path, num_layers: int = 4
+) -> dict[str, str]:
+    """Create actual safetensors files with known tensor values.
+
+    Returns the weight_map (tensor_name -> shard_filename).
+    """
+    import torch
+    from safetensors.torch import save_file
+
+    weight_map: dict[str, str] = {}
+    hidden_size = 16
+
+    # Group tensors by shard file
+    shard_tensors: dict[str, dict[str, torch.Tensor]] = {}
+
+    # Embedding — shard 1
+    shard_file = "model-00001-of-00002.safetensors"
+    embed_tensor = torch.randn(100, hidden_size, dtype=torch.float32)
+    if shard_file not in shard_tensors:
+        shard_tensors[shard_file] = {}
+    shard_tensors[shard_file]["model.embed_tokens.weight"] = embed_tensor
+    weight_map["model.embed_tokens.weight"] = shard_file
+
+    # Layer tensors
+    layer_suffixes = [
+        "self_attn.q_proj.weight",
+        "self_attn.k_proj.weight",
+        "mlp.gate_proj.weight",
+        "input_layernorm.weight",
+    ]
+
+    for layer_idx in range(num_layers):
+        shard_num = 1 if layer_idx < num_layers // 2 else 2
+        shard_file = f"model-{shard_num:05d}-of-00002.safetensors"
+        if shard_file not in shard_tensors:
+            shard_tensors[shard_file] = {}
+
+        for suffix in layer_suffixes:
+            tensor_name = f"model.layers.{layer_idx}.{suffix}"
+            if "layernorm" in suffix:
+                tensor = torch.randn(hidden_size, dtype=torch.float32)
+            else:
+                tensor = torch.randn(hidden_size, hidden_size, dtype=torch.float32)
+            shard_tensors[shard_file][tensor_name] = tensor
+            weight_map[tensor_name] = shard_file
+
+    # Final norm and lm_head — shard 2
+    shard_file = "model-00002-of-00002.safetensors"
+    if shard_file not in shard_tensors:
+        shard_tensors[shard_file] = {}
+    shard_tensors[shard_file]["model.norm.weight"] = torch.randn(
+        hidden_size, dtype=torch.float32
+    )
+    weight_map["model.norm.weight"] = shard_file
+    shard_tensors[shard_file]["lm_head.weight"] = torch.randn(
+        100, hidden_size, dtype=torch.float32
+    )
+    weight_map["lm_head.weight"] = shard_file
+
+    # Write safetensors files
+    for filename, tensors in shard_tensors.items():
+        save_file(tensors, str(tmp_path / filename))
+
+    # Write the index file
+    index_data = {
+        "metadata": {"total_size": 1000000},
+        "weight_map": weight_map,
+    }
+    index_path = tmp_path / "model.safetensors.index.json"
+    with open(index_path, "w", encoding="utf-8") as f:
+        json.dump(index_data, f)
+
+    return weight_map
+
+
+@_requires_safetensors
+class TestLoadTensorsFromManifest:
+    """Test loading actual tensor data from safetensors files."""
+
+    def test_loads_correct_tensors_for_rank_0(self, tmp_path: Path) -> None:
+        """Rank 0 loads embedding and its assigned layer tensors."""
+        import torch
+
+        _create_synthetic_safetensors_files(tmp_path, num_layers=4)
+        distribution = PipelineLayerDistribution(
+            layers_per_rank=(1, 1, 1, 1),
+            total_layer_count=4,
+            rank_count=4,
+        )
+        assignment = distribution.get_stage_assignment(0)
+        manifest = load_qwen_local_shard_from_safetensors(
+            model_path=tmp_path, stage_assignment=assignment
+        )
+
+        loaded = load_tensors_from_manifest(
+            manifest=manifest,
+            model_path=tmp_path,
+            device=torch.device("cpu"),
+            dtype=torch.bfloat16,
+        )
+
+        assert "model.embed_tokens.weight" in loaded
+        assert "model.layers.0.self_attn.q_proj.weight" in loaded
+        assert "model.layers.1.self_attn.q_proj.weight" not in loaded
+
+    def test_loads_correct_tensors_for_last_rank(self, tmp_path: Path) -> None:
+        """Last rank loads norm, lm_head, and its assigned layer tensors."""
+        import torch
+
+        _create_synthetic_safetensors_files(tmp_path, num_layers=4)
+        distribution = PipelineLayerDistribution(
+            layers_per_rank=(1, 1, 1, 1),
+            total_layer_count=4,
+            rank_count=4,
+        )
+        assignment = distribution.get_stage_assignment(3)
+        manifest = load_qwen_local_shard_from_safetensors(
+            model_path=tmp_path, stage_assignment=assignment
+        )
+
+        loaded = load_tensors_from_manifest(
+            manifest=manifest,
+            model_path=tmp_path,
+            device=torch.device("cpu"),
+            dtype=torch.bfloat16,
+        )
+
+        assert "model.norm.weight" in loaded
+        assert "lm_head.weight" in loaded
+        assert "model.layers.3.self_attn.q_proj.weight" in loaded
+        assert "model.embed_tokens.weight" not in loaded
+
+    def test_loaded_tensors_have_correct_dtype(self, tmp_path: Path) -> None:
+        """Loaded tensors are cast to the specified dtype."""
+        import torch
+
+        _create_synthetic_safetensors_files(tmp_path, num_layers=4)
+        distribution = PipelineLayerDistribution(
+            layers_per_rank=(1, 1, 1, 1),
+            total_layer_count=4,
+            rank_count=4,
+        )
+        assignment = distribution.get_stage_assignment(0)
+        manifest = load_qwen_local_shard_from_safetensors(
+            model_path=tmp_path, stage_assignment=assignment
+        )
+
+        loaded = load_tensors_from_manifest(
+            manifest=manifest,
+            model_path=tmp_path,
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+        )
+
+        for tensor in loaded.values():
+            assert tensor.dtype == torch.float32
+
+    def test_loaded_tensors_on_correct_device(self, tmp_path: Path) -> None:
+        """Loaded tensors are placed on the specified device."""
+        import torch
+
+        _create_synthetic_safetensors_files(tmp_path, num_layers=4)
+        distribution = PipelineLayerDistribution(
+            layers_per_rank=(1, 1, 1, 1),
+            total_layer_count=4,
+            rank_count=4,
+        )
+        assignment = distribution.get_stage_assignment(0)
+        manifest = load_qwen_local_shard_from_safetensors(
+            model_path=tmp_path, stage_assignment=assignment
+        )
+
+        loaded = load_tensors_from_manifest(
+            manifest=manifest,
+            model_path=tmp_path,
+            device=torch.device("cpu"),
+            dtype=torch.bfloat16,
+        )
+
+        for tensor in loaded.values():
+            assert tensor.device == torch.device("cpu")
+
+    def test_loads_only_requested_tensors(self, tmp_path: Path) -> None:
+        """Only tensors in the manifest are loaded, not the full file."""
+        import torch
+
+        _create_synthetic_safetensors_files(tmp_path, num_layers=4)
+        # Rank 1 owns only layer 1
+        distribution = PipelineLayerDistribution(
+            layers_per_rank=(1, 1, 1, 1),
+            total_layer_count=4,
+            rank_count=4,
+        )
+        assignment = distribution.get_stage_assignment(1)
+        manifest = load_qwen_local_shard_from_safetensors(
+            model_path=tmp_path, stage_assignment=assignment
+        )
+
+        loaded = load_tensors_from_manifest(
+            manifest=manifest,
+            model_path=tmp_path,
+            device=torch.device("cpu"),
+            dtype=torch.bfloat16,
+        )
+
+        # Only layer 1 tensors should be loaded
+        for name in loaded:
+            assert "model.layers.1." in name
+        # Embedding, norm, lm_head, and other layers should NOT be loaded
+        assert "model.embed_tokens.weight" not in loaded
+        assert "model.norm.weight" not in loaded
+        assert "lm_head.weight" not in loaded
+
+    def test_tensor_values_match_source(self, tmp_path: Path) -> None:
+        """Loaded tensor values match what was written to the safetensors file."""
+        import torch
+        from safetensors.torch import save_file
+
+        # Create a simple safetensors file with known values
+        known_tensor = torch.ones(4, 4, dtype=torch.float32) * 42.0
+        save_file(
+            {"model.embed_tokens.weight": known_tensor},
+            str(tmp_path / "model-00001-of-00001.safetensors"),
+        )
+
+        # Write index
+        weight_map = {
+            "model.embed_tokens.weight": "model-00001-of-00001.safetensors"
+        }
+        index_data = {"metadata": {}, "weight_map": weight_map}
+        with open(
+            tmp_path / "model.safetensors.index.json", "w", encoding="utf-8"
+        ) as f:
+            json.dump(index_data, f)
+
+        # Create a minimal manifest for rank 0 with just embedding
+        manifest = LocalShardManifest(
+            tensor_names=["model.embed_tokens.weight"],
+            tensor_to_file={
+                "model.embed_tokens.weight": "model-00001-of-00001.safetensors"
+            },
+            stage_assignment=PipelineStageAssignment(
+                rank=0,
+                start_layer=0,
+                end_layer=1,
+                owns_embedding=True,
+                owns_lm_head=False,
+            ),
+            total_tensor_count=1,
+            local_tensor_count=1,
+        )
+
+        loaded = load_tensors_from_manifest(
+            manifest=manifest,
+            model_path=tmp_path,
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+        )
+
+        assert torch.allclose(loaded["model.embed_tokens.weight"], known_tensor)
+
+    def test_raises_on_missing_shard_file(self, tmp_path: Path) -> None:
+        """Raises FileNotFoundError when a shard file is missing."""
+        import torch
+
+        # Create a manifest referencing a non-existent file
+        manifest = LocalShardManifest(
+            tensor_names=["model.embed_tokens.weight"],
+            tensor_to_file={
+                "model.embed_tokens.weight": "nonexistent.safetensors"
+            },
+            stage_assignment=PipelineStageAssignment(
+                rank=0,
+                start_layer=0,
+                end_layer=1,
+                owns_embedding=True,
+                owns_lm_head=False,
+            ),
+            total_tensor_count=1,
+            local_tensor_count=1,
+        )
+
+        with pytest.raises(FileNotFoundError, match="Shard file not found"):
+            load_tensors_from_manifest(
+                manifest=manifest,
+                model_path=tmp_path,
+                device=torch.device("cpu"),
+                dtype=torch.bfloat16,
+            )
+
+    def test_raises_on_missing_tensor_in_shard(self, tmp_path: Path) -> None:
+        """Raises RuntimeError when a tensor is not found in its shard file."""
+        import torch
+        from safetensors.torch import save_file
+
+        # Create a shard file with different tensors than expected
+        save_file(
+            {"some_other_tensor": torch.zeros(4)},
+            str(tmp_path / "model-00001-of-00001.safetensors"),
+        )
+
+        manifest = LocalShardManifest(
+            tensor_names=["model.embed_tokens.weight"],
+            tensor_to_file={
+                "model.embed_tokens.weight": "model-00001-of-00001.safetensors"
+            },
+            stage_assignment=PipelineStageAssignment(
+                rank=0,
+                start_layer=0,
+                end_layer=1,
+                owns_embedding=True,
+                owns_lm_head=False,
+            ),
+            total_tensor_count=1,
+            local_tensor_count=1,
+        )
+
+        with pytest.raises(RuntimeError, match="not found in shard file"):
+            load_tensors_from_manifest(
+                manifest=manifest,
+                model_path=tmp_path,
+                device=torch.device("cpu"),
+                dtype=torch.bfloat16,
+            )
+
+    def test_default_dtype_is_bfloat16(self, tmp_path: Path) -> None:
+        """When dtype is not specified, tensors default to bfloat16."""
+        import torch
+        from safetensors.torch import save_file
+
+        save_file(
+            {"model.embed_tokens.weight": torch.ones(4, 4, dtype=torch.float32)},
+            str(tmp_path / "shard.safetensors"),
+        )
+
+        manifest = LocalShardManifest(
+            tensor_names=["model.embed_tokens.weight"],
+            tensor_to_file={"model.embed_tokens.weight": "shard.safetensors"},
+            stage_assignment=PipelineStageAssignment(
+                rank=0,
+                start_layer=0,
+                end_layer=1,
+                owns_embedding=True,
+                owns_lm_head=False,
+            ),
+            total_tensor_count=1,
+            local_tensor_count=1,
+        )
+
+        loaded = load_tensors_from_manifest(
+            manifest=manifest,
+            model_path=tmp_path,
+            device=torch.device("cpu"),
+        )
+
+        assert loaded["model.embed_tokens.weight"].dtype == torch.bfloat16
+
+
+@_requires_safetensors
+class TestValidateLoadedTensors:
+    """Test validation of loaded tensors against manifest."""
+
+    def test_passes_when_all_tensors_present(self, tmp_path: Path) -> None:
+        """Validation passes when all manifest tensors are loaded."""
+        import torch
+
+        _create_synthetic_safetensors_files(tmp_path, num_layers=4)
+        distribution = PipelineLayerDistribution(
+            layers_per_rank=(1, 1, 1, 1),
+            total_layer_count=4,
+            rank_count=4,
+        )
+        assignment = distribution.get_stage_assignment(0)
+        manifest = load_qwen_local_shard_from_safetensors(
+            model_path=tmp_path, stage_assignment=assignment
+        )
+
+        loaded = load_tensors_from_manifest(
+            manifest=manifest,
+            model_path=tmp_path,
+            device=torch.device("cpu"),
+            dtype=torch.bfloat16,
+        )
+
+        # Should not raise
+        validate_loaded_tensors(manifest, loaded)
+
+    def test_raises_on_missing_tensors(self) -> None:
+        """Validation raises ValueError when tensors are missing."""
+        import torch
+
+        manifest = LocalShardManifest(
+            tensor_names=[
+                "model.embed_tokens.weight",
+                "model.layers.0.self_attn.q_proj.weight",
+            ],
+            tensor_to_file={
+                "model.embed_tokens.weight": "shard.safetensors",
+                "model.layers.0.self_attn.q_proj.weight": "shard.safetensors",
+            },
+            stage_assignment=PipelineStageAssignment(
+                rank=0,
+                start_layer=0,
+                end_layer=1,
+                owns_embedding=True,
+                owns_lm_head=False,
+            ),
+            total_tensor_count=2,
+            local_tensor_count=2,
+        )
+
+        # Only provide one of the two expected tensors
+        loaded = {
+            "model.embed_tokens.weight": torch.zeros(4, 4),
+        }
+
+        with pytest.raises(ValueError, match="Missing 1 tensors"):
+            validate_loaded_tensors(manifest, loaded)
+
+    def test_raises_with_missing_tensor_names(self) -> None:
+        """Error message includes the names of missing tensors."""
+        import torch
+
+        manifest = LocalShardManifest(
+            tensor_names=[
+                "model.embed_tokens.weight",
+                "model.layers.0.self_attn.q_proj.weight",
+                "model.layers.0.mlp.gate_proj.weight",
+            ],
+            tensor_to_file={
+                "model.embed_tokens.weight": "shard.safetensors",
+                "model.layers.0.self_attn.q_proj.weight": "shard.safetensors",
+                "model.layers.0.mlp.gate_proj.weight": "shard.safetensors",
+            },
+            stage_assignment=PipelineStageAssignment(
+                rank=0,
+                start_layer=0,
+                end_layer=1,
+                owns_embedding=True,
+                owns_lm_head=False,
+            ),
+            total_tensor_count=3,
+            local_tensor_count=3,
+        )
+
+        # Provide only the embedding
+        loaded: dict[str, torch.Tensor] = {
+            "model.embed_tokens.weight": torch.zeros(4, 4),
+        }
+
+        with pytest.raises(ValueError, match="model.layers.0"):
+            validate_loaded_tensors(manifest, loaded)
+
+    def test_passes_with_extra_tensors(self) -> None:
+        """Validation passes even if loaded dict has extra tensors."""
+        import torch
+
+        manifest = LocalShardManifest(
+            tensor_names=["model.embed_tokens.weight"],
+            tensor_to_file={"model.embed_tokens.weight": "shard.safetensors"},
+            stage_assignment=PipelineStageAssignment(
+                rank=0,
+                start_layer=0,
+                end_layer=1,
+                owns_embedding=True,
+                owns_lm_head=False,
+            ),
+            total_tensor_count=1,
+            local_tensor_count=1,
+        )
+
+        # Provide the expected tensor plus an extra one
+        loaded = {
+            "model.embed_tokens.weight": torch.zeros(4, 4),
+            "extra_tensor": torch.zeros(2, 2),
+        }
+
+        # Should not raise
+        validate_loaded_tensors(manifest, loaded)

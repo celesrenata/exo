@@ -82,13 +82,13 @@ Depends on Task 1 instrumentation. Benefits from Task 2 buffer lifecycle.
 - [x] Define pipeline configuration in `pipeline_config.py`: add `PipelineStageAssignment` and `PipelineLayerDistribution` with validation for total layer count (64) and four ranks
 - [x] Refactor `model_loader.py`: add `load_qwen_local_shard_from_safetensors(...)` with safetensors index parsing, tensor-name ownership resolver, and local tensor manifest creation
 - [x] Implement tensor ownership: rank 0 owns token embedding, ranks own configured contiguous layer ranges, final rank owns final normalization and `lm_head`, handle tied/shared weights explicitly
-- [~] Avoid full model materialization: remove or bypass code paths that call full-model loading on every rank, load tensor slices by name from safetensors, do not build layers outside local stage assignment
-- [~] Build local shard modules: instantiate only local Qwen3.5 layers using layer type metadata to choose full-attention or linear-attention implementation, preserve global layer indices for rotary position and cache keys
-- [~] Update `pipeline_parallel_shard.py`: accept `PipelineStageAssignment`, expose loaded layer range, assert only assigned layers are present
-- [~] Update startup path in `engine.py`: create rank-local stage assignment from configuration, call local-shard loader on each rank, log loaded tensor manifest summary
-- [~] Add strict startup validation: missing tensor names fail startup, duplicate owned tensors fail startup, unassigned layer tensors fail startup, unsupported layer type fails startup
-- [~] Add tests: synthetic safetensors checkpoint with embedding/layers/norm/head, test each rank loads only owned tensors, test invalid distribution fails, test toy model pipeline output equals monolithic output
-- [~] Add memory benchmark: record peak resident memory during model load, add output to `bench_xpu.py`
+- [x] Avoid full model materialization: remove or bypass code paths that call full-model loading on every rank, load tensor slices by name from safetensors, do not build layers outside local stage assignment
+- [x] Build local shard modules: instantiate only local Qwen3.5 layers using layer type metadata to choose full-attention or linear-attention implementation, preserve global layer indices for rotary position and cache keys
+- [x] Update `pipeline_parallel_shard.py`: accept `PipelineStageAssignment`, expose loaded layer range, assert only assigned layers are present
+- [x] Update startup path in `engine.py`: create rank-local stage assignment from configuration, call local-shard loader on each rank, log loaded tensor manifest summary
+- [x] Add strict startup validation: missing tensor names fail startup, duplicate owned tensors fail startup, unassigned layer tensors fail startup, unsupported layer type fails startup
+- [x] Add tests: synthetic safetensors checkpoint with embedding/layers/norm/head, test each rank loads only owned tensors, test invalid distribution fails, test toy model pipeline output equals monolithic output
+- [x] Add memory benchmark: record peak resident memory during model load, add output to `bench_xpu.py`
 
 ### Dependencies
 Depends on Task 1 instrumentation. Should be completed before large-scale 27B benchmarking. Independent of Tasks 2-4 but must be reconciled with Task 4 cache initialization.
@@ -97,15 +97,15 @@ Depends on Task 1 instrumentation. Should be completed before large-scale 27B be
 
 ## Task 6: Pipeline Stage Balancing
 
-- [~] Add stage distribution support to configuration: use `PipelineLayerDistribution`, allow command-line override in `bench_xpu.py`, validate contiguous layer ranges
-- [~] Update `model_loader.py` to use configured distribution when resolving local tensor ownership
-- [~] Update `pipeline_parallel_shard.py` to use configured layer range for local forward, preserving global layer indices
-- [~] Add per-layer timing export using Task 1 instrumentation data, exporting decode and prefill timing separately
-- [~] Implement `recommend_pipeline_layer_distribution(...)`: include fixed rank costs (rank 0 embedding, rank 3 norm + lm_head + sampling), preserve layer order, minimize max stage time
-- [~] Add benchmark support: `bench_xpu.py --pipeline-layer-distribution`, `--recommend-layer-distribution`, comparison output for multiple distributions
-- [~] Test distribution validation: reject sums not equal to total layer count, reject zero-layer stages, reject negative counts
-- [~] Test recommendation algorithm: use synthetic timing arrays, verify recommendation reduces max stage time when possible, verify no invalid distribution produced
-- [~] Run empirical comparison: baseline `[16,16,16,16]`, try `[17,17,16,14]`, try timing-recommended distribution
+- [x] Add stage distribution support to configuration: use `PipelineLayerDistribution`, allow command-line override in `bench_xpu.py`, validate contiguous layer ranges
+- [x] Update `model_loader.py` to use configured distribution when resolving local tensor ownership
+- [x] Update `pipeline_parallel_shard.py` to use configured layer range for local forward, preserving global layer indices
+- [x] Add per-layer timing export using Task 1 instrumentation data, exporting decode and prefill timing separately
+- [x] Implement `recommend_pipeline_layer_distribution(...)`: include fixed rank costs (rank 0 embedding, rank 3 norm + lm_head + sampling), preserve layer order, minimize max stage time
+- [x] Add benchmark support: `bench_xpu.py --pipeline-layer-distribution`, `--recommend-layer-distribution`, comparison output for multiple distributions
+- [x] Test distribution validation: reject sums not equal to total layer count, reject zero-layer stages, reject negative counts
+- [x] Test recommendation algorithm: use synthetic timing arrays, verify recommendation reduces max stage time when possible, verify no invalid distribution produced
+- [x] Run empirical comparison: baseline `[16,16,16,16]`, try `[17,17,16,14]`, try timing-recommended distribution
 
 ### Dependencies
 Depends on Task 1 instrumentation. Depends on Task 5 local-shard loading. Benefits from Task 3 (sampling overhead affects final-rank balancing).

@@ -210,6 +210,104 @@ class PipelineLayerDistribution(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Helper functions for layer distribution creation and parsing
+# ---------------------------------------------------------------------------
+
+
+def default_layer_distribution(
+    total_layers: int, world_size: int
+) -> PipelineLayerDistribution:
+    """Create a balanced layer distribution using divmod.
+
+    The first ``remainder`` ranks receive ``(base + 1)`` layers, and the
+    remaining ranks receive ``base`` layers. This matches the logic in
+    ``compute_layer_assignment``.
+
+    Args:
+        total_layers: Total number of transformer layers in the model.
+        world_size: Number of pipeline-parallel ranks.
+
+    Returns:
+        A validated ``PipelineLayerDistribution`` with balanced assignment.
+
+    Raises:
+        ValueError: If total_layers < 1 or world_size < 1.
+    """
+    if total_layers < 1:
+        raise ValueError(
+            f"total_layers must be at least 1, got {total_layers}"
+        )
+    if world_size < 1:
+        raise ValueError(f"world_size must be at least 1, got {world_size}")
+
+    base = total_layers // world_size
+    remainder = total_layers % world_size
+
+    layers_per_rank = tuple(
+        base + 1 if rank < remainder else base
+        for rank in range(world_size)
+    )
+
+    return PipelineLayerDistribution(
+        layers_per_rank=layers_per_rank,
+        total_layer_count=total_layers,
+        rank_count=world_size,
+    )
+
+
+def parse_layer_distribution_arg(
+    arg: str, total_layers: int, world_size: int
+) -> PipelineLayerDistribution:
+    """Parse a comma-separated layer distribution string into a validated model.
+
+    Accepts strings like ``"16,16,16,16"`` or ``"17,17,16,14"`` and creates
+    a ``PipelineLayerDistribution`` with full validation.
+
+    Args:
+        arg: Comma-separated string of integers (e.g. ``"16,16,16,16"``).
+        total_layers: Total number of transformer layers in the model.
+        world_size: Number of pipeline-parallel ranks.
+
+    Returns:
+        A validated ``PipelineLayerDistribution``.
+
+    Raises:
+        ValueError: If the string cannot be parsed, contains non-integer
+            values, or the resulting distribution fails validation (wrong
+            sum, wrong rank count, zero-layer stages).
+    """
+    parts = arg.strip().split(",")
+    try:
+        layers_per_rank = tuple(int(part.strip()) for part in parts)
+    except ValueError as exc:
+        raise ValueError(
+            f"Cannot parse layer distribution '{arg}': "
+            f"all values must be integers. Error: {exc}"
+        ) from exc
+
+    if len(layers_per_rank) != world_size:
+        raise ValueError(
+            f"Layer distribution has {len(layers_per_rank)} elements "
+            f"but world_size is {world_size}. "
+            f"Expected {world_size} comma-separated integers."
+        )
+
+    layer_sum = sum(layers_per_rank)
+    if layer_sum != total_layers:
+        raise ValueError(
+            f"Layer distribution sums to {layer_sum} "
+            f"but total_layers is {total_layers}. "
+            f"Values must sum to {total_layers}."
+        )
+
+    return PipelineLayerDistribution(
+        layers_per_rank=layers_per_rank,
+        total_layer_count=total_layers,
+        rank_count=world_size,
+    )
+
+
+# ---------------------------------------------------------------------------
 # ChunkedGatedDeltaNetPrefillConfiguration — chunked prefill settings
 # ---------------------------------------------------------------------------
 

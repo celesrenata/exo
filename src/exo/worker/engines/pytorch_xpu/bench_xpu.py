@@ -32,6 +32,17 @@ from exo.worker.engines.pytorch_xpu.instrumentation import (
     PerformanceEvent,
     PerformanceRecorder,
 )
+from exo.worker.engines.pytorch_xpu.pipeline_config import (
+    PipelineLayerDistribution,
+    default_layer_distribution,
+    parse_layer_distribution_arg,
+)
+from exo.worker.engines.pytorch_xpu.stage_balancing import (
+    PerStageTimingSummary,
+    export_per_layer_timing,
+    export_per_stage_timing,
+    recommend_pipeline_layer_distribution,
+)
 
 # ---------------------------------------------------------------------------
 # Type aliases
@@ -64,6 +75,8 @@ class BenchmarkConfig:
     report_sdpa: bool = False
     json_output_path: str | None = None
     benchmark_mode: BenchmarkMode = "single-request-decode"
+    pipeline_layer_distribution: PipelineLayerDistribution | None = None
+    recommend_layer_distribution: bool = False
 
 
 @dataclass(frozen=True)
@@ -136,6 +149,18 @@ class EnvironmentInfo:
     dtype: str
     compile_status: str | None = None
     sdpa_backend: str | None = None
+
+
+@dataclass(frozen=True)
+class MemoryLoadingBenchmark:
+    """Memory metrics from model loading, for benchmark output."""
+
+    peak_rss_mib: float
+    rss_before_mib: float
+    rss_after_mib: float
+    rss_delta_mib: float
+    tensor_mib_loaded: float
+    loading_duration_seconds: float
 
 
 @dataclass(frozen=True)
@@ -231,8 +256,60 @@ def parse_args(argv: list[str] | None = None) -> BenchmarkConfig:
             "single-request-decode (default), prefill, or continuous-batching"
         ),
     )
+    parser.add_argument(
+        "--pipeline-layer-distribution",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated layer distribution across pipeline ranks "
+            "(e.g. '16,16,16,16' or '17,17,16,14'). "
+            "Overrides the default balanced distribution."
+        ),
+    )
+    parser.add_argument(
+        "--recommend-layer-distribution",
+        action="store_true",
+        default=False,
+        help=(
+            "After benchmark completes, use per-layer timing to recommend "
+            "an optimal pipeline layer distribution and print a comparison "
+            "table showing current vs recommended distribution."
+        ),
+    )
 
     args = parser.parse_args(argv)
+
+    # Parse pipeline layer distribution if provided
+    pipeline_layer_distribution: PipelineLayerDistribution | None = None
+    if args.pipeline_layer_distribution is not None:
+        # Default to 64 total layers and 4 ranks (Qwen3.5-27B on gremlin cluster)
+        # The rank count is inferred from the number of comma-separated values
+        parts = args.pipeline_layer_distribution.strip().split(",")
+        world_size = len(parts)
+        # Infer total layers from the sum of the distribution
+        try:
+            total_layers = sum(int(p.strip()) for p in parts)
+        except ValueError:
+            print(
+                f"ERROR: Invalid --pipeline-layer-distribution: "
+                f"'{args.pipeline_layer_distribution}'. "
+                f"Expected comma-separated integers (e.g. '16,16,16,16').",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        try:
+            pipeline_layer_distribution = parse_layer_distribution_arg(
+                args.pipeline_layer_distribution,
+                total_layers=total_layers,
+                world_size=world_size,
+            )
+        except ValueError as exc:
+            print(
+                f"ERROR: Invalid --pipeline-layer-distribution: {exc}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     return BenchmarkConfig(
         model_id=args.model_id,
@@ -247,6 +324,8 @@ def parse_args(argv: list[str] | None = None) -> BenchmarkConfig:
         report_sdpa=args.report_sdpa,
         json_output_path=args.json_output_path,
         benchmark_mode=args.benchmark_mode,
+        pipeline_layer_distribution=pipeline_layer_distribution,
+        recommend_layer_distribution=args.recommend_layer_distribution,
     )
 
 
@@ -637,6 +716,7 @@ def build_json_output(
     pipeline_metrics: PipelineMetrics | None,
     env: EnvironmentInfo,
     recorder: PerformanceRecorder | None,
+    memory_loading: MemoryLoadingBenchmark | None = None,
 ) -> BenchmarkJsonOutput:
     """Build structured JSON output for cross-run comparison.
 
@@ -646,6 +726,7 @@ def build_json_output(
         pipeline_metrics: Pipeline-level metrics (None if not computed).
         env: Environment metadata.
         recorder: PerformanceRecorder with raw events (None if unavailable).
+        memory_loading: Memory metrics from model loading (None if not measured).
 
     Returns:
         BenchmarkJsonOutput with metadata, metrics, and raw_events sections.
@@ -706,6 +787,16 @@ def build_json_output(
             pipeline_metrics.pipeline_bubble_estimate
         )
 
+    if memory_loading is not None:
+        metrics["memory_loading"] = {
+            "peak_rss_mib": memory_loading.peak_rss_mib,
+            "rss_before_mib": memory_loading.rss_before_mib,
+            "rss_after_mib": memory_loading.rss_after_mib,
+            "rss_delta_mib": memory_loading.rss_delta_mib,
+            "tensor_mib_loaded": memory_loading.tensor_mib_loaded,
+            "loading_duration_seconds": memory_loading.loading_duration_seconds,
+        }
+
     # Collect raw events from recorder
     raw_events: list[dict[str, Any]] = []
     if recorder is not None:
@@ -751,6 +842,7 @@ def format_report(
     config: BenchmarkConfig,
     env: EnvironmentInfo,
     pipeline_metrics: PipelineMetrics | None = None,
+    memory_loading: MemoryLoadingBenchmark | None = None,
 ) -> str:
     """Format benchmark results into a structured text report.
 
@@ -759,6 +851,7 @@ def format_report(
         config: The benchmark configuration used.
         env: Environment metadata.
         pipeline_metrics: Pipeline-level metrics (None if not computed).
+        memory_loading: Memory metrics from model loading (None if not measured).
 
     Returns:
         A multi-line string report suitable for terminal output.
@@ -868,6 +961,29 @@ def format_report(
         lines.append(f"SDPA backend:    {env.sdpa_backend}")
     lines.append("")
 
+    # Memory loading metrics (if available)
+    if memory_loading is not None:
+        lines.append("--- Memory Loading ---")
+        lines.append(
+            f"Peak RSS:        {memory_loading.peak_rss_mib:.1f} MiB"
+        )
+        lines.append(
+            f"RSS before:      {memory_loading.rss_before_mib:.1f} MiB"
+        )
+        lines.append(
+            f"RSS after:       {memory_loading.rss_after_mib:.1f} MiB"
+        )
+        lines.append(
+            f"RSS delta:       {memory_loading.rss_delta_mib:.1f} MiB"
+        )
+        lines.append(
+            f"Tensors loaded:  {memory_loading.tensor_mib_loaded:.1f} MiB"
+        )
+        lines.append(
+            f"Load duration:   {memory_loading.loading_duration_seconds:.2f} s"
+        )
+        lines.append("")
+
     # Configuration
     lines.append("--- Configuration ---")
     lines.append(f"Benchmark mode:  {config.benchmark_mode}")
@@ -886,6 +1002,105 @@ def format_report(
         )
         lines.append("")
 
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Distribution Comparison Formatting
+# ---------------------------------------------------------------------------
+
+
+def format_distribution_comparison(
+    current_distribution: PipelineLayerDistribution,
+    recommended_distribution: PipelineLayerDistribution,
+    current_stage_timing: list[PerStageTimingSummary],
+    recommended_stage_timing: list[PerStageTimingSummary],
+) -> str:
+    """Format a comparison table between current and recommended distributions.
+
+    Shows per-stage timing for both distributions and the improvement in
+    max stage time (pipeline bottleneck reduction).
+
+    Args:
+        current_distribution: The current pipeline layer distribution.
+        recommended_distribution: The recommended optimal distribution.
+        current_stage_timing: Per-stage timing for the current distribution.
+        recommended_stage_timing: Per-stage timing for the recommended distribution.
+
+    Returns:
+        A multi-line string with a readable comparison table.
+    """
+    lines: list[str] = []
+    lines.append("")
+    lines.append("=" * 60)
+    lines.append("PIPELINE LAYER DISTRIBUTION COMPARISON")
+    lines.append("=" * 60)
+    lines.append("")
+
+    # Current distribution
+    current_layers_str = ",".join(
+        str(n) for n in current_distribution.layers_per_rank
+    )
+    lines.append(f"Current distribution:     [{current_layers_str}]")
+
+    # Recommended distribution
+    recommended_layers_str = ",".join(
+        str(n) for n in recommended_distribution.layers_per_rank
+    )
+    lines.append(f"Recommended distribution: [{recommended_layers_str}]")
+    lines.append("")
+
+    # Per-stage timing table header
+    lines.append("--- Per-Stage Decode Timing (seconds) ---")
+    lines.append(
+        f"{'Rank':<6}{'Current Layers':<16}"
+        f"{'Current Time':<14}{'Rec. Layers':<14}{'Rec. Time':<14}"
+    )
+    lines.append("-" * 64)
+
+    # Per-stage rows
+    current_max_time = 0.0
+    recommended_max_time = 0.0
+
+    for rank in range(current_distribution.rank_count):
+        current_timing = current_stage_timing[rank]
+        recommended_timing = recommended_stage_timing[rank]
+
+        current_time = current_timing.decode_total_mean_seconds
+        recommended_time = recommended_timing.decode_total_mean_seconds
+
+        current_max_time = max(current_max_time, current_time)
+        recommended_max_time = max(recommended_max_time, recommended_time)
+
+        current_layer_count = current_timing.layer_count
+        recommended_layer_count = recommended_timing.layer_count
+
+        lines.append(
+            f"{rank:<6}{current_layer_count:<16}"
+            f"{current_time:<14.6f}{recommended_layer_count:<14}"
+            f"{recommended_time:<14.6f}"
+        )
+
+    lines.append("-" * 64)
+    lines.append("")
+
+    # Max stage time comparison
+    lines.append(f"Max stage time (current):     {current_max_time:.6f} s")
+    lines.append(
+        f"Max stage time (recommended): {recommended_max_time:.6f} s"
+    )
+
+    # Improvement percentage
+    if current_max_time > 0.0:
+        improvement = (
+            (current_max_time - recommended_max_time) / current_max_time
+        ) * 100.0
+        lines.append(f"Bottleneck reduction:         {improvement:.1f}%")
+    else:
+        lines.append("Bottleneck reduction:         N/A (no timing data)")
+
+    lines.append("")
     lines.append("=" * 60)
     return "\n".join(lines)
 
@@ -1649,6 +1864,54 @@ def main() -> None:
     # Generate and print report
     report = format_report(stats, config, env, pipeline_metrics)
     print(report)
+
+    # Recommend layer distribution if requested
+    if config.recommend_layer_distribution:
+        per_layer_timing = export_per_layer_timing(recorder)
+
+        if per_layer_timing:
+            # Determine current distribution
+            if config.pipeline_layer_distribution is not None:
+                current_distribution = config.pipeline_layer_distribution
+            else:
+                # Default balanced distribution based on layer count from timing
+                total_layers = len(per_layer_timing)
+                current_distribution = default_layer_distribution(
+                    total_layers=total_layers, world_size=4
+                )
+
+            world_size = current_distribution.rank_count
+
+            # Get recommendation
+            recommended_distribution = (
+                recommend_pipeline_layer_distribution(
+                    per_layer_timing=per_layer_timing,
+                    world_size=world_size,
+                )
+            )
+
+            # Compute per-stage timing for both distributions
+            current_stage_timing = export_per_stage_timing(
+                per_layer_timing, current_distribution
+            )
+            recommended_stage_timing = export_per_stage_timing(
+                per_layer_timing, recommended_distribution
+            )
+
+            # Print comparison
+            comparison = format_distribution_comparison(
+                current_distribution=current_distribution,
+                recommended_distribution=recommended_distribution,
+                current_stage_timing=current_stage_timing,
+                recommended_stage_timing=recommended_stage_timing,
+            )
+            print(comparison)
+        else:
+            print(
+                "\nWARNING: No per-layer timing data available. "
+                "Cannot recommend distribution.",
+                file=sys.stderr,
+            )
 
     # Write JSON output if requested
     if config.json_output_path is not None:
