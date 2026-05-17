@@ -14,12 +14,21 @@ Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.8, 3.9, 3.10, 3.11
 
 from __future__ import annotations
 
+import logging
 from collections import deque
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, final
+from typing import TYPE_CHECKING, Any, Literal, final
 
 if TYPE_CHECKING:
+    from exo.worker.engines.pytorch_xpu.gated_deltanet_cache import (
+        GatedDeltaNetCache,
+    )
+    from exo.worker.engines.pytorch_xpu.gated_deltanet_state import (
+        GatedDeltaNetPersistentState,
+    )
     from exo.worker.engines.pytorch_xpu.sampling import SamplingConfiguration
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -683,3 +692,332 @@ class RequestIdentifierMap:
     def available_slot_count(self) -> int:
         """Number of free slots available for assignment."""
         return len(self._free_slots)
+
+
+# ---------------------------------------------------------------------------
+# PerRequestCacheManager — per-request KV cache and GatedDeltaNet state
+# ---------------------------------------------------------------------------
+
+
+@final
+class PerRequestCacheManager:
+    """Manages per-request KV caches and GatedDeltaNet persistent state.
+
+    In continuous batching, multiple requests are active simultaneously.
+    Each request needs its own isolated cache state. This manager stores
+    caches keyed by request_id (not batch position), ensuring that slot
+    reuse does not corrupt another request's state.
+
+    The batch position (slot_index) is ephemeral — a request may move
+    between slots during its lifetime. The request_id is the stable key.
+
+    Thread safety: NOT thread-safe. Designed for single-threaded per-rank decode.
+
+    **Validates: Requirements 3.2, 3.9, 5.5, 5.7, 5.8**
+    """
+
+    def __init__(self, max_requests: int, num_layers: int) -> None:
+        """Initialize with capacity for max_requests concurrent caches.
+
+        Args:
+            max_requests: Maximum number of concurrent requests that can
+                have active caches. Used for capacity validation.
+            num_layers: Number of model layers (used for GatedDeltaNet
+                state indexing validation).
+
+        Raises:
+            ValueError: If max_requests or num_layers is not positive.
+        """
+        if max_requests <= 0:
+            raise ValueError(
+                f"max_requests must be positive, got {max_requests}"
+            )
+        if num_layers <= 0:
+            raise ValueError(
+                f"num_layers must be positive, got {num_layers}"
+            )
+
+        self._max_requests: int = max_requests
+        self._num_layers: int = num_layers
+
+        # Primary cache storage: request_id → GatedDeltaNetCache
+        self._caches: dict[str, GatedDeltaNetCache] = {}
+
+        # Per-request, per-layer GatedDeltaNet persistent state
+        # Key: (request_id, layer_index) → GatedDeltaNetPersistentState
+        self._gated_deltanet_states: dict[
+            tuple[str, int], GatedDeltaNetPersistentState
+        ] = {}
+
+        # Pool of recycled GatedDeltaNet states available for reuse
+        # Key: layer_index → list of recycled states
+        self._recycled_states: dict[
+            int, list[GatedDeltaNetPersistentState]
+        ] = {}
+
+    # -------------------------------------------------------------------
+    # Public API: Cache lifecycle
+    # -------------------------------------------------------------------
+
+    def create_cache(self, request_id: str, dynamic_cache: Any) -> None:
+        """Create a new cache entry for a request (called after prefill starts).
+
+        Wraps the provided DynamicCache in a GatedDeltaNetCache and stores
+        it keyed by request_id.
+
+        Args:
+            request_id: Unique identifier for the request.
+            dynamic_cache: A HuggingFace DynamicCache instance to wrap.
+
+        Raises:
+            ValueError: If a cache already exists for this request_id.
+            RuntimeError: If the manager is at capacity.
+        """
+        if request_id in self._caches:
+            raise ValueError(
+                f"Cache already exists for request '{request_id}'"
+            )
+        if len(self._caches) >= self._max_requests:
+            raise RuntimeError(
+                f"PerRequestCacheManager at capacity "
+                f"({self._max_requests} active caches)"
+            )
+
+        # Import here to avoid circular imports at module level
+        from exo.worker.engines.pytorch_xpu.gated_deltanet_cache import (
+            GatedDeltaNetCache,
+        )
+
+        cache = GatedDeltaNetCache(dynamic_cache=dynamic_cache)
+        self._caches[request_id] = cache
+
+        logger.debug(
+            "Created per-request cache: request=%r, active_count=%d",
+            request_id,
+            len(self._caches),
+        )
+
+    def get_cache(self, request_id: str) -> GatedDeltaNetCache | None:
+        """Get the cache for a request, or None if not found.
+
+        Lookup is O(1) by request_id — batch position is not involved.
+
+        Args:
+            request_id: The request whose cache to retrieve.
+
+        Returns:
+            The GatedDeltaNetCache for the request, or None if no cache
+            exists for this request_id.
+        """
+        return self._caches.get(request_id)
+
+    def remove_cache(self, request_id: str) -> None:
+        """Remove and deallocate a request's cache (on completion/cancellation).
+
+        Removes the GatedDeltaNetCache and all associated GatedDeltaNet
+        persistent states for the request. States are NOT recycled — they
+        are dropped entirely. Use ``recycle_cache`` if you want to preserve
+        state tensors for reuse.
+
+        Args:
+            request_id: The request whose cache should be removed.
+
+        Does nothing if no cache exists for the request.
+        """
+        removed_cache = self._caches.pop(request_id, None)
+        if removed_cache is None:
+            return
+
+        # Remove all GatedDeltaNet states for this request
+        keys_to_remove = [
+            key for key in self._gated_deltanet_states
+            if key[0] == request_id
+        ]
+        for key in keys_to_remove:
+            del self._gated_deltanet_states[key]
+
+        logger.debug(
+            "Removed per-request cache: request=%r, "
+            "removed_states=%d, active_count=%d",
+            request_id,
+            len(keys_to_remove),
+            len(self._caches),
+        )
+
+    def recycle_cache(self, request_id: str) -> None:
+        """Recycle a request's GatedDeltaNet states for reuse.
+
+        Zeros all GatedDeltaNet state tensors and moves them to the recycled
+        pool, keyed by layer_index. The GatedDeltaNetCache wrapper is removed
+        from the active cache map. The next request that needs state for the
+        same layer can claim a recycled state instead of allocating new tensors.
+
+        Args:
+            request_id: The request whose states should be recycled.
+
+        Does nothing if no cache exists for the request.
+        """
+        removed_cache = self._caches.pop(request_id, None)
+        if removed_cache is None:
+            return
+
+        # Recycle all GatedDeltaNet states for this request
+        keys_to_recycle = [
+            key for key in self._gated_deltanet_states
+            if key[0] == request_id
+        ]
+        recycled_count = 0
+        for key in keys_to_recycle:
+            state = self._gated_deltanet_states.pop(key)
+            state.recycle()
+            layer_index = key[1]
+            if layer_index not in self._recycled_states:
+                self._recycled_states[layer_index] = []
+            self._recycled_states[layer_index].append(state)
+            recycled_count += 1
+
+        logger.debug(
+            "Recycled per-request cache: request=%r, "
+            "recycled_states=%d, active_count=%d",
+            request_id,
+            recycled_count,
+            len(self._caches),
+        )
+
+    # -------------------------------------------------------------------
+    # Public API: GatedDeltaNet persistent state management
+    # -------------------------------------------------------------------
+
+    def set_gated_deltanet_state(
+        self,
+        request_id: str,
+        layer_index: int,
+        state: GatedDeltaNetPersistentState,
+    ) -> None:
+        """Store a GatedDeltaNet persistent state for a request and layer.
+
+        Args:
+            request_id: The owning request identifier.
+            layer_index: The global layer index (0-indexed).
+            state: The persistent state container to store.
+
+        Raises:
+            ValueError: If no cache exists for the request_id.
+            ValueError: If layer_index is out of range.
+        """
+        if request_id not in self._caches:
+            raise ValueError(
+                f"No cache exists for request '{request_id}'. "
+                f"Call create_cache() first."
+            )
+        if layer_index < 0 or layer_index >= self._num_layers:
+            raise ValueError(
+                f"layer_index {layer_index} out of range "
+                f"[0, {self._num_layers})"
+            )
+
+        self._gated_deltanet_states[(request_id, layer_index)] = state
+
+    def get_gated_deltanet_state(
+        self, request_id: str, layer_index: int
+    ) -> GatedDeltaNetPersistentState | None:
+        """Get persistent state for a specific request and layer.
+
+        Lookup is O(1) by (request_id, layer_index) tuple.
+
+        Args:
+            request_id: The request whose state to retrieve.
+            layer_index: The global layer index (0-indexed).
+
+        Returns:
+            The GatedDeltaNetPersistentState for the request and layer,
+            or None if no state has been registered.
+        """
+        return self._gated_deltanet_states.get((request_id, layer_index))
+
+    def claim_recycled_state(
+        self, request_id: str, layer_index: int
+    ) -> GatedDeltaNetPersistentState | None:
+        """Claim a recycled state for a request and layer, if available.
+
+        Checks the recycled pool for a state matching the layer_index.
+        If found, claims it for the new request and registers it in the
+        active state map.
+
+        Args:
+            request_id: The new owning request identifier.
+            layer_index: The layer index to find a recycled state for.
+
+        Returns:
+            The claimed GatedDeltaNetPersistentState, or None if no
+            recycled state is available for this layer.
+
+        Raises:
+            ValueError: If no cache exists for the request_id.
+        """
+        if request_id not in self._caches:
+            raise ValueError(
+                f"No cache exists for request '{request_id}'. "
+                f"Call create_cache() first."
+            )
+
+        pool = self._recycled_states.get(layer_index)
+        if not pool:
+            return None
+
+        state = pool.pop()
+        if not pool:
+            del self._recycled_states[layer_index]
+
+        state.claim(request_id)
+        self._gated_deltanet_states[(request_id, layer_index)] = state
+
+        logger.debug(
+            "Claimed recycled GatedDeltaNet state: request=%r, layer=%d",
+            request_id,
+            layer_index,
+        )
+        return state
+
+    # -------------------------------------------------------------------
+    # Properties
+    # -------------------------------------------------------------------
+
+    @property
+    def active_cache_count(self) -> int:
+        """Number of active per-request caches."""
+        return len(self._caches)
+
+    @property
+    def total_memory_bytes(self) -> int:
+        """Estimated total memory used by all active caches.
+
+        Sums up the fp32 recurrent state tensor memory for all active
+        GatedDeltaNet persistent states. Does not include DynamicCache
+        memory (which is managed by HuggingFace internals).
+        """
+        total = 0
+        for state in self._gated_deltanet_states.values():
+            total += state.shape_metadata.recurrent_state_bytes_fp32
+        return total
+
+    @property
+    def recycled_state_count(self) -> int:
+        """Total number of recycled states available in the pool."""
+        return sum(len(pool) for pool in self._recycled_states.values())
+
+    @property
+    def active_request_ids(self) -> list[str]:
+        """List of request IDs that currently have active caches."""
+        return list(self._caches.keys())
+
+    def has_cache(self, request_id: str) -> bool:
+        """Check whether a cache exists for the given request.
+
+        Args:
+            request_id: The request to check.
+
+        Returns:
+            True if a cache is registered for the request.
+        """
+        return request_id in self._caches
