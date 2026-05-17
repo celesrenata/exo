@@ -713,3 +713,243 @@ def compose_chunk_transforms(
         states.append(current_state)
 
     return states
+
+
+# ---------------------------------------------------------------------------
+# Output materialization
+# ---------------------------------------------------------------------------
+
+
+def materialize_chunk_outputs(
+    *,
+    chunk_outputs: list[ChunkOutput],
+    prefix_states: list[torch.Tensor],
+    q_chunks: list[torch.Tensor],
+    k_chunks: list[torch.Tensor],
+    gate_chunks: list[torch.Tensor],
+    beta_chunks: list[torch.Tensor],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Materialize final per-token outputs and the final recurrent state.
+
+    For each chunk c with incoming state S_c (from prefix_states[c]):
+    - The inter-chunk contribution to token t in chunk c accounts for how
+      the incoming state S_c propagates through the recurrence within the chunk.
+    - The final output is: o_final[t] = o_intra[t] + o_inter[t]
+
+    The inter-chunk contribution is computed by running the linear part of the
+    recurrence on the incoming state. For token t at position p within chunk c:
+        The state contribution from S_c at position p is obtained by applying
+        the partial linear transform (decay + corrections from tokens 0..p) to S_c.
+        Then o_inter[t] = q_t^T @ A_partial_t(S_c)
+
+    For exact correctness, we re-run the recurrence sequentially within each chunk
+    using the actual incoming state and subtract the zero-state contribution
+    (which is already captured in chunk_outputs).
+
+    Args:
+        chunk_outputs: List of N ChunkOutput objects with intra-chunk activations.
+        prefix_states: List of N+1 state tensors from compose_chunk_transforms.
+            prefix_states[c] is the incoming state for chunk c.
+            prefix_states[N] is the final state after all chunks.
+        q_chunks: List of N query tensors, each (B, C, H, d_k).
+        k_chunks: List of N key tensors, each (B, C, H, d_k).
+        gate_chunks: List of N gate tensors, each (B, C, H).
+        beta_chunks: List of N beta tensors, each (B, C, H).
+
+    Returns:
+        (outputs, final_state) where:
+        - outputs: (B, T, H, d_v) — final per-token outputs in sequence order
+        - final_state: (B, H, d_k, d_v) — final recurrent state for decode continuation
+
+    **Validates: Requirements 7.1, 7.5, 7.6, 7.7**
+    """
+    num_chunks = len(chunk_outputs)
+    assert num_chunks > 0, "Must have at least one chunk"
+    assert len(prefix_states) == num_chunks + 1, (
+        f"Expected {num_chunks + 1} prefix states, got {len(prefix_states)}"
+    )
+
+    # Infer dimensions from first chunk
+    first_output = chunk_outputs[0]
+    batch_size = first_output.activations.shape[0]
+    num_heads = first_output.activations.shape[2]
+    value_dim = first_output.activations.shape[3]
+    key_dim = q_chunks[0].shape[-1]
+    device = first_output.activations.device
+
+    # Compute total sequence length
+    total_seq_len = sum(co.chunk_size for co in chunk_outputs)
+
+    # Allocate output tensor
+    outputs = torch.zeros(
+        batch_size, total_seq_len, num_heads, value_dim,
+        dtype=torch.float32, device=device,
+    )
+
+    # For each chunk, compute the inter-chunk contribution and add to intra-chunk output
+    offset = 0
+    final_state = prefix_states[-1]  # Default: use the last prefix state
+
+    for c in range(num_chunks):
+        chunk_size = chunk_outputs[c].chunk_size
+        incoming_state = prefix_states[c]  # (B, H, d_k, d_v)
+        intra_output = chunk_outputs[c].activations  # (B, C, H, d_v)
+
+        q_chunk = q_chunks[c].float()  # (B, C, H, d_k)
+        k_chunk = k_chunks[c].float()  # (B, C, H, d_k)
+        gate_chunk = gate_chunks[c].float()  # (B, C, H)
+        beta_chunk = beta_chunks[c].float()  # (B, C, H)
+
+        # Scale queries
+        scale = key_dim ** -0.5
+        q_scaled = q_chunk * scale
+
+        # Compute inter-chunk contribution by propagating incoming_state
+        # through the recurrence within this chunk.
+        # We track how S_c evolves through the chunk's tokens (linear part only).
+        state_contribution = incoming_state.float()  # (B, H, d_k, d_v)
+
+        for t in range(chunk_size):
+            q_t = q_scaled[:, t, :, :]   # (B, H, d_k)
+            k_t = k_chunk[:, t, :, :]    # (B, H, d_k)
+            g_t = gate_chunk[:, t, :]    # (B, H)
+            b_t = beta_chunk[:, t, :]    # (B, H)
+
+            # Decay the state contribution
+            decay = g_t.exp().unsqueeze(-1).unsqueeze(-1)  # (B, H, 1, 1)
+            state_contribution = state_contribution * decay
+
+            # Apply the delta rule correction to the state contribution
+            # The correction erases the component along k_t proportional to beta_t
+            k_expanded = k_t.unsqueeze(-1)  # (B, H, d_k, 1)
+            retrieved = (state_contribution * k_expanded).sum(dim=-2)  # (B, H, d_v)
+            beta_expanded = b_t.unsqueeze(-1)  # (B, H, 1)
+            correction = beta_expanded * retrieved  # (B, H, d_v)
+            correction_expanded = correction.unsqueeze(-2)  # (B, H, 1, d_v)
+            state_contribution = state_contribution - k_expanded * correction_expanded
+
+            # Inter-chunk output contribution: q_t^T @ state_contribution
+            q_expanded = q_t.unsqueeze(-1)  # (B, H, d_k, 1)
+            o_inter_t = (state_contribution * q_expanded).sum(dim=-2)  # (B, H, d_v)
+
+            # Final output = intra + inter
+            outputs[:, offset + t, :, :] = intra_output[:, t, :, :] + o_inter_t
+
+        offset += chunk_size
+
+    # The final recurrent state is the last prefix state (state after all chunks)
+    # This already accounts for the full recurrence including the incoming state
+    # propagation through all chunks.
+    return outputs, final_state
+
+
+# ---------------------------------------------------------------------------
+# Top-level chunked prefill orchestration
+# ---------------------------------------------------------------------------
+
+
+def chunked_gated_deltanet_prefill(
+    *,
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    chunk_size: int = 64,
+    initial_state: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Full chunked GatedDeltaNet prefill.
+
+    Splits the sequence into chunks, computes intra-chunk outputs and transforms,
+    propagates prefix states, and materializes final outputs.
+
+    Returns (outputs, final_state) matching the sequential prefill interface.
+
+    Args:
+        q: L2-normalized queries, shape (B, T, H, d_k).
+        k: L2-normalized keys, shape (B, T, H, d_k).
+        v: Values, shape (B, T, H, d_v).
+        gate: Log-space decay gates, shape (B, T, H).
+        beta: Sigmoid update rates, shape (B, T, H).
+        chunk_size: Number of tokens per chunk (default 64).
+        initial_state: Optional initial recurrent state, shape (B, H, d_k, d_v).
+            If None, starts from zero state.
+
+    Returns:
+        (outputs, final_state) where:
+        - outputs: (B, T, H, d_v) — per-token outputs in sequence order
+        - final_state: (B, H, d_k, d_v) — final recurrent state for decode
+
+    **Validates: Requirements 7.1, 7.5, 7.6, 7.7**
+    """
+    batch_size, seq_len, num_heads, key_dim = q.shape
+    value_dim = v.shape[-1]
+    device = q.device
+
+    # Phase 1: Split sequence into chunks and compute chunk-local outputs/transforms
+    chunk_outputs: list[ChunkOutput] = []
+    transforms: list[ChunkTransform] = []
+    q_chunks: list[torch.Tensor] = []
+    k_chunks: list[torch.Tensor] = []
+    gate_chunks: list[torch.Tensor] = []
+    beta_chunks: list[torch.Tensor] = []
+
+    offset = 0
+    chunk_index = 0
+    while offset < seq_len:
+        end = min(offset + chunk_size, seq_len)
+        c_size = end - offset
+
+        q_c = q[:, offset:end]
+        k_c = k[:, offset:end]
+        v_c = v[:, offset:end]
+        gate_c = gate[:, offset:end]
+        beta_c = beta[:, offset:end]
+
+        chunk_out, chunk_transform = compute_chunk_local(
+            q_chunk=q_c,
+            k_chunk=k_c,
+            v_chunk=v_c,
+            gate_chunk=gate_c,
+            beta_chunk=beta_c,
+            chunk_index=chunk_index,
+        )
+
+        chunk_outputs.append(chunk_out)
+        transforms.append(chunk_transform)
+        q_chunks.append(q_c)
+        k_chunks.append(k_c)
+        gate_chunks.append(gate_c)
+        beta_chunks.append(beta_c)
+
+        offset = end
+        chunk_index += 1
+
+    # Phase 2: Compose transforms to get prefix states
+    prefix_states = compose_chunk_transforms(transforms)
+
+    # If initial_state is provided, shift all prefix states by applying
+    # the initial state through the transform chain
+    if initial_state is not None:
+        initial = initial_state.float()
+        # Recompute prefix states starting from initial_state instead of zero
+        # prefix_states[0] should be initial_state
+        # prefix_states[i] = apply_chunk_transform(prefix_states[i-1], transforms[i-1])
+        shifted_states: list[torch.Tensor] = [initial]
+        current = initial
+        for transform in transforms:
+            current = apply_chunk_transform(current, transform)
+            shifted_states.append(current)
+        prefix_states = shifted_states
+
+    # Phase 3: Materialize final outputs using prefix states
+    outputs, final_state = materialize_chunk_outputs(
+        chunk_outputs=chunk_outputs,
+        prefix_states=prefix_states,
+        q_chunks=q_chunks,
+        k_chunks=k_chunks,
+        gate_chunks=gate_chunks,
+        beta_chunks=beta_chunks,
+    )
+
+    return outputs, final_state
