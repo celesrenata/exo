@@ -19,6 +19,11 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 if TYPE_CHECKING:
+    from exo.worker.engines.pytorch_xpu.continuous_batching import (
+        DecodeMicrobatch,
+        PerRequestCacheManager,
+        TokenResultBatch,
+    )
     from exo.worker.engines.pytorch_xpu.decode_output_buffer_pool import (
         DecodeOutputBufferPool,
     )
@@ -1005,6 +1010,150 @@ class PipelineParallelShard:
                 f"(num_heads={num_heads}, key_dim={key_dim}, value_dim={value_dim}, "
                 f"conv_dim={conv_dim}, device={device})"
             )
+
+    # -------------------------------------------------------------------
+    # Continuous Batching: Microbatch Interface
+    # -------------------------------------------------------------------
+
+    def forward_microbatch(
+        self,
+        microbatch: DecodeMicrobatch,
+        cache_manager: PerRequestCacheManager,
+    ) -> TokenResultBatch:
+        """Execute a batched decode step for multiple concurrent requests.
+
+        Gathers per-request cache entries from the cache_manager, builds a
+        batched input tensor from the microbatch's input_token_ids, runs the
+        forward pass, and returns token results for each active slot.
+
+        For now, this iterates over active slots and calls the existing
+        forward() method once per request (single-request-at-a-time). True
+        batched tensor operations will replace this when the full continuous
+        batching tensor path is implemented.
+
+        Args:
+            microbatch: The decode microbatch describing active slots and
+                their input tokens.
+            cache_manager: Per-request cache manager for gathering/updating
+                per-request state.
+
+        Returns:
+            TokenResultBatch with generated tokens for each active slot.
+
+        Raises:
+            ValueError: If microbatch has no active slots.
+
+        Requirements: 3.1, 3.2, 3.3, 3.9
+        """
+        from exo.worker.engines.pytorch_xpu.continuous_batching import (
+            TokenResultBatch as _TokenResultBatch,
+        )
+
+        if microbatch.active_slot_count <= 0:
+            raise ValueError(
+                "Cannot forward_microbatch with zero active slots"
+            )
+
+        token_ids: list[int] = []
+        slot_indices: list[int] = []
+        slot_generations: list[int] = []
+
+        for slot_state in microbatch.slot_states:
+            if not slot_state.is_active:
+                continue
+            if slot_state.request_id is None:
+                continue
+
+            request_id = slot_state.request_id
+
+            # Gather per-request cache entry
+            cache_entry = cache_manager.get_cache(request_id)
+            if cache_entry is None:
+                logger.warning(
+                    "forward_microbatch: no cache for request %r at slot %d, skipping",
+                    request_id,
+                    slot_state.slot_index,
+                )
+                continue
+
+            # Find the input token for this slot
+            # input_token_ids is ordered by active slot position
+            active_idx = slot_indices.__len__()  # current position in active list
+            if active_idx >= len(microbatch.input_token_ids):
+                logger.warning(
+                    "forward_microbatch: input_token_ids exhausted at active_idx=%d",
+                    active_idx,
+                )
+                break
+
+            input_token_id = microbatch.input_token_ids[active_idx]
+
+            # Build single-token input tensor for this request
+            input_tensor = torch.tensor(
+                [[input_token_id]], dtype=torch.long, device=self.config.device
+            )
+
+            # Set current request context for GatedDeltaNet state tracking
+            self._current_request_id = request_id
+
+            # Execute forward pass for this single request
+            # (true batching will replace this loop with a single batched call)
+            output, _ = self.forward(input_tensor)
+
+            # For the last stage, output is logits [1, 1, vocab_size]
+            # Take argmax as the generated token (greedy placeholder)
+            if self.config.is_last_stage and output.dim() == 3:
+                generated_token = int(torch.argmax(output[0, -1, :]).item())
+            else:
+                # Non-last stages produce hidden states, not tokens.
+                # Use a placeholder token_id of 0 (the pipeline generator
+                # handles actual token extraction from the final rank).
+                generated_token = 0
+
+            token_ids.append(generated_token)
+            slot_indices.append(slot_state.slot_index)
+            slot_generations.append(slot_state.slot_generation)
+
+        return _TokenResultBatch(
+            token_ids=tuple(token_ids),
+            slot_indices=tuple(slot_indices),
+            slot_generations=tuple(slot_generations),
+        )
+
+    def validate_microbatch_compatibility(
+        self,
+        microbatch: DecodeMicrobatch,
+        cache_manager: PerRequestCacheManager,
+    ) -> list[str]:
+        """Validate that all requests in the microbatch have valid caches.
+
+        Checks each active slot's request_id against the cache_manager to
+        ensure a cache entry exists. Returns a list of request IDs that are
+        missing or have invalid caches.
+
+        Args:
+            microbatch: The decode microbatch to validate.
+            cache_manager: Per-request cache manager to check against.
+
+        Returns:
+            List of request IDs with missing or invalid caches. Empty list
+            means all requests are valid and ready for decode.
+
+        Requirements: 3.2, 3.9
+        """
+        missing_cache_requests: list[str] = []
+
+        for slot_state in microbatch.slot_states:
+            if not slot_state.is_active:
+                continue
+            if slot_state.request_id is None:
+                continue
+
+            request_id = slot_state.request_id
+            if not cache_manager.has_cache(request_id):
+                missing_cache_requests.append(request_id)
+
+        return missing_cache_requests
 
     @property
     def current_request_id(self) -> str | None:
