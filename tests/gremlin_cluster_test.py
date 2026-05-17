@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-End-to-end cluster test for 4-node Qwen3.5-4B tensor parallel inference on torch+xpu.
+End-to-end cluster test for 4-node Qwen3.5-27B pipeline parallel inference on torch+xpu.
 
 This script:
 1. Downloads the Qwen3.5-4B model on one node (master), which distributes to all others
@@ -132,7 +132,7 @@ else:
     print("WARNING: cluster_monitor.py not found. Metrics collection not available.")
 
 # Model configuration
-TARGET_MODEL = "Qwen/Qwen3.5-4B"
+TARGET_MODEL = "Qwen/Qwen3.5-27B"
 DEFAULT_API_HOST = "10.1.1.12"  # Gremlin cluster master node
 PROMPT = "Hello, world!"
 SYSTEM_PROMPT = "You are a helpful assistant."
@@ -250,7 +250,7 @@ class ClusterTestResult:
     success: bool = False
     error: str | None = None
     model_id: str = ""
-    sharding: str = "Tensor"
+    sharding: str = "Pipeline"
     instance_meta: str = "PyTorchXPURing"
     node_count: int = 0
     nodes: list[str] = field(default_factory=list)
@@ -726,17 +726,17 @@ async def start_download(
             "modelCard": {
                 "modelId": model_id,
                 "storageSize": {"inBytes": model_card.get("storage_size_megabytes", 0) * 1000000},
-                "nLayers": 32,  # Qwen3.5-4B has 32 layers
-                "hiddenSize": 2560,
-                "supportsTensor": True,
+                "nLayers": 64,  # Qwen3.5-27B has 64 layers
+                "hiddenSize": 5120,
+                "supportsTensor": False,
                 "numKeyValueHeads": 4,
                 "tasks": ["TextGeneration"],
             },
             "deviceRank": 0,
             "worldSize": 1,
             "startLayer": 0,
-            "endLayer": 32,
-            "nLayers": 32,
+            "endLayer": 64,
+            "nLayers": 64,
         }
     }
 
@@ -1034,9 +1034,9 @@ async def run_test(
                 print(f"  All runners already ready!")
         else:
             # Create new instance
-            print(f"  No existing instance found. Creating new tensor-parallel instance...")
+            print(f"  No existing instance found. Creating new pipeline-parallel instance...")
             try:
-                placement_result = await create_tensor_instance(
+                placement_result = await create_pipeline_instance(
                     client, api_host, api_port, model_id
                 )
                 command_id = placement_result.get("command_id", "")
@@ -2146,12 +2146,12 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("  GREMLIN CLUSTER TEST - Qwen3.5-4B (torch+xpu)")
+    print("  GREMLIN CLUSTER TEST - Qwen3.5-27B (torch+xpu, pipeline)")
     print(f"  Target: {args.model}")
     print(f"  Nodes:  {args.node_count}")
     print(f"  Host:   {args.api_host}")
     print(f"  Port:   {args.api_port}")
-    print(f"  Config: Tensor sharding / PyTorchXPURing")
+    print(f"  Config: Pipeline sharding / PyTorchXPURing")
     print(f"  Test:   {args.test_type}")
     print("=" * 60)
 
