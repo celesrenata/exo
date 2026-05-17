@@ -16,6 +16,68 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # ---------------------------------------------------------------------------
+# PipelineStageAssignment — single rank's layer assignment
+# ---------------------------------------------------------------------------
+
+
+@final
+class PipelineStageAssignment(BaseModel):
+    """
+    Immutable description of a single rank's layer assignment in the pipeline.
+
+    Defines which contiguous range of transformer layers a rank owns, and
+    whether it is responsible for the token embedding (rank 0) or the final
+    normalization and language model head (last rank).
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    rank: int
+    """Pipeline stage rank (0-indexed)."""
+
+    start_layer: int
+    """First layer index assigned to this stage (inclusive)."""
+
+    end_layer: int
+    """Last layer index assigned to this stage (exclusive)."""
+
+    owns_embedding: bool
+    """Whether this rank owns the token embedding (rank 0)."""
+
+    owns_lm_head: bool
+    """Whether this rank owns the final normalization and lm_head (last rank)."""
+
+    @field_validator("rank")
+    @classmethod
+    def validate_rank_nonnegative(cls, value: int) -> int:
+        """Validate that rank is non-negative."""
+        if value < 0:
+            raise ValueError(f"rank must be non-negative, got {value}")
+        return value
+
+    @field_validator("end_layer")
+    @classmethod
+    def validate_end_layer_positive(cls, value: int) -> int:
+        """Validate that end_layer is positive (at least 1 layer assigned)."""
+        if value <= 0:
+            raise ValueError(f"end_layer must be positive, got {value}")
+        return value
+
+    def model_post_init(self, __context: object) -> None:
+        """Validate that start_layer < end_layer."""
+        if self.start_layer >= self.end_layer:
+            raise ValueError(
+                f"start_layer ({self.start_layer}) must be less than "
+                f"end_layer ({self.end_layer})"
+            )
+
+    @property
+    def num_local_layers(self) -> int:
+        """Number of transformer layers assigned to this stage."""
+        return self.end_layer - self.start_layer
+
+
+# ---------------------------------------------------------------------------
 # PipelineLayerDistribution — layer assignment across pipeline ranks
 # ---------------------------------------------------------------------------
 
@@ -96,6 +158,55 @@ class PipelineLayerDistribution(BaseModel):
                 f"layers_per_rank sums to {layer_sum} "
                 f"but total_layer_count is {self.total_layer_count}"
             )
+
+    def get_stage_assignment(self, rank: int) -> PipelineStageAssignment:
+        """Compute the stage assignment for a given rank.
+
+        Derives the contiguous layer range from the cumulative sum of
+        ``layers_per_rank`` and determines embedding/lm_head ownership
+        based on rank position.
+
+        Args:
+            rank: Pipeline stage rank (0-indexed). Must be in
+                ``[0, rank_count)``.
+
+        Returns:
+            A ``PipelineStageAssignment`` describing the rank's layer range
+            and auxiliary module ownership.
+
+        Raises:
+            ValueError: If rank is out of range.
+        """
+        if rank < 0 or rank >= self.rank_count:
+            raise ValueError(
+                f"rank must be in [0, {self.rank_count}), got {rank}"
+            )
+        start_layer = sum(self.layers_per_rank[:rank])
+        end_layer = start_layer + self.layers_per_rank[rank]
+        return PipelineStageAssignment(
+            rank=rank,
+            start_layer=start_layer,
+            end_layer=end_layer,
+            owns_embedding=(rank == 0),
+            owns_lm_head=(rank == self.rank_count - 1),
+        )
+
+    def validate_contiguous(self) -> bool:
+        """Verify that layer ranges are contiguous with no gaps or overlaps.
+
+        Checks that the stage assignments derived from this distribution
+        form a complete, non-overlapping partition of ``[0, total_layer_count)``.
+
+        Returns:
+            True if the distribution is contiguous and covers all layers.
+        """
+        expected_start = 0
+        for rank in range(self.rank_count):
+            assignment = self.get_stage_assignment(rank)
+            if assignment.start_layer != expected_start:
+                return False
+            expected_start = assignment.end_layer
+        return expected_start == self.total_layer_count
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,9 @@ import torch
 import torch.nn.functional as F
 
 if TYPE_CHECKING:
+    from exo.worker.engines.pytorch_xpu.gated_deltanet_state import (
+        GatedDeltaNetPersistentState,
+    )
     from exo.worker.engines.pytorch_xpu.instrumentation import PerformanceRecorder
 
 
@@ -119,6 +122,132 @@ def _gated_deltanet_recurrent_step_impl(
     output = (state * q_expanded).sum(dim=-2)  # (B, H, d_v)
 
     return output.to(initial_dtype), state
+
+
+def gated_deltanet_decode_recurrent_step_optimized(
+    q: torch.Tensor,           # (B, H, d_k) in bf16
+    k: torch.Tensor,           # (B, H, d_k) in bf16
+    v: torch.Tensor,           # (B, H, d_v) in bf16
+    gate: torch.Tensor,        # (B, H) in bf16
+    beta: torch.Tensor,        # (B, H) in bf16
+    persistent_state: GatedDeltaNetPersistentState,
+    *,
+    performance_recorder: PerformanceRecorder | None = None,
+    layer_index: int | None = None,
+) -> torch.Tensor:
+    """Optimized single-step recurrent GatedDeltaNet update using persistent fp32 state.
+
+    Key optimizations over ``_gated_deltanet_recurrent_step_impl``:
+
+    1. **No state dtype promotion**: The persistent state is already fp32 — no cast needed.
+    2. **In-place state decay**: Uses ``state.mul_(g)`` instead of ``state = state * g``,
+       eliminating one (B, H, d_k, d_v) allocation per token.
+    3. **In-place state update**: Uses ``state.add_(...)`` instead of ``state = state + ...``,
+       eliminating another (B, H, d_k, d_v) allocation per token.
+    4. **Preallocated output buffers**: Writes output into ``persistent_state.output_buffer_fp32``
+       using ``torch.sum(..., out=...)`` and casts into ``persistent_state.output_buffer_bf16``
+       using ``.copy_()``, avoiding per-token output allocation.
+
+    The function modifies ``persistent_state.recurrent_state`` in place and returns
+    the output in bf16 using the preallocated buffer.
+
+    Args:
+        q: L2-normalized query, shape (B, H, d_k) in bf16.
+        k: L2-normalized key, shape (B, H, d_k) in bf16.
+        v: value, shape (B, H, d_v) in bf16.
+        gate: log-space decay gate, shape (B, H) in bf16.
+        beta: sigmoid update rate, shape (B, H) in bf16.
+        persistent_state: Persistent state container with fp32 recurrent state
+            and preallocated output buffers.
+        performance_recorder: Optional recorder for timing spans and counters.
+            When provided, records recurrent step time tagged by layer index.
+            Zero-cost when None.
+        layer_index: Optional global layer index for instrumentation metadata.
+
+    Returns:
+        Output tensor of shape (B, H, d_v) in bf16, backed by
+        ``persistent_state.output_buffer_bf16``.
+
+    **Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.10**
+    """
+    if performance_recorder is not None:
+        metadata: dict[str, int] = {
+            "batch_size": q.shape[0],
+            "num_heads": q.shape[1],
+            "key_head_dim": q.shape[2],
+        }
+        if layer_index is not None:
+            metadata["layer_index"] = layer_index
+        with performance_recorder.span(
+            "gated_deltanet_optimized_recurrent_step",
+            mode="decode",
+            metadata=metadata,
+        ):
+            return _gated_deltanet_decode_recurrent_step_optimized_impl(
+                q, k, v, gate, beta, persistent_state
+            )
+    return _gated_deltanet_decode_recurrent_step_optimized_impl(
+        q, k, v, gate, beta, persistent_state
+    )
+
+
+def _gated_deltanet_decode_recurrent_step_optimized_impl(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    gate: torch.Tensor,
+    beta: torch.Tensor,
+    persistent_state: GatedDeltaNetPersistentState,
+) -> torch.Tensor:
+    """Inner implementation of the optimized recurrent step (no instrumentation)."""
+    # Cast small input tensors to fp32 (q/k/v/gate/beta are small: ~16 KB total)
+    # The state is already fp32 — no cast needed (Requirement 5.2)
+    q_fp32 = q.float()
+    k_fp32 = k.float()
+    v_fp32 = v.float()
+    gate_fp32 = gate.float()
+    beta_fp32 = beta.float()
+
+    # Get reference to the persistent fp32 state (already fp32, no cast)
+    state = persistent_state.recurrent_state
+
+    # Scale query: scale = 1/sqrt(d_k)
+    d_k = q_fp32.shape[-1]
+    q_fp32 = q_fp32 * (d_k ** -0.5)
+
+    # Step 1: Decay old state IN PLACE (eliminates one large allocation)
+    # Original: state = state * g  →  allocates new (B, H, d_k, d_v) tensor
+    # Optimized: state.mul_(g)    →  modifies existing tensor in place
+    g = gate_fp32.exp().unsqueeze(-1).unsqueeze(-1)  # (B, H, 1, 1)
+    state.mul_(g)
+
+    # Step 2: Retrieve what state predicts for this key
+    k_expanded = k_fp32.unsqueeze(-1)  # (B, H, d_k, 1)
+    retrieved = (state * k_expanded).sum(dim=-2)  # (B, H, d_v)
+
+    # Step 3: Compute delta (error correction)
+    beta_expanded = beta_fp32.unsqueeze(-1)  # (B, H, 1)
+    delta = beta_expanded * (v_fp32 - retrieved)  # (B, H, d_v)
+
+    # Step 4: Write correction into state IN PLACE (eliminates another large allocation)
+    # Original: state = state + k_expanded * delta_expanded  →  allocates new state
+    # Optimized: state.add_(k_expanded * delta_expanded)     →  modifies in place
+    delta_expanded = delta.unsqueeze(-2)  # (B, H, 1, d_v)
+    state.add_(k_expanded * delta_expanded)
+
+    # Step 5: Read output using preallocated buffer
+    # Original: output = (state * q_expanded).sum(dim=-2)  →  allocates new tensor
+    # Optimized: write into preallocated fp32 buffer, then copy to bf16 buffer
+    q_expanded = q_fp32.unsqueeze(-1)  # (B, H, d_k, 1)
+    torch.sum(state * q_expanded, dim=-2, out=persistent_state.output_buffer_fp32)
+
+    # Cast fp32 output to bf16 using preallocated buffer (no new allocation)
+    persistent_state.output_buffer_bf16.copy_(persistent_state.output_buffer_fp32)
+
+    # Track decode step
+    persistent_state.increment_decode_step()
+
+    return persistent_state.output_buffer_bf16
 
 
 def gated_deltanet_chunk_prefill(

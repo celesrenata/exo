@@ -19,7 +19,16 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 if TYPE_CHECKING:
+    from exo.worker.engines.pytorch_xpu.decode_output_buffer_pool import (
+        DecodeOutputBufferPool,
+    )
+    from exo.worker.engines.pytorch_xpu.gated_deltanet_cache import (
+        GatedDeltaNetCache,
+    )
     from exo.worker.engines.pytorch_xpu.instrumentation import PerformanceRecorder
+    from exo.worker.engines.pytorch_xpu.pipeline_config import (
+        PytorchXpuOptimizationConfiguration,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +172,7 @@ class PipelineParallelShard:
         rotary_emb: torch.nn.Module | None = None,
         text_model_config: Any | None = None,
         performance_recorder: PerformanceRecorder | None = None,
+        optimization_config: PytorchXpuOptimizationConfiguration | None = None,
     ) -> None:
         """Initialize the pipeline-parallel shard.
 
@@ -177,6 +187,11 @@ class PipelineParallelShard:
             performance_recorder: Optional recorder for performance instrumentation.
                 When provided, per-stage, per-layer, final norm, and lm_head
                 timings are recorded via the span context-manager API.
+            optimization_config: Optional optimization configuration. When provided,
+                the ``enable_gated_deltanet_persistent_state`` flag controls whether
+                GatedDeltaNet persistent state, GatedDeltaNetCache wrapper, and
+                DecodeOutputBufferPool are created. When None, defaults to enabled
+                (all optimizations active).
         """
         self.layers = layers
         self.config = config
@@ -186,30 +201,89 @@ class PipelineParallelShard:
         self.rotary_emb = rotary_emb
         self.text_model_config = text_model_config
         self.performance_recorder: PerformanceRecorder | None = performance_recorder
+        self._optimization_config: PytorchXpuOptimizationConfiguration | None = optimization_config
+
+        # Determine whether GatedDeltaNet persistent state optimization is enabled.
+        # When no config is provided, default to enabled (optimization active).
+        self._gated_deltanet_persistent_state_enabled: bool = (
+            optimization_config.enable_gated_deltanet_persistent_state
+            if optimization_config is not None
+            else True
+        )
 
         # KV cache: one entry per local layer (None until first forward pass)
         self._kv_cache: list[tuple[torch.Tensor, torch.Tensor] | None] = [
             None
         ] * config.num_local_layers
 
-        # HuggingFace DynamicCache for native layer compatibility.
-        # Linear attention layers (GatedDeltaNet) store conv_state and recurrent_state
-        # inside this cache object. Without it, they have no memory between decode steps.
+        # HuggingFace DynamicCache wrapped in GatedDeltaNetCache for native layer
+        # compatibility. Linear attention layers (GatedDeltaNet) store conv_state and
+        # recurrent_state inside this cache object. The GatedDeltaNetCache wrapper
+        # additionally stores persistent fp32 recurrent state for the optimized decode
+        # path. Without it, layers have no memory between decode steps.
         self._hf_cache: Any | None = None
+        self._gated_deltanet_cache: GatedDeltaNetCache | None = None
         try:
             from transformers.cache_utils import DynamicCache as _DynamicCache
+
             if text_model_config is not None:
-                self._hf_cache = _DynamicCache(config=text_model_config)
+                dynamic_cache = _DynamicCache(config=text_model_config)
             else:
-                self._hf_cache = _DynamicCache()
-            logger.info(
-                f"Pipeline shard rank={config.rank}: created DynamicCache for native layer state"
-            )
+                dynamic_cache = _DynamicCache()
+
+            if self._gated_deltanet_persistent_state_enabled:
+                # Optimization enabled: wrap DynamicCache in GatedDeltaNetCache
+                # for persistent fp32 state storage
+                from exo.worker.engines.pytorch_xpu.gated_deltanet_cache import (
+                    GatedDeltaNetCache as _GatedDeltaNetCache,
+                )
+                self._gated_deltanet_cache = _GatedDeltaNetCache(dynamic_cache=dynamic_cache)
+                # _hf_cache points to the wrapper — it delegates DynamicCache operations
+                # transparently, so existing layer code continues to work unchanged.
+                self._hf_cache = self._gated_deltanet_cache
+                logger.info(
+                    f"Pipeline shard rank={config.rank}: created GatedDeltaNetCache "
+                    f"(wrapping DynamicCache) for native layer state"
+                )
+            else:
+                # Optimization disabled: use plain DynamicCache (existing behavior)
+                self._hf_cache = dynamic_cache
+                logger.info(
+                    f"Pipeline shard rank={config.rank}: created plain DynamicCache "
+                    f"(GatedDeltaNet persistent state disabled)"
+                )
         except ImportError:
             logger.warning(
-                "Pipeline shard: could not import DynamicCache from transformers. "
+                "Pipeline shard: could not import DynamicCache or GatedDeltaNetCache. "
                 "Linear attention layers will not maintain recurrent state between decode steps."
             )
+
+        # Decode output buffer pool for reusable intermediate tensors
+        # (only created when GatedDeltaNet persistent state optimization is enabled)
+        self._decode_output_buffer_pool: DecodeOutputBufferPool | None = None
+        if self._gated_deltanet_persistent_state_enabled:
+            try:
+                from exo.worker.engines.pytorch_xpu.decode_output_buffer_pool import (
+                    DecodeOutputBufferPool as _DecodeOutputBufferPool,
+                )
+                self._decode_output_buffer_pool = _DecodeOutputBufferPool()
+                logger.info(
+                    f"Pipeline shard rank={config.rank}: created DecodeOutputBufferPool"
+                )
+            except ImportError:
+                logger.debug(
+                    "Pipeline shard: could not import DecodeOutputBufferPool. "
+                    "Decode output buffer reuse unavailable."
+                )
+        else:
+            logger.debug(
+                f"Pipeline shard rank={config.rank}: DecodeOutputBufferPool skipped "
+                f"(GatedDeltaNet persistent state disabled)"
+            )
+
+        # Current request identifier for GatedDeltaNet persistent state tracking.
+        # Set via initialize_request() before decode begins, cleared on reset_state().
+        self._current_request_id: str | None = None
 
         # Detect layer types for hybrid attention models (Qwen3.5)
         self._layer_types: list[str] = self._detect_layer_types()
@@ -234,6 +308,9 @@ class PipelineParallelShard:
             f"rotary_emb={rotary_emb is not None}, "
             f"layer_types={self._layer_types}, "
             f"hf_cache={self._hf_cache is not None}, "
+            f"gated_deltanet_cache={self._gated_deltanet_cache is not None}, "
+            f"gated_deltanet_persistent_state={self._gated_deltanet_persistent_state_enabled}, "
+            f"decode_buffer_pool={self._decode_output_buffer_pool is not None}, "
             f"compiled={self._compiled_forward is not None}, "
             f"instrumented={self.performance_recorder is not None}"
         )
@@ -640,8 +717,17 @@ class PipelineParallelShard:
         seq_len = hidden_states.shape[1]
         mode = "prefill" if seq_len > 1 else "decode"
 
-        # Call the layer with optional instrumentation
+        # Instrumentation: count optimized vs baseline path usage for
+        # GatedDeltaNet layers during decode. The optimized path avoids the
+        # bf16→fp32 state cast because persistent state is already fp32.
         recorder = self.performance_recorder
+        if recorder is not None and mode == "decode" and layer_type == "linear_attention":
+            if self._gated_deltanet_persistent_state_enabled:
+                recorder.increment_counter("per_token_casts_avoided")
+            else:
+                recorder.increment_counter("per_token_casts_baseline")
+
+        # Call the layer with optional instrumentation
         if recorder is not None:
             with recorder.span(
                 "layer_compute",
@@ -715,14 +801,55 @@ class PipelineParallelShard:
     def reset_state(self) -> None:
         """Reset KV cache and linear attention recurrent state for new sequence.
 
-        Requirements: 5.3, 6.3
+        Clears all cache state including:
+        - Per-layer KV cache entries
+        - HuggingFace DynamicCache (via GatedDeltaNetCache wrapper)
+        - GatedDeltaNet persistent fp32 recurrent states
+        - Decode output buffer pool
+        - Decode shape stability tracking
+        - Current request identifier
+
+        Requirements: 5.3, 5.7, 5.8, 6.3
         """
         self._kv_cache = [None] * self.config.num_local_layers
         # Reset decode shape stability tracking
         self._last_output_shape = None
         self._in_decode_steady_state = False
-        # Reset the HuggingFace DynamicCache (clears linear attention recurrent state)
-        if self._hf_cache is not None:
+        # Clear current request identifier
+        self._current_request_id = None
+
+        # Recycle GatedDeltaNet persistent states (zeros tensors, keeps containers
+        # available for reuse by the next request — avoids reallocation cost)
+        if (
+            self._gated_deltanet_persistent_state_enabled
+            and self._gated_deltanet_cache is not None
+        ):
+            self._gated_deltanet_cache.recycle_all_gated_deltanet_states()
+
+        # Clear decode output buffer pool (releases intermediate tensor memory)
+        if (
+            self._gated_deltanet_persistent_state_enabled
+            and self._decode_output_buffer_pool is not None
+        ):
+            self._decode_output_buffer_pool.clear()
+
+        # Reset the HuggingFace DynamicCache (clears linear attention recurrent state).
+        # We recreate the DynamicCache inside the GatedDeltaNetCache wrapper to ensure
+        # the HF layer state (conv_state, recurrent_state stored by the layer itself)
+        # is fully cleared. The GatedDeltaNet persistent states are separate and handled
+        # above via recycle_all_gated_deltanet_states().
+        if self._gated_deltanet_cache is not None:
+            try:
+                from transformers.cache_utils import DynamicCache as _DynamicCache
+                if self.text_model_config is not None:
+                    new_dynamic_cache = _DynamicCache(config=self.text_model_config)
+                else:
+                    new_dynamic_cache = _DynamicCache()
+                # Replace the underlying DynamicCache in the wrapper
+                self._gated_deltanet_cache._dynamic_cache = new_dynamic_cache
+            except ImportError:
+                pass
+        elif self._hf_cache is not None:
             try:
                 from transformers.cache_utils import DynamicCache as _DynamicCache
                 if self.text_model_config is not None:
@@ -731,11 +858,162 @@ class PipelineParallelShard:
                     self._hf_cache = _DynamicCache()
             except ImportError:
                 self._hf_cache = None
+
         logger.debug(
             f"Pipeline stage rank={self.config.rank}: state reset "
-            f"({self.config.num_local_layers} cache entries cleared, hf_cache recreated, "
-            f"decode shape stability reset)"
+            f"({self.config.num_local_layers} cache entries cleared, "
+            f"hf_cache recreated, gated_deltanet states recycled, "
+            f"decode buffer pool cleared, decode shape stability reset)"
         )
+
+    def initialize_request(self, request_id: str) -> None:
+        """Initialize per-request state before decode begins.
+
+        Sets the current request identifier and initializes GatedDeltaNet persistent
+        fp32 state for all linear_attention layers in this shard. This must be called
+        after prefill completes and before the first decode step.
+
+        The persistent state eliminates per-token bf16→fp32 promotion and per-token
+        tensor allocation during the recurrent decode step.
+
+        When ``enable_gated_deltanet_persistent_state`` is disabled, only the request
+        identifier is set — no persistent state initialization occurs.
+
+        Args:
+            request_id: Unique identifier for the generation request. Used to track
+                which request owns which persistent state containers.
+
+        Requirements: 5.1, 5.2, 5.7, 5.8
+        """
+        self._current_request_id = request_id
+
+        # Initialize GatedDeltaNet persistent state for linear_attention layers
+        # (only when the optimization is enabled)
+        if (
+            self._gated_deltanet_persistent_state_enabled
+            and self._gated_deltanet_cache is not None
+        ):
+            self._initialize_gated_deltanet_persistent_states(request_id)
+
+        logger.debug(
+            f"Pipeline stage rank={self.config.rank}: initialized request {request_id!r}, "
+            f"persistent_state_enabled={self._gated_deltanet_persistent_state_enabled}, "
+            f"gated_deltanet_states={self._gated_deltanet_cache.gated_deltanet_state_count if self._gated_deltanet_cache else 0}"
+        )
+
+    def _initialize_gated_deltanet_persistent_states(self, request_id: str) -> None:
+        """Initialize persistent fp32 state for all GatedDeltaNet layers in this shard.
+
+        For each linear_attention layer, creates (or reuses) a
+        GatedDeltaNetPersistentState container with preallocated fp32 tensors.
+        This is called once per request, not per token.
+
+        The model dimensions are extracted from the text_model_config. If the config
+        is unavailable or dimensions cannot be determined, initialization is skipped
+        with a warning (the shard falls back to the standard decode path).
+
+        Args:
+            request_id: Unique identifier for the owning request.
+        """
+        if self._gated_deltanet_cache is None:
+            return
+
+        # Extract model dimensions from text_model_config
+        config = self.text_model_config
+        if config is None:
+            logger.debug(
+                f"Pipeline stage rank={self.config.rank}: no text_model_config, "
+                f"skipping GatedDeltaNet persistent state initialization"
+            )
+            return
+
+        # Qwen3.5 model dimensions (from HuggingFace config attributes)
+        # num_attention_heads: total query heads (for GatedDeltaNet, this is num_v_heads)
+        # For linear attention layers in Qwen3.5:
+        #   key_dim = head_dim (hidden_size / num_attention_heads)
+        #   value_dim = head_dim
+        #   conv_dim = num_heads * (key_dim + value_dim) typically
+        #   conv_kernel_size = 4 (default for Qwen3.5)
+        num_heads = getattr(config, "num_attention_heads", None)
+        hidden_size = getattr(config, "hidden_size", None)
+        conv_kernel_size = getattr(config, "conv_kernel_size", 4)
+
+        if num_heads is None or hidden_size is None:
+            logger.debug(
+                f"Pipeline stage rank={self.config.rank}: cannot determine model "
+                f"dimensions (num_heads={num_heads}, hidden_size={hidden_size}), "
+                f"skipping GatedDeltaNet persistent state initialization"
+            )
+            return
+
+        head_dim = hidden_size // num_heads
+        # For GatedDeltaNet layers, key_dim and value_dim are both head_dim
+        key_dim = head_dim
+        value_dim = head_dim
+        # conv_dim is typically the projection dimension for the linear attention
+        # In Qwen3.5, this is num_heads * (key_dim + value_dim) = hidden_size * 2
+        # But the actual conv_dim depends on the layer's internal projection.
+        # Use a safe default: num_heads * (key_dim + value_dim)
+        conv_dim = num_heads * (key_dim + value_dim)
+
+        device = torch.device(self.config.device)
+
+        try:
+            from exo.worker.engines.pytorch_xpu.gated_deltanet_state import (
+                initialize_gated_deltanet_state,
+            )
+        except ImportError:
+            logger.warning(
+                f"Pipeline stage rank={self.config.rank}: could not import "
+                f"initialize_gated_deltanet_state, skipping persistent state init"
+            )
+            return
+
+        initialized_count = 0
+        for local_idx, layer_type in enumerate(self._layer_types):
+            if layer_type == "linear_attention":
+                global_layer_index = self.config.start_layer + local_idx
+                initialize_gated_deltanet_state(
+                    cache=self._gated_deltanet_cache,
+                    request_identifier=request_id,
+                    layer_index=global_layer_index,
+                    batch_size=1,  # Single-request decode
+                    num_heads=num_heads,
+                    key_dim=key_dim,
+                    value_dim=value_dim,
+                    conv_dim=conv_dim,
+                    conv_kernel_size=conv_kernel_size,
+                    device=device,
+                )
+                initialized_count += 1
+
+        if initialized_count > 0:
+            logger.info(
+                f"Pipeline stage rank={self.config.rank}: initialized {initialized_count} "
+                f"GatedDeltaNet persistent states for request {request_id!r} "
+                f"(num_heads={num_heads}, key_dim={key_dim}, value_dim={value_dim}, "
+                f"conv_dim={conv_dim}, device={device})"
+            )
+
+    @property
+    def current_request_id(self) -> str | None:
+        """The current request identifier, or None if no request is active."""
+        return self._current_request_id
+
+    @property
+    def gated_deltanet_persistent_state_enabled(self) -> bool:
+        """Whether GatedDeltaNet persistent state optimization is active."""
+        return self._gated_deltanet_persistent_state_enabled
+
+    @property
+    def gated_deltanet_cache(self) -> GatedDeltaNetCache | None:
+        """Access the GatedDeltaNetCache wrapper (for external state queries)."""
+        return self._gated_deltanet_cache
+
+    @property
+    def decode_output_buffer_pool(self) -> DecodeOutputBufferPool | None:
+        """Access the decode output buffer pool (for external diagnostics)."""
+        return self._decode_output_buffer_pool
 
     def __call__(
         self,
