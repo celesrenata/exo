@@ -1359,7 +1359,17 @@ class TensorParallelShard:
         ).unsqueeze(0).expand(batch_size, -1)
 
         # --- Transformer layers ---
+        # Profiling: track per-layer and per-operation timing
+        import time as _time
+        _layer_times: list[float] = []
+        _allreduce_total_ms: float = 0.0
+        _linear_attn_total_ms: float = 0.0
+        _full_attn_total_ms: float = 0.0
+        _mlp_total_ms: float = 0.0
+        _forward_start = _time.perf_counter()
+
         for layer_idx in range(num_layers):
+            _layer_start = _time.perf_counter()
             residual = hidden_states
 
             # 1. Input LayerNorm (redundant — all ranks compute same result)
@@ -1372,10 +1382,12 @@ class TensorParallelShard:
             hidden_states = self._apply_norm(hidden_states, ln_weight, ln_bias)
 
             # Dispatch based on layer type (linear_attention vs full_attention)
+            _attn_start = _time.perf_counter()
             if self._layer_types[layer_idx] == "linear_attention":
                 # Linear attention (Gated DeltaNet) — no KV cache needed
                 attn_output = self._forward_linear_attn_layer(hidden_states, layer_idx)
                 new_kv_cache.append(None)  # type: ignore[arg-type]
+                _linear_attn_total_ms += (_time.perf_counter() - _attn_start) * 1000
             else:
                 # Full attention (standard transformer with KV cache)
                 # 2. QKV projections (column-parallel)
@@ -1501,11 +1513,13 @@ class TensorParallelShard:
                 attn_output = self._row_parallel_linear(
                     attn_output, o_weight, o_bias, layer_index=layer_idx
                 )
+                _full_attn_total_ms += (_time.perf_counter() - _attn_start) * 1000
 
             # 4. Residual connection
             hidden_states = residual + attn_output
 
             # --- MLP block ---
+            _mlp_start = _time.perf_counter()
             residual = hidden_states
 
             # Post-attention LayerNorm (redundant)
@@ -1547,9 +1561,11 @@ class TensorParallelShard:
             mlp_output = self._row_parallel_linear(
                 mlp_hidden, down_weight, down_bias, layer_index=layer_idx
             )
+            _mlp_total_ms += (_time.perf_counter() - _mlp_start) * 1000
 
             # 7. Residual connection
             hidden_states = residual + mlp_output
+            _layer_times.append((_time.perf_counter() - _layer_start) * 1000)
 
             # --- Per-layer NaN detection (one-shot per request) ---
             if not self._nan_diag_logged_this_request and (
@@ -1565,6 +1581,24 @@ class TensorParallelShard:
                     f"inf_count={int(torch.isinf(hidden_states).sum().item())} "
                     f"seq_len={seq_len} past_seq_len={past_seq_len}"
                 )
+
+        # --- Profiling summary (logged once per forward pass) ---
+        _forward_elapsed_ms = (_time.perf_counter() - _forward_start) * 1000
+        _avg_layer_ms = sum(_layer_times) / len(_layer_times) if _layer_times else 0
+        _slowest_layer_idx = _layer_times.index(max(_layer_times)) if _layer_times else -1
+        _slowest_layer_ms = max(_layer_times) if _layer_times else 0
+        _slowest_layer_type = self._layer_types[_slowest_layer_idx] if _slowest_layer_idx >= 0 and _slowest_layer_idx < len(self._layer_types) else "unknown"
+
+        logger.info(
+            f"[TP_FORWARD_PROFILE] rank={self.config.rank}/{self.config.world_size} "
+            f"seq_len={seq_len} past_seq_len={past_seq_len} "
+            f"total={_forward_elapsed_ms:.0f}ms "
+            f"layers={num_layers} avg_layer={_avg_layer_ms:.1f}ms "
+            f"linear_attn={_linear_attn_total_ms:.0f}ms "
+            f"full_attn={_full_attn_total_ms:.0f}ms "
+            f"mlp={_mlp_total_ms:.0f}ms "
+            f"slowest_layer={_slowest_layer_idx}({_slowest_layer_type})={_slowest_layer_ms:.0f}ms"
+        )
 
         # --- Final LayerNorm (redundant on all ranks) ---
         final_ln_weight = self._get_weight(f"{self._layer_prefix}.norm.weight")
@@ -1646,7 +1680,10 @@ class TensorParallelShard:
             # collectives; an explicit cast ensures the all-reduce is actually
             # performed across all ranks rather than silently returning the local
             # partial result.
+            import time as _ar_time
+            _ar_stage_start = _ar_time.perf_counter()
             cpu_f32 = tensor.detach().to(dtype=torch.float32, device="cpu")
+            _ar_stage_ms = (_ar_time.perf_counter() - _ar_stage_start) * 1000
 
             # --- DIAGNOSTIC: capture pre-reduce norm on layer 0 o_proj (first call) ---
             _do_diag = (not self._allreduce_diag_logged and layer_index == 0)
@@ -1654,12 +1691,24 @@ class TensorParallelShard:
             if _do_diag:
                 _pre_norm = float(cpu_f32.norm().item())
 
+            _ar_reduce_start = _ar_time.perf_counter()
             dist.all_reduce(
                 cpu_f32,
                 op=dist.ReduceOp.SUM,
                 group=tp_group,
                 async_op=False,
             )
+            _ar_reduce_ms = (_ar_time.perf_counter() - _ar_reduce_start) * 1000
+
+            # Log first all-reduce timing per forward pass for profiling
+            if not self._allreduce_diag_logged:
+                logger.info(
+                    f"[ALLREDUCE_TIMING] rank={self.config.rank} layer={layer_index} "
+                    f"stage_to_cpu={_ar_stage_ms:.2f}ms "
+                    f"all_reduce={_ar_reduce_ms:.2f}ms "
+                    f"tensor_shape={tuple(tensor.shape)} "
+                    f"tensor_numel={tensor.numel()}"
+                )
 
             if _do_diag:
                 _post_norm = float(cpu_f32.norm().item())
