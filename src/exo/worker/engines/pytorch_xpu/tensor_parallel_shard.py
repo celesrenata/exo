@@ -1626,6 +1626,20 @@ class TensorParallelShard:
             lm_head_weight = self._get_weight(f"{self._layer_prefix}.embed_tokens.weight")
         logits = F.linear(hidden_states, lm_head_weight)
 
+        # Diagnostic: log top-5 predicted tokens and hidden state stats
+        with open(f"/tmp/tp_profile_rank{self.config.rank}.log", "a") as _pf:
+            _last_logits = logits[:, -1, :]  # (batch, vocab)
+            _top5 = torch.topk(_last_logits, 5, dim=-1)
+            _hs_norm = float(hidden_states[:, -1, :].norm().item())
+            _logits_max = float(_last_logits.max().item())
+            _logits_min = float(_last_logits.min().item())
+            _pf.write(
+                f"[LOGITS_DIAG] rank={self.config.rank} seq_len={seq_len} "
+                f"hs_norm={_hs_norm:.4f} logits_range=[{_logits_min:.2f},{_logits_max:.2f}] "
+                f"top5_ids={_top5.indices[0].tolist()} top5_vals={[f'{v:.2f}' for v in _top5.values[0].tolist()]}\n"
+            )
+            _pf.flush()
+
         # --- NaN/Inf diagnostic (one-shot per request) ---
         if not self._nan_diag_logged_this_request:
             has_nan = bool(torch.isnan(logits).any().item())
