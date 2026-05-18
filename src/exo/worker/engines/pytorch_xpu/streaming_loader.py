@@ -417,9 +417,9 @@ def _load_native_linear_attn_layers(
 ) -> dict[int, Any]:
     """Load native linear attention layers for hybrid models (Qwen3.5/3.6).
 
-    Uses AutoModelForCausalLM with device_map="meta" to get the model
-    structure without allocating weight memory, then manually loads the
-    linear_attn weights from the sharded_state_dict.
+    Instantiates individual Qwen3_5GatedDeltaNet modules from the model config
+    and loads their weights from the sharded_state_dict. Does NOT use
+    device_map="meta" (which requires accelerate).
 
     Returns:
         Dict mapping layer_idx -> native linear_attn module on device.
@@ -431,31 +431,31 @@ def _load_native_linear_attn_layers(
         return {}
 
     try:
-        from transformers import AutoConfig, AutoModelForCausalLM
+        from transformers import AutoConfig
 
         source = model_id or model_path
+        config = AutoConfig.from_pretrained(source, trust_remote_code=True)
 
-        # Load model structure with meta device (no memory for weights)
-        model = AutoModelForCausalLM.from_pretrained(
-            source,
-            trust_remote_code=True,
-            torch_dtype=torch.bfloat16,
-            device_map="meta",
-        )
+        # Get text_config for hybrid VL models
+        text_config = getattr(config, 'text_config', config)
+        layer_types = getattr(text_config, 'layer_types', None)
+        if layer_types is None:
+            return {}
 
-        # Find the layers container
-        layers = _find_model_layers(model)
-        if layers is None:
-            del model
+        # Try to import the Qwen3.5 GatedDeltaNet module
+        try:
+            from transformers.models.qwen3_5.modeling_qwen3_5 import (
+                Qwen3_5GatedDeltaNet,  # type: ignore[import-untyped]
+            )
+        except ImportError:
+            logger.warning("Could not import Qwen3_5GatedDeltaNet from transformers")
             return {}
 
         native_layers: dict[int, Any] = {}
 
-        for idx, layer in enumerate(layers):
-            if not hasattr(layer, "linear_attn") or layer.linear_attn is None:
+        for idx, layer_type in enumerate(layer_types):
+            if layer_type != "linear_attention":
                 continue
-
-            linear_attn = layer.linear_attn
 
             # Collect weights for this linear_attn module from sharded_state_dict
             prefix_patterns = [
@@ -476,24 +476,23 @@ def _load_native_linear_attn_layers(
             if not layer_weights:
                 continue
 
-            # Materialize the module from meta device to target device
-            linear_attn = linear_attn.to_empty(device=device)
+            # Instantiate the GatedDeltaNet module directly from config
+            linear_attn = Qwen3_5GatedDeltaNet(text_config, layer_idx=idx)  # type: ignore[arg-type]
+            linear_attn = linear_attn.to(device=device, dtype=torch.bfloat16)
 
             # Load the weights
             missing, unexpected = linear_attn.load_state_dict(layer_weights, strict=False)
             if missing:
-                logger.warning(
-                    f"Layer {idx} linear_attn missing keys: {missing}"
+                logger.debug(
+                    f"Layer {idx} linear_attn missing keys ({len(missing)}): {missing[:3]}..."
                 )
 
             linear_attn.eval()
             native_layers[idx] = linear_attn
 
-        del model
-
         if native_layers:
             logger.info(
-                f"Loaded {len(native_layers)} native linear_attn layers from safetensors"
+                f"Loaded {len(native_layers)} native linear_attn layers from config+weights"
             )
 
         return native_layers
