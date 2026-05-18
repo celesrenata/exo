@@ -1062,6 +1062,12 @@ class TensorParallelShard:
         norm_weight = self._get_weight(f"{prefix}.norm.weight")
         out_proj = self._get_weight(f"{prefix}.out_proj.weight")
 
+        # Ensure hidden_states matches weight dtype (weights are bfloat16,
+        # hidden_states may be float32 after RMSNorm computation)
+        weight_dtype = in_proj_qkv.dtype
+        if hidden_states.dtype != weight_dtype:
+            hidden_states = hidden_states.to(weight_dtype)
+
         # 2. Infer dimensions from weight shapes
         total_qkv_dim = in_proj_qkv.shape[0]
         v_dim = in_proj_z.shape[0]
