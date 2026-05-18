@@ -334,6 +334,18 @@ def _enable_rdma_transport() -> bool:
         )
         if ibverbs_found:
             os.environ["GLOO_DEVICE_TRANSPORT"] = "ibverbs"
+            # Ensure libibverbs.so.1 is discoverable by Gloo's dlopen().
+            # On NixOS, /run/current-system/sw/lib isn't in the default linker
+            # search path, so we must add it to LD_LIBRARY_PATH for Gloo to find it.
+            ibverbs_dir = next(
+                (p for p in search_paths if p and os.path.isfile(os.path.join(p, "libibverbs.so.1"))),
+                None,
+            )
+            if ibverbs_dir:
+                current_ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+                if ibverbs_dir not in current_ld_path:
+                    os.environ["LD_LIBRARY_PATH"] = f"{ibverbs_dir}:{current_ld_path}" if current_ld_path else ibverbs_dir
+                    logger.info(f"Added {ibverbs_dir} to LD_LIBRARY_PATH for libibverbs.so.1")
             logger.info("RDMA detected and libibverbs.so.1 found — set GLOO_DEVICE_TRANSPORT=ibverbs")
             return True
         else:
