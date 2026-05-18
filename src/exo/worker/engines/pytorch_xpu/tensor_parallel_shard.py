@@ -1342,18 +1342,9 @@ class TensorParallelShard:
 
         # Reset native linear-attention cache at the start of each new sequence
         # (past_seq_len == 0 means this is a fresh prefill, not a decode step).
-        # The _native_cache retains recurrent/conv state from the previous call;
-        # if it is NOT cleared between inference requests (e.g. after warmup or a
-        # prior generation), all 24 GatedDeltaNet layers start with stale state
-        # and produce garbage hidden_states, which propagates to garbage logits.
-        if past_seq_len == 0 and hasattr(self, '_native_cache') and self._native_cache is not None:
-            # Reset by discarding the cache — a fresh one will be created lazily
-            # on the first _forward_linear_attn_layer call inside this forward pass.
-            logger.info(
-                f"[CACHE_RESET] rank={self.config.rank}: resetting _native_cache "
-                f"for new sequence (past_seq_len=0)"
-            )
-            del self._native_cache
+        # NOTE: Cache reset is handled by reset_generation_state() between requests.
+        # Do NOT reset here — the generation system may call forward() multiple times
+        # with past_seq_len=0 (warmup + actual prompt) within the same request.
         position_ids = torch.arange(
             past_seq_len, past_seq_len + seq_len, device=hidden_states.device
         ).unsqueeze(0).expand(batch_size, -1)
