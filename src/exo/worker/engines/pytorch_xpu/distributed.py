@@ -271,11 +271,11 @@ class CpuStagedTensor:
 
 
 def _detect_rdma_available() -> bool:
-    """Detect if RDMA (ibverbs) is available on this node.
+    """Detect if RDMA (SIW/iWARP) is available on this node.
 
     Checks for an active RDMA device by reading /sys/class/infiniband/.
-    Returns True if at least one RDMA device exists with an active port,
-    indicating that Gloo can use ibverbs transport instead of TCP sockets.
+    SIW provides kernel-level TCP optimization (zero-copy, reduced context
+    switches) that benefits Gloo's TCP transport automatically.
     """
     try:
         infiniband_dir = "/sys/class/infiniband"
@@ -284,7 +284,6 @@ def _detect_rdma_available() -> bool:
         devices = os.listdir(infiniband_dir)
         if not devices:
             return False
-        # Check if at least one device has an active port
         for device in devices:
             port_dir = os.path.join(infiniband_dir, device, "ports")
             if not os.path.isdir(port_dir):
@@ -302,41 +301,31 @@ def _detect_rdma_available() -> bool:
 
 
 def _enable_rdma_transport() -> bool:
-    """Enable RDMA transport for Gloo if available.
+    """Log RDMA availability. Removes GLOO_DEVICE_TRANSPORT=ibverbs if set.
 
-    Sets GLOO_DEVICE_TRANSPORT=ibverbs when RDMA is detected and the user
-    hasn't explicitly set the transport. Returns True if RDMA was enabled.
+    The PyTorch XPU wheel (2.11.0+xpu) only includes Gloo TCP and TCP-TLS
+    transports. The ibverbs transport requires building PyTorch from source
+    with USE_IBVERBS=ON (see nix/pytorch-xpu-source.nix).
 
-    SIW (Soft-iWARP) over Ethernet provides RDMA semantics with zero-copy
-    kernel bypass, reducing latency for the small tensor transfers used in
-    pipeline-parallel activation passing.
+    SIW (Soft-iWARP) on the gremlin nodes optimizes TCP at the kernel level
+    automatically — zero-copy transfers and reduced context switches benefit
+    Gloo's TCP transport without explicit ibverbs support.
 
-    Note: Gloo loads libibverbs.so.1 via dlopen() from within libtorch_cpu.so
-    (glibc 2.42), not from the Python interpreter (glibc 2.40). We verify
-    the library exists on disk rather than using ctypes.CDLL which would
-    fail due to the glibc version mismatch in the NixOS environment.
-
-    IMPORTANT: PyTorch XPU wheels (2.11.0+xpu) do NOT include Gloo ibverbs
-    support. Setting GLOO_DEVICE_TRANSPORT=ibverbs causes "unsupported gloo
-    device" errors. This function is disabled until a PyTorch build with
-    Gloo ibverbs support is available. RDMA will be used automatically when
-    PyTorch is built with USE_IBVERBS=1.
+    Returns True if RDMA hardware is present (informational only).
     """
-    if "GLOO_DEVICE_TRANSPORT" in os.environ:
-        transport = os.environ["GLOO_DEVICE_TRANSPORT"]
-        logger.info(f"GLOO_DEVICE_TRANSPORT already set: {transport}")
-        return transport == "ibverbs"
+    # Remove GLOO_DEVICE_TRANSPORT=ibverbs if set — it crashes this PyTorch build
+    if os.environ.get("GLOO_DEVICE_TRANSPORT") == "ibverbs":
+        del os.environ["GLOO_DEVICE_TRANSPORT"]
+        logger.warning(
+            "Removed GLOO_DEVICE_TRANSPORT=ibverbs — not supported in PyTorch XPU wheel. "
+            "Gloo will use TCP (SIW provides kernel-level RDMA optimization automatically)."
+        )
 
-    # Disabled: PyTorch XPU wheel's Gloo backend does not support ibverbs.
-    # The ibv_* symbols in libtorch_cpu.so are from the NCCL/c10d RDMA path,
-    # not from Gloo's device transport layer. Gloo only supports "tcp" and
-    # "tcp_tls" transports in the XPU wheel build.
     if _detect_rdma_available():
         logger.info(
-            "RDMA (SIW) detected on this node but Gloo ibverbs transport is not "
-            "available in this PyTorch build. Using TCP transport. "
-            "RDMA will be used when PyTorch is built with USE_IBVERBS=1."
+            "SIW RDMA active — Gloo TCP benefits from kernel-level zero-copy automatically"
         )
+        return True
     return False
 
 

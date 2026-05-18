@@ -138,10 +138,6 @@ in
         EXO_LIBP2P_PORT = toString cfg.libp2pPort;
       } // lib.optionalAttrs (cfg.peers != []) {
         EXO_PEERS = lib.concatStringsSep "," cfg.peers;
-      } // lib.optionalAttrs (cfg.rdmaCorePackage != null) {
-        # Enable RDMA (ibverbs) transport for Gloo — uses SIW (Soft-iWARP)
-        # over Ethernet for lower-latency inter-node tensor transfers
-        GLOO_DEVICE_TRANSPORT = "ibverbs";
       } // lib.optionalAttrs (cfg.intelGpuPackages != [] || cfg.rdmaCorePackage != null) {
         # Intel GPU runtime libraries for torch.xpu (Level Zero + compute runtime)
         # Include /run/opengl-driver/lib where NixOS places GPU driver libraries
