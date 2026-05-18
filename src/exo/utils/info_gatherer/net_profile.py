@@ -105,8 +105,13 @@ async def check_reachable(
     ) -> None:
         async with send:
             out: defaultdict[NodeId, set[str]] = defaultdict(set)
-            await check_reachability(target_ip, expected_node_id, out, client, api_port)
+            try:
+                await check_reachability(target_ip, expected_node_id, out, client, api_port)
+            except Exception as e:
+                logger.warning(f"Probe to {target_ip} for {expected_node_id} failed: {e}")
+                return
             if expected_node_id in out:
+                logger.debug(f"Probe succeeded: {target_ip} -> {expected_node_id}")
                 await send.send((target_ip, expected_node_id))
 
     def _is_usable_remote_ip(ip: str) -> bool:
@@ -133,6 +138,7 @@ async def check_reachable(
             return False
         return True
 
+    probed_count = 0
     async with (
         httpx.AsyncClient(timeout=timeout, limits=limits, verify=False) as client,
         create_task_group() as tg,
@@ -144,8 +150,10 @@ async def check_reachable(
                 continue
             for iface in node_network[node_id].interfaces:
                 if _is_usable_remote_ip(iface.ip_address):
+                    probed_count += 1
                     tg.start_soon(_probe, iface.ip_address, node_id, client, send.clone())
         send.close()
+        logger.debug(f"Net profiler: probing {probed_count} IPs across {len(list(topology.list_nodes())) - 1} remote nodes")
 
         with recv:
             async for item in recv:
