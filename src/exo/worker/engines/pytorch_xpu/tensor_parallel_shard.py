@@ -1373,6 +1373,11 @@ class TensorParallelShard:
 
         for layer_idx in range(num_layers):
             _layer_start = _time.perf_counter()
+            # Write per-layer progress to file (to identify where it hangs)
+            if layer_idx % 8 == 0 or layer_idx < 3:
+                with open(f"/tmp/tp_profile_rank{self.config.rank}.log", "a") as _pf:
+                    _pf.write(f"[LAYER_START] rank={self.config.rank} layer={layer_idx}/{num_layers} type={self._layer_types[layer_idx] if layer_idx < len(self._layer_types) else '?'} elapsed={(_time.perf_counter() - _forward_start)*1000:.0f}ms\n")
+                    _pf.flush()
             residual = hidden_states
 
             # 1. Input LayerNorm (redundant — all ranks compute same result)
