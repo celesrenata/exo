@@ -487,6 +487,17 @@ def _load_native_linear_attn_layers(
                     f"Layer {idx} linear_attn missing keys ({len(missing)}): {missing[:3]}..."
                 )
 
+            # Log weight loading status to file for diagnosis
+            with open(f"/tmp/tp_native_layer_load.log", "a") as _nlf:
+                _nlf.write(
+                    f"Layer {idx}: loaded {len(layer_weights)} weights, "
+                    f"missing={len(missing)}, unexpected={len(unexpected)}, "
+                    f"keys={list(layer_weights.keys())[:5]}\n"
+                )
+                if missing:
+                    _nlf.write(f"  MISSING: {missing}\n")
+                _nlf.flush()
+
             linear_attn.eval()
             native_layers[idx] = linear_attn
 
