@@ -160,6 +160,7 @@ class TensorParallelShard:
         device: str,
         *,
         pre_sharded: bool = False,
+        native_rotary_emb: Any = None,
     ) -> None:
         """Initialize with sharded weights extracted from the full model.
 
@@ -173,12 +174,21 @@ class TensorParallelShard:
             device: Target device string (e.g., "xpu:0", "cpu", "cuda:0").
             pre_sharded: If True, the state dict is already sharded (from streaming
                 loader) and shard_weights() will be skipped.
+            native_rotary_emb: Pre-built native rotary embedding module (from streaming
+                loader). When provided, overrides extraction from model object.
         """
         self.config = config
         self.device = device
         self.sharded_state_dict: dict[str, torch.Tensor] = {}
         self._native_linear_attn_layers: dict[int, Any] = {}
         self._native_rotary_emb: Any = None  # Native rotary embedding module (optional)
+
+        # Accept pre-built native rotary embedding (from streaming loader)
+        if native_rotary_emb is not None:
+            self._native_rotary_emb = native_rotary_emb.to(device)
+            logger.info(
+                f"Using provided native rotary_emb: {type(native_rotary_emb).__name__}"
+            )
 
         # Extract state dict from model if it's a module
         if isinstance(model, dict):
@@ -228,6 +238,17 @@ class TensorParallelShard:
             f"kv_heads_per_rank={config.kv_heads_per_rank}, "
             f"intermediate_per_rank={config.intermediate_per_rank}"
         )
+
+        # Fail-fast: MRoPE models MUST have native rotary embedding.
+        # Without it, the manual 1D RoPE fallback produces garbage output.
+        if self._native_rotary_emb is None and self.config.mrope_interleaved:
+            raise RuntimeError(
+                "MRoPE model detected (mrope_interleaved=True) but no native rotary "
+                "embedding available. The streaming loader must pass native_rotary_emb "
+                "to TensorParallelShard for correct 3D positional encoding. "
+                "Without native MRoPE, all full attention layers will use incorrect "
+                "1D RoPE, producing degenerate output."
+            )
 
     def _extract_native_rotary_emb(self, model: Any) -> None:  # pyright: ignore[reportAny]
         """Extract the native rotary embedding module from the HuggingFace model.
@@ -583,7 +604,14 @@ class TensorParallelShard:
 
         # Handle bias terms with the same sharding as their corresponding weights
         if self._matches_attn_key(param_name, "q_proj.bias"):
-            shard_size = heads_per_rank * head_dim
+            # Match q_proj.weight sharding: check actual tensor shape for doubled Q (Q + gate)
+            actual_out_dim = param_tensor.shape[0]
+            expected_standard = heads_per_rank * head_dim * world_size
+            q_doubled = actual_out_dim == expected_standard * 2
+            if q_doubled:
+                shard_size = heads_per_rank * head_dim * 2
+            else:
+                shard_size = heads_per_rank * head_dim
             start = rank * shard_size
             return param_tensor.narrow(0, start, shard_size).clone()
 

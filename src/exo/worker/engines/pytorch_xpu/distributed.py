@@ -270,15 +270,97 @@ class CpuStagedTensor:
     original_shape: tuple[int, ...]
 
 
+def _detect_rdma_available() -> bool:
+    """Detect if RDMA (ibverbs) is available on this node.
+
+    Checks for an active RDMA device by reading /sys/class/infiniband/.
+    Returns True if at least one RDMA device exists with an active port,
+    indicating that Gloo can use ibverbs transport instead of TCP sockets.
+    """
+    try:
+        infiniband_dir = "/sys/class/infiniband"
+        if not os.path.isdir(infiniband_dir):
+            return False
+        devices = os.listdir(infiniband_dir)
+        if not devices:
+            return False
+        # Check if at least one device has an active port
+        for device in devices:
+            port_dir = os.path.join(infiniband_dir, device, "ports")
+            if not os.path.isdir(port_dir):
+                continue
+            for port in os.listdir(port_dir):
+                state_file = os.path.join(port_dir, port, "state")
+                if os.path.isfile(state_file):
+                    with open(state_file) as f:
+                        state = f.read().strip()
+                    if "ACTIVE" in state:
+                        return True
+        return False
+    except OSError:
+        return False
+
+
+def _enable_rdma_transport() -> bool:
+    """Enable RDMA transport for Gloo if available.
+
+    Sets GLOO_DEVICE_TRANSPORT=ibverbs when RDMA is detected and the user
+    hasn't explicitly set the transport. Returns True if RDMA was enabled.
+
+    SIW (Soft-iWARP) over Ethernet provides RDMA semantics with zero-copy
+    kernel bypass, reducing latency for the small tensor transfers used in
+    pipeline-parallel activation passing.
+
+    Note: Gloo loads libibverbs.so.1 via dlopen() from within libtorch_cpu.so
+    (glibc 2.42), not from the Python interpreter (glibc 2.40). We verify
+    the library exists on disk rather than using ctypes.CDLL which would
+    fail due to the glibc version mismatch in the NixOS environment.
+    """
+    if "GLOO_DEVICE_TRANSPORT" in os.environ:
+        logger.info(f"GLOO_DEVICE_TRANSPORT already set: {os.environ['GLOO_DEVICE_TRANSPORT']}")
+        return os.environ["GLOO_DEVICE_TRANSPORT"] == "ibverbs"
+
+    if _detect_rdma_available():
+        # Verify libibverbs.so.1 is findable in LD_LIBRARY_PATH or standard paths
+        search_paths = os.environ.get("LD_LIBRARY_PATH", "").split(":") + [
+            "/run/current-system/sw/lib",
+            "/usr/lib",
+            "/usr/lib64",
+        ]
+        ibverbs_found = any(
+            os.path.isfile(os.path.join(p, "libibverbs.so.1"))
+            for p in search_paths
+            if p
+        )
+        if ibverbs_found:
+            os.environ["GLOO_DEVICE_TRANSPORT"] = "ibverbs"
+            logger.info("RDMA detected and libibverbs.so.1 found — set GLOO_DEVICE_TRANSPORT=ibverbs")
+            return True
+        else:
+            logger.warning("RDMA device detected but libibverbs.so.1 not found in library paths")
+            return False
+    else:
+        logger.info("No active RDMA device detected — using default TCP transport")
+        return False
+
+
 def init_process_group(config: ProcessGroupConfig) -> None:
     """Initialize torch.distributed with Gloo backend using TCPStore.
 
     Creates a TCPStore directly (not env:// rendezvous) so that rank 0
     can bind on 0.0.0.0 while other ranks connect to master_addr.
 
+    When RDMA (ibverbs) is available via SIW/RoCE/iWARP, Gloo will use
+    RDMA transport for lower-latency tensor transfers between nodes.
+
     Requirements: 1.1, 1.3, 1.6
     """
     import torch.distributed as dist
+
+    # Enable RDMA transport if available (SIW over Ethernet on gremlin nodes)
+    rdma_enabled = _enable_rdma_transport()
+    if rdma_enabled:
+        logger.info("Gloo will use ibverbs (RDMA) transport for inter-node communication")
 
     # Tell Gloo which network interface to use for mesh connections.
     if "GLOO_SOCKET_IFNAME" not in os.environ:
@@ -800,10 +882,11 @@ def get_tensor_parallel_group() -> object | None:
 
 
 def init_tensor_parallel_group(config: TensorParallelGroupConfig) -> None:
-    """Initialize a Gloo process group for tensor parallelism over TB4.
+    """Initialize a Gloo process group for tensor parallelism.
 
-    Sets GLOO_SOCKET_IFNAME to the TB4 interface so all collective
-    operations route over the high-bandwidth TB4 links.
+    When RDMA is available (SIW over Ethernet), Gloo uses ibverbs transport
+    for the frequent all-reduce operations that tensor parallelism requires.
+    Falls back to the TB4 interface if specified, or uses RDMA over bond0.
 
     If a default process group already exists (e.g., pipeline parallelism
     over ethernet), this creates a new named group that coexists with it.
@@ -817,6 +900,9 @@ def init_tensor_parallel_group(config: TensorParallelGroupConfig) -> None:
     import torch.distributed as dist
 
     global _tp_process_group  # noqa: PLW0603
+
+    # Enable RDMA transport if available
+    _enable_rdma_transport()
 
     # Set env:// rendezvous variables for the TB4 master.
     os.environ["MASTER_ADDR"] = config.master_addr

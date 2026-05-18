@@ -44,7 +44,7 @@ def load_sharded_from_safetensors(
     config: TPShardConfig,
     device: str,
     model_id: str = "",
-) -> tuple[dict[str, torch.Tensor], dict[int, Any], Any]:
+) -> tuple[dict[str, torch.Tensor], dict[int, Any], Any, Any]:
     """Load model weights from safetensors files with streaming sharding.
 
     Reads weights directly from safetensors files, sharding each tensor
@@ -62,6 +62,8 @@ def load_sharded_from_safetensors(
         - native_linear_attn_layers: dict mapping layer_idx -> native layer module
           (empty for pure transformer models)
         - tokenizer: loaded tokenizer
+        - native_rotary_emb: native rotary embedding module for MRoPE models,
+          or None for standard RoPE models
     """
     import safetensors.torch as st
 
@@ -173,7 +175,10 @@ def load_sharded_from_safetensors(
         model_path, model_id, sharded_state_dict, device
     )
 
-    return sharded_state_dict, native_layers, tokenizer
+    # For MRoPE models, load native rotary embedding
+    native_rotary_emb = _load_native_rotary_emb(model_path, model_id, device)
+
+    return sharded_state_dict, native_layers, tokenizer, native_rotary_emb
 
 
 def _discover_safetensors_files(model_dir: Path) -> dict[str, list[str]]:
@@ -511,6 +516,72 @@ def _load_native_linear_attn_layers(
     except Exception as e:
         logger.warning(f"Failed to load native linear_attn layers: {e}")
         return {}
+
+
+def _load_native_rotary_emb(
+    model_path: str,
+    model_id: str,
+    device: str,
+) -> Any:
+    """Load native rotary embedding for MRoPE models (Qwen3.5/3.6).
+
+    Instantiates Qwen3_5RotaryEmbedding from the model config when the model
+    uses Multi-Resolution Rotary Position Embedding (MRoPE). This is required
+    for the streaming loader path where no HuggingFace model object exists to
+    extract rotary_emb from.
+
+    Returns:
+        Native rotary embedding module on device, or None for non-MRoPE models.
+    """
+    try:
+        from transformers import AutoConfig
+
+        source = model_id or model_path
+        config = AutoConfig.from_pretrained(source, trust_remote_code=True)
+
+        # Get text_config for hybrid VL models
+        text_config = getattr(config, 'text_config', config)
+
+        # Check if model uses MRoPE via rope_scaling dict
+        rope_scaling = getattr(text_config, 'rope_scaling', None)
+        rope_parameters = getattr(text_config, 'rope_parameters', None)
+
+        is_mrope = False
+        if rope_scaling is not None and isinstance(rope_scaling, dict):
+            if rope_scaling.get("type") == "mrope":
+                is_mrope = True
+            elif "mrope_section" in rope_scaling:
+                is_mrope = True
+        if not is_mrope and rope_parameters is not None and isinstance(rope_parameters, dict) and "mrope_section" in rope_parameters:
+            is_mrope = True
+
+        if not is_mrope:
+            return None
+
+        # Try to import the Qwen3.5 RotaryEmbedding module
+        try:
+            from transformers.models.qwen3_5.modeling_qwen3_5 import (
+                Qwen3_5RotaryEmbedding,  # type: ignore[import-untyped]
+            )
+        except ImportError:
+            logger.warning("Could not import Qwen3_5RotaryEmbedding from transformers")
+            return None
+
+        # Instantiate from text_config, move to device
+        rotary_emb = Qwen3_5RotaryEmbedding(config=text_config)  # type: ignore[arg-type]
+        rotary_emb = rotary_emb.to(device=device, dtype=torch.bfloat16)
+        rotary_emb.eval()
+
+        logger.info(
+            f"Loaded native Qwen3_5RotaryEmbedding for MRoPE model "
+            f"(rope_scaling.type='mrope') on device={device}"
+        )
+
+        return rotary_emb
+
+    except Exception as e:
+        logger.warning(f"Failed to load native rotary embedding: {e}")
+        return None
 
 
 def _find_model_layers(model: Any) -> Any:

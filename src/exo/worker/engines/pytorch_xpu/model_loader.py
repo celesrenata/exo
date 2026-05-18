@@ -410,7 +410,7 @@ class ModelLoader:
 
         model_path = self._resolve_model_path(model_id)
 
-        sharded_state_dict, native_layers, tokenizer = load_sharded_from_safetensors(
+        sharded_state_dict, native_layers, tokenizer, native_rotary_emb = load_sharded_from_safetensors(
             model_path=model_path,
             config=tp_config,
             device=str(device),
@@ -423,6 +423,7 @@ class ModelLoader:
             config=tp_config,
             device=str(device),
             pre_sharded=True,
+            native_rotary_emb=native_rotary_emb,
         )
 
         # Attach native linear_attn layers if any

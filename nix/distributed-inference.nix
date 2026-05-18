@@ -36,6 +36,17 @@ in
       example = lib.literalExpression "[ pkgs.intel-compute-runtime pkgs.level-zero ]";
     };
 
+    rdmaCorePackage = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = null;
+      description = ''
+        The rdma-core package providing libibverbs.so.1 for RDMA transport.
+        When set, Gloo will use ibverbs (RDMA over SIW/Ethernet) instead of
+        TCP sockets for lower-latency inter-node tensor transfers.
+      '';
+      example = lib.literalExpression "pkgs.rdma-core";
+    };
+
     masterAddr = lib.mkOption {
       type = lib.types.str;
       description = ''
@@ -127,13 +138,19 @@ in
         EXO_LIBP2P_PORT = toString cfg.libp2pPort;
       } // lib.optionalAttrs (cfg.peers != []) {
         EXO_PEERS = lib.concatStringsSep "," cfg.peers;
-      } // lib.optionalAttrs (cfg.intelGpuPackages != []) {
+      } // lib.optionalAttrs (cfg.rdmaCorePackage != null) {
+        # Enable RDMA (ibverbs) transport for Gloo — uses SIW (Soft-iWARP)
+        # over Ethernet for lower-latency inter-node tensor transfers
+        GLOO_DEVICE_TRANSPORT = "ibverbs";
+      } // lib.optionalAttrs (cfg.intelGpuPackages != [] || cfg.rdmaCorePackage != null) {
         # Intel GPU runtime libraries for torch.xpu (Level Zero + compute runtime)
         # Include /run/opengl-driver/lib where NixOS places GPU driver libraries
         # that the Level Zero loader scans for libze_intel_gpu.so
+        # Include rdma-core for libibverbs.so.1 when RDMA is enabled
         LD_LIBRARY_PATH = lib.concatStringsSep ":" ([
           "/run/opengl-driver/lib"
         ] ++ (map (pkg: "${pkg}/lib") cfg.intelGpuPackages)
+          ++ (lib.optional (cfg.rdmaCorePackage != null) "${cfg.rdmaCorePackage}/lib")
           ++ (builtins.filter (p: p != "") (
             map (pkg: if builtins.pathExists "${pkg}/lib/intel-opencl" then "${pkg}/lib/intel-opencl" else "") cfg.intelGpuPackages
           )));
