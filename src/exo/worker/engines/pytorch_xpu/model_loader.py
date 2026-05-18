@@ -376,6 +376,17 @@ class ModelLoader:
             dict(rope_scaling_raw) if isinstance(rope_scaling_raw, dict) else None
         )
 
+        # Extract partial_rotary_factor and mrope_interleaved from rope_parameters
+        rope_params_raw = getattr(text_config, "rope_parameters", None)
+        partial_rotary_factor = 1.0
+        mrope_interleaved = False
+        if isinstance(rope_params_raw, dict):
+            partial_rotary_factor = float(rope_params_raw.get("partial_rotary_factor", 1.0))
+            mrope_interleaved = bool(rope_params_raw.get("mrope_interleaved", False))
+            # rope_theta might also be in rope_parameters
+            if "rope_theta" in rope_params_raw:
+                rope_theta = float(rope_params_raw["rope_theta"])
+
         tp_config = TPShardConfig(
             rank=shard_metadata.device_rank,
             world_size=shard_metadata.world_size,
@@ -386,6 +397,8 @@ class ModelLoader:
             num_key_value_heads=num_key_value_heads,
             rope_theta=rope_theta,
             rope_scaling=rope_scaling,
+            partial_rotary_factor=partial_rotary_factor,
+            mrope_interleaved=mrope_interleaved,
         )
 
         logger.info(
