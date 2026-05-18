@@ -381,12 +381,14 @@ class Worker:
                 conn.edge for conn in self.state.topology.out_edges(self.node_id)
             )
             conns: defaultdict[NodeId, set[str]] = defaultdict(set)
+            logger.debug(f"_poll_connection_updates: starting probe round, existing edges={len(edges)}, node_network_size={len(self.state.node_network)}")
             async for ip, nid in check_reachable(
                 self.state.topology,
                 self.node_id,
                 self.state.node_network,
                 api_port=self.api_port,
             ):
+                logger.debug(f"_poll_connection_updates: received probe result ip={ip} nid={nid}")
                 if ip in conns[nid]:
                     continue
                 conns[nid].add(ip)
