@@ -315,45 +315,29 @@ def _enable_rdma_transport() -> bool:
     (glibc 2.42), not from the Python interpreter (glibc 2.40). We verify
     the library exists on disk rather than using ctypes.CDLL which would
     fail due to the glibc version mismatch in the NixOS environment.
+
+    IMPORTANT: PyTorch XPU wheels (2.11.0+xpu) do NOT include Gloo ibverbs
+    support. Setting GLOO_DEVICE_TRANSPORT=ibverbs causes "unsupported gloo
+    device" errors. This function is disabled until a PyTorch build with
+    Gloo ibverbs support is available. RDMA will be used automatically when
+    PyTorch is built with USE_IBVERBS=1.
     """
     if "GLOO_DEVICE_TRANSPORT" in os.environ:
-        logger.info(f"GLOO_DEVICE_TRANSPORT already set: {os.environ['GLOO_DEVICE_TRANSPORT']}")
-        return os.environ["GLOO_DEVICE_TRANSPORT"] == "ibverbs"
+        transport = os.environ["GLOO_DEVICE_TRANSPORT"]
+        logger.info(f"GLOO_DEVICE_TRANSPORT already set: {transport}")
+        return transport == "ibverbs"
 
+    # Disabled: PyTorch XPU wheel's Gloo backend does not support ibverbs.
+    # The ibv_* symbols in libtorch_cpu.so are from the NCCL/c10d RDMA path,
+    # not from Gloo's device transport layer. Gloo only supports "tcp" and
+    # "tcp_tls" transports in the XPU wheel build.
     if _detect_rdma_available():
-        # Verify libibverbs.so.1 is findable in LD_LIBRARY_PATH or standard paths
-        search_paths = os.environ.get("LD_LIBRARY_PATH", "").split(":") + [
-            "/run/current-system/sw/lib",
-            "/usr/lib",
-            "/usr/lib64",
-        ]
-        ibverbs_found = any(
-            os.path.isfile(os.path.join(p, "libibverbs.so.1"))
-            for p in search_paths
-            if p
+        logger.info(
+            "RDMA (SIW) detected on this node but Gloo ibverbs transport is not "
+            "available in this PyTorch build. Using TCP transport. "
+            "RDMA will be used when PyTorch is built with USE_IBVERBS=1."
         )
-        if ibverbs_found:
-            os.environ["GLOO_DEVICE_TRANSPORT"] = "ibverbs"
-            # Ensure libibverbs.so.1 is discoverable by Gloo's dlopen().
-            # On NixOS, /run/current-system/sw/lib isn't in the default linker
-            # search path, so we must add it to LD_LIBRARY_PATH for Gloo to find it.
-            ibverbs_dir = next(
-                (p for p in search_paths if p and os.path.isfile(os.path.join(p, "libibverbs.so.1"))),
-                None,
-            )
-            if ibverbs_dir:
-                current_ld_path = os.environ.get("LD_LIBRARY_PATH", "")
-                if ibverbs_dir not in current_ld_path:
-                    os.environ["LD_LIBRARY_PATH"] = f"{ibverbs_dir}:{current_ld_path}" if current_ld_path else ibverbs_dir
-                    logger.info(f"Added {ibverbs_dir} to LD_LIBRARY_PATH for libibverbs.so.1")
-            logger.info("RDMA detected and libibverbs.so.1 found — set GLOO_DEVICE_TRANSPORT=ibverbs")
-            return True
-        else:
-            logger.warning("RDMA device detected but libibverbs.so.1 not found in library paths")
-            return False
-    else:
-        logger.info("No active RDMA device detected — using default TCP transport")
-        return False
+    return False
 
 
 def init_process_group(config: ProcessGroupConfig) -> None:
