@@ -1367,6 +1367,9 @@ class TensorParallelShard:
         _full_attn_total_ms: float = 0.0
         _mlp_total_ms: float = 0.0
         _forward_start = _time.perf_counter()
+        with open(f"/tmp/tp_profile_rank{self.config.rank}.log", "a") as _pf:
+            _pf.write(f"[FORWARD_START] rank={self.config.rank} seq_len={seq_len} past_seq_len={past_seq_len} num_layers={num_layers} device={hidden_states.device}\n")
+            _pf.flush()
 
         for layer_idx in range(num_layers):
             _layer_start = _time.perf_counter()
@@ -1589,7 +1592,7 @@ class TensorParallelShard:
         _slowest_layer_ms = max(_layer_times) if _layer_times else 0
         _slowest_layer_type = self._layer_types[_slowest_layer_idx] if _slowest_layer_idx >= 0 and _slowest_layer_idx < len(self._layer_types) else "unknown"
 
-        logger.info(
+        _profile_msg = (
             f"[TP_FORWARD_PROFILE] rank={self.config.rank}/{self.config.world_size} "
             f"seq_len={seq_len} past_seq_len={past_seq_len} "
             f"total={_forward_elapsed_ms:.0f}ms "
@@ -1599,6 +1602,11 @@ class TensorParallelShard:
             f"mlp={_mlp_total_ms:.0f}ms "
             f"slowest_layer={_slowest_layer_idx}({_slowest_layer_type})={_slowest_layer_ms:.0f}ms"
         )
+        logger.info(_profile_msg)
+        # Also write to file since runner subprocess logs may not reach journald
+        with open(f"/tmp/tp_profile_rank{self.config.rank}.log", "a") as _pf:
+            _pf.write(f"{_profile_msg}\n")
+            _pf.flush()
 
         # --- Final LayerNorm (redundant on all ranks) ---
         final_ln_weight = self._get_weight(f"{self._layer_prefix}.norm.weight")
@@ -1702,13 +1710,17 @@ class TensorParallelShard:
 
             # Log first all-reduce timing per forward pass for profiling
             if not self._allreduce_diag_logged:
-                logger.info(
+                _ar_msg = (
                     f"[ALLREDUCE_TIMING] rank={self.config.rank} layer={layer_index} "
                     f"stage_to_cpu={_ar_stage_ms:.2f}ms "
                     f"all_reduce={_ar_reduce_ms:.2f}ms "
                     f"tensor_shape={tuple(tensor.shape)} "
                     f"tensor_numel={tensor.numel()}"
                 )
+                logger.info(_ar_msg)
+                with open(f"/tmp/tp_profile_rank{self.config.rank}.log", "a") as _pf:
+                    _pf.write(f"{_ar_msg}\n")
+                    _pf.flush()
 
             if _do_diag:
                 _post_norm = float(cpu_f32.norm().item())
