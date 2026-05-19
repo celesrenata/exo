@@ -705,7 +705,7 @@
     const instanceType = nodeCount <= 1 ? "MlxRing" : selectedInstanceType;
     try {
       const placementResponse = await fetch(
-        `/instance/placement?model_id=${encodeURIComponent(modelId)}&sharding=${sharding}&instance_meta=${instanceType}&min_nodes=1`,
+        `/instance/placement?model_id=${encodeURIComponent(modelId)}&sharding=${sharding}&instance_meta=${instanceType}&min_nodes=${selectedMinNodes}`,
       );
       if (!placementResponse.ok) {
         const errorText = await placementResponse.text();
@@ -1443,7 +1443,7 @@
             model_id: modelId,
             sharding: selectedSharding,
             instance_meta: selectedInstanceType,
-            min_nodes: 1,
+            min_nodes: selectedMinNodes,
           }),
         });
       }
