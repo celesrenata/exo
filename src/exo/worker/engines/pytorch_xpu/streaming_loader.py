@@ -561,11 +561,16 @@ def _load_native_rotary_emb(
         # Try to import the Qwen3.5 RotaryEmbedding module
         try:
             from transformers.models.qwen3_5.modeling_qwen3_5 import (
-                Qwen3_5RotaryEmbedding,  # type: ignore[import-untyped]
+                Qwen3_5TextRotaryEmbedding as Qwen3_5RotaryEmbedding,  # type: ignore[import-untyped]
             )
         except ImportError:
-            logger.warning("Could not import Qwen3_5RotaryEmbedding from transformers")
-            return None
+            try:
+                from transformers.models.qwen3_5.modeling_qwen3_5 import (
+                    Qwen3_5RotaryEmbedding,  # type: ignore[import-untyped]
+                )
+            except ImportError:
+                logger.warning("Could not import Qwen3_5 RotaryEmbedding from transformers")
+                return None
 
         # Instantiate from text_config, move to device
         rotary_emb = Qwen3_5RotaryEmbedding(config=text_config)  # type: ignore[arg-type]
