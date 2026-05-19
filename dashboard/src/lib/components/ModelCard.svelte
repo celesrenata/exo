@@ -23,7 +23,7 @@
     } | null;
     nodes?: Record<string, NodeInfo>;
     sharding?: "Pipeline" | "Tensor";
-    runtime?: "MlxRing" | "MlxJaccl";
+    runtime?: "MlxRing" | "MlxJaccl" | "PyTorchXPURing";
     onLaunch?: () => void;
     tags?: string[];
     apiPreview?: PlacementPreview | null;

@@ -16,6 +16,7 @@
   type InstanceWrapper = {
     MlxRingInstance?: Instance;
     MlxJacclInstance?: Instance;
+    PyTorchXPURingInstance?: Instance;
     VllmInstance?: Instance;
   };
 
@@ -46,6 +47,7 @@
       const inst =
         wrapper.MlxRingInstance ??
         wrapper.MlxJacclInstance ??
+        wrapper.PyTorchXPURingInstance ??
         wrapper.VllmInstance;
       const modelId = inst?.shardAssignments?.modelId ?? "";
       const nodeToRunner = inst?.shardAssignments?.nodeToRunner ?? {};
