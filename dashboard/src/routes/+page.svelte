@@ -931,8 +931,7 @@
 
     // Apply sharding and instance type unconditionally
     selectedSharding = defaults.sharding;
-    selectedInstanceType =
-      defaults.instanceType === "MlxRing" ? "MlxRing" : "MlxJaccl";
+    selectedInstanceType = defaults.instanceType as InstanceMeta;
 
     // Apply minNodes if valid (between 1 and maxNodes)
     if (
@@ -2713,6 +2712,14 @@
         )
         .sort((a, b) => getPreviewNodeCount(b) - getPreviewNodeCount(a));
       if (jacclTensor.length > 0) return jacclTensor[0];
+
+      // Multi-node PyTorch XPU: prefer Tensor with most nodes
+      const xpuTensor = valid
+        .filter(
+          (p) => p.instance_meta === "PyTorchXPURing" && p.sharding === "Tensor",
+        )
+        .sort((a, b) => getPreviewNodeCount(b) - getPreviewNodeCount(a));
+      if (xpuTensor.length > 0) return xpuTensor[0];
 
       // Multi-node without RDMA: fall back to single-node Pipeline/Ring
       const singlePipeline = valid.filter(
