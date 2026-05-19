@@ -631,6 +631,11 @@
           ) // lib.optionalAttrs pkgs.stdenv.isLinux {
             # PyTorch with Intel XPU support (Linux only)
             pytorch-xpu = pkgsExo.python313.pkgs.torch;
+            # PyTorch from source with XPU + ibverbs (RDMA) support — long build time
+            pytorch-xpu-source = pkgsExo.python313.pkgs.callPackage (inputs.self + /nix/pytorch-xpu-source.nix) {
+              inherit (pkgsExo) intel-compute-runtime level-zero mkl oneDNN onetbb;
+              inherit (pkgsExo) rdma-core libnl numactl;
+            };
             # Intel oneAPI runtime libraries (libsycl.so.8, libpti_view.so.0, etc.)
             # Needed by PyTorch XPU at runtime
             intel-oneapi-runtime = pkgs.callPackage (inputs.self + /nix/intel-oneapi-runtime.nix) { };
