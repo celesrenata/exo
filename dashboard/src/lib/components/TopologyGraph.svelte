@@ -556,6 +556,9 @@
         if (telemetry?.gpu?.utilization_percent != null) {
           gpuUsagePercent = telemetry.gpu.utilization_percent;
         }
+        if (sysPower === null && telemetry?.gpu?.power_watts != null) {
+          sysPower = telemetry.gpu.power_watts;
+        }
       }
 
       let iconBaseWidth = nodeRadius * 1.2;

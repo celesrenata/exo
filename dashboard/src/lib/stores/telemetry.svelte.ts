@@ -17,6 +17,7 @@ export interface GpuMetrics {
   utilization_percent: number | null;
   render_busy_percent: number | null;
   memory_bandwidth_percent: number | null;
+  power_watts: number | null;
   source: string;
 }
 

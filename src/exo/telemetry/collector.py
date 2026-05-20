@@ -27,6 +27,7 @@ from exo.telemetry.parsers import (
 logger: Final = logging.getLogger(__name__)
 
 _SYSFS_GPU_FREQ_PATH: Final = Path("/sys/class/drm/card0/gt_cur_freq_mhz")
+_RAPL_ENERGY_PATH: Final = Path("/sys/class/powercap/intel-rapl:0/energy_uj")
 _PROC_NET_DEV_PATH: Final = Path("/proc/net/dev")
 _INTEL_GPU_TOP_COMMAND: Final = ("intel_gpu_top", "-J", "-s", "900")
 _GPU_READ_TIMEOUT_SECONDS: Final[float] = 2.0
@@ -51,6 +52,10 @@ class TelemetryCollector:
         self._previous_bytes_sent: int | None = None
         self._previous_bytes_received: int | None = None
         self._previous_network_timestamp: datetime | None = None
+
+        # Previous RAPL energy sample for power computation
+        self._previous_energy_uj: int | None = None
+        self._previous_energy_timestamp: datetime | None = None
 
     def start(self) -> None:
         """Start the background telemetry collection loop."""
@@ -105,6 +110,8 @@ class TelemetryCollector:
 
     async def _collect_gpu(self, timestamp: datetime) -> GpuMetrics:
         """Collect GPU metrics from intel_gpu_top or sysfs fallback."""
+        power_watts = await self._read_rapl_power(timestamp)
+
         if not self._gpu_process_failed and self._gpu_process is not None:
             result = await self._read_gpu_top_line()
             if result is not None:
@@ -115,6 +122,7 @@ class TelemetryCollector:
                     utilization_percent=result.utilization_percent,
                     render_busy_percent=result.render_busy_percent,
                     memory_bandwidth_percent=result.memory_bandwidth_percent,
+                    power_watts=power_watts,
                     source="intel_gpu_top",
                 )
 
@@ -125,6 +133,7 @@ class TelemetryCollector:
                 node_id=self._node_id,
                 timestamp=timestamp,
                 frequency_mhz=frequency,
+                power_watts=power_watts,
                 source="sysfs",
             )
 
@@ -132,6 +141,7 @@ class TelemetryCollector:
         return GpuMetrics(
             node_id=self._node_id,
             timestamp=timestamp,
+            power_watts=power_watts,
             source="unavailable",
         )
 
@@ -174,6 +184,28 @@ class TelemetryCollector:
             return int(content.strip())
         except (OSError, ValueError):
             return None
+
+    async def _read_rapl_power(self, timestamp: datetime) -> float | None:
+        """Read RAPL package power in watts from energy_uj delta."""
+        try:
+            loop = asyncio.get_running_loop()
+            raw = await loop.run_in_executor(None, _RAPL_ENERGY_PATH.read_text)
+            energy_uj = int(raw.strip())
+        except (OSError, ValueError):
+            return None
+
+        power: float | None = None
+        if self._previous_energy_uj is not None and self._previous_energy_timestamp is not None:
+            dt = (timestamp - self._previous_energy_timestamp).total_seconds()
+            if dt > 0:
+                delta = energy_uj - self._previous_energy_uj
+                if delta < 0:
+                    delta += 2**32
+                power = delta * 1e-6 / dt
+
+        self._previous_energy_uj = energy_uj
+        self._previous_energy_timestamp = timestamp
+        return power
 
     async def _collect_network(self, timestamp: datetime) -> NetworkMetrics:
         """Collect network metrics from /proc/net/dev."""

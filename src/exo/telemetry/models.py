@@ -17,6 +17,7 @@ class GpuMetrics(FrozenModel):
     utilization_percent: float | None = None
     render_busy_percent: float | None = None
     memory_bandwidth_percent: float | None = None
+    power_watts: float | None = None
     source: Literal["intel_gpu_top", "sysfs", "unavailable"] = "intel_gpu_top"
 
 
