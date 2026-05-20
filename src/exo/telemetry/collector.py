@@ -26,7 +26,8 @@ from exo.telemetry.parsers import (
 
 logger: Final = logging.getLogger(__name__)
 
-_SYSFS_GPU_FREQ_PATH: Final = Path("/sys/class/drm/card0/gt_cur_freq_mhz")
+_SYSFS_GPU_FREQ_PATH: Final = Path("/sys/class/drm/card1/gt_cur_freq_mhz")
+_SYSFS_RC6_RESIDENCY_PATH: Final = Path("/sys/class/drm/card1/gt/gt0/rc6_residency_ms")
 _RAPL_ENERGY_PATH: Final = Path("/sys/class/powercap/intel-rapl:0/energy_uj")
 _PROC_NET_DEV_PATH: Final = Path("/proc/net/dev")
 _INTEL_GPU_TOP_COMMAND: Final = ("intel_gpu_top", "-J", "-s", "900")
@@ -56,6 +57,10 @@ class TelemetryCollector:
         # Previous RAPL energy sample for power computation
         self._previous_energy_uj: int | None = None
         self._previous_energy_timestamp: datetime | None = None
+
+        # Previous RC6 residency sample for GPU utilization
+        self._previous_rc6_ms: int | None = None
+        self._previous_rc6_timestamp: datetime | None = None
 
     def start(self) -> None:
         """Start the background telemetry collection loop."""
@@ -111,6 +116,7 @@ class TelemetryCollector:
     async def _collect_gpu(self, timestamp: datetime) -> GpuMetrics:
         """Collect GPU metrics from intel_gpu_top or sysfs fallback."""
         power_watts = await self._read_rapl_power(timestamp)
+        rc6_utilization = await self._read_rc6_utilization(timestamp)
 
         if not self._gpu_process_failed and self._gpu_process is not None:
             result = await self._read_gpu_top_line()
@@ -119,7 +125,7 @@ class TelemetryCollector:
                     node_id=self._node_id,
                     timestamp=timestamp,
                     frequency_mhz=result.frequency_mhz,
-                    utilization_percent=result.utilization_percent,
+                    utilization_percent=result.utilization_percent or rc6_utilization,
                     render_busy_percent=result.render_busy_percent,
                     memory_bandwidth_percent=result.memory_bandwidth_percent,
                     power_watts=power_watts,
@@ -128,21 +134,13 @@ class TelemetryCollector:
 
         # Fallback to sysfs
         frequency = await self._read_sysfs_frequency()
-        if frequency is not None:
-            return GpuMetrics(
-                node_id=self._node_id,
-                timestamp=timestamp,
-                frequency_mhz=frequency,
-                power_watts=power_watts,
-                source="sysfs",
-            )
-
-        # Both unavailable
         return GpuMetrics(
             node_id=self._node_id,
             timestamp=timestamp,
+            frequency_mhz=frequency,
+            utilization_percent=rc6_utilization,
             power_watts=power_watts,
-            source="unavailable",
+            source="sysfs" if frequency is not None or rc6_utilization is not None else "unavailable",
         )
 
     async def _read_gpu_top_line(self) -> IntelGpuTopResult | None:
@@ -184,6 +182,26 @@ class TelemetryCollector:
             return int(content.strip())
         except (OSError, ValueError):
             return None
+
+    async def _read_rc6_utilization(self, timestamp: datetime) -> float | None:
+        """Compute GPU utilization from RC6 residency delta (100% - idle%)."""
+        try:
+            loop = asyncio.get_running_loop()
+            raw = await loop.run_in_executor(None, _SYSFS_RC6_RESIDENCY_PATH.read_text)
+            rc6_ms = int(raw.strip())
+        except (OSError, ValueError):
+            return None
+
+        utilization: float | None = None
+        if self._previous_rc6_ms is not None and self._previous_rc6_timestamp is not None:
+            dt_ms = (timestamp - self._previous_rc6_timestamp).total_seconds() * 1000
+            if dt_ms > 0:
+                idle_pct = (rc6_ms - self._previous_rc6_ms) / dt_ms * 100
+                utilization = max(0.0, min(100.0, 100.0 - idle_pct))
+
+        self._previous_rc6_ms = rc6_ms
+        self._previous_rc6_timestamp = timestamp
+        return utilization
 
     async def _read_rapl_power(self, timestamp: datetime) -> float | None:
         """Read RAPL package power in watts from energy_uj delta."""
