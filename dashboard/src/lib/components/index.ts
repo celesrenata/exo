@@ -13,4 +13,7 @@ export { default as ModelFilterPopover } from "./ModelFilterPopover.svelte";
 export { default as ModelPickerGroup } from "./ModelPickerGroup.svelte";
 export { default as ModelPickerModal } from "./ModelPickerModal.svelte";
 export { default as ChatModelSelector } from "./ChatModelSelector.svelte";
+export { default as GpuTelemetryPanel } from "./GpuTelemetryPanel.svelte";
+export { default as InferenceSettingsPanel } from "./InferenceSettingsPanel.svelte";
 export { default as IntegrationCard } from "./IntegrationCard.svelte";
+export { default as NetworkTelemetryPanel } from "./NetworkTelemetryPanel.svelte";

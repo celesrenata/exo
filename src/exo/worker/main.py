@@ -57,6 +57,7 @@ from exo.utils.info_gatherer.net_profile import check_reachable
 from exo.utils.keyed_backoff import KeyedBackoff
 from exo.utils.task_group import TaskGroup
 from exo.worker.plan import plan
+from exo.worker.runner.runner import resolve_generation_settings
 from exo.worker.runner.supervisor import RunnerSupervisor
 
 
@@ -360,6 +361,10 @@ class Worker:
         await self._stopped.wait()
 
     async def _start_runner_task(self, task: Task):
+        if isinstance(task, TextGeneration):
+            settings = self.state.generation_settings
+            resolved_params = resolve_generation_settings(settings, task.task_params)
+            task = task.model_copy(update={"task_params": resolved_params})
         if (instance := self.state.instances.get(task.instance_id)) is not None:
             await self.runners[
                 instance.shard_assignments.node_to_runner[self.node_id]

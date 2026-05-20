@@ -45,6 +45,8 @@ from exo.api.adapters.responses import (
     generate_responses_stream,
     responses_request_to_text_generation,
 )
+from exo.api.generation_settings import register_generation_settings_routes
+from exo.api.telemetry import register_telemetry_routes
 from exo.api.keepalive import with_sse_keepalive
 from exo.api.types import (
     AddCustomModelParams,
@@ -272,6 +274,8 @@ class API:
         self._setup_exception_handlers()
         self._setup_cors()
         self._setup_routes()
+        register_generation_settings_routes(self)
+        register_telemetry_routes(self)
 
         self.app.mount(
             "/",

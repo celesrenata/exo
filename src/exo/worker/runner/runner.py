@@ -17,6 +17,7 @@ from exo.shared.types.events import (
     TaskAcknowledged,
     TaskStatusUpdated,
 )
+from exo.shared.types.generation_settings import GenerationSettings
 from exo.shared.types.tasks import (
     ConnectToGroup,
     GenerationTask,
@@ -30,6 +31,7 @@ from exo.shared.types.tasks import (
     TaskStatus,
     TextGeneration,
 )
+from exo.shared.types.text_generation import TextGenerationTaskParams
 from exo.shared.types.worker.instances import BoundInstance
 from exo.shared.types.worker.runner_response import (
     CancelledResponse,
@@ -59,6 +61,43 @@ from exo.worker.runner.bootstrap import logger
 
 PREFILL_PICKUP_TIMEOUT_SECONDS = 3
 PREFILL_FINISH_TIMEOUT_SECONDS = 300
+
+
+def resolve_generation_settings(
+    settings: GenerationSettings,
+    params: TextGenerationTaskParams,
+) -> TextGenerationTaskParams:
+    """Resolve cluster-wide generation settings into task parameters.
+
+    Request-level parameters (non-None values in ``params``) take precedence
+    over cluster-wide settings.  If a parameter is None in ``params``, the
+    corresponding cluster-wide setting is applied.
+
+    Args:
+        settings: Cluster-wide generation settings snapshot.
+        params: Task parameters from the inference request.
+
+    Returns:
+        A new ``TextGenerationTaskParams`` with resolved values.
+    """
+    resolved_enable_thinking: bool | None = (
+        params.enable_thinking
+        if params.enable_thinking is not None
+        else settings.thinking_mode
+    )
+
+    resolved_max_output_tokens: int | None = (
+        params.max_output_tokens
+        if params.max_output_tokens is not None
+        else settings.output_token_budget
+    )
+
+    return params.model_copy(
+        update={
+            "enable_thinking": resolved_enable_thinking,
+            "max_output_tokens": resolved_max_output_tokens,
+        }
+    )
 
 
 @dataclass

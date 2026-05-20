@@ -10,6 +10,7 @@ from exo.shared.types.events import (
     CustomModelCardAdded,
     CustomModelCardDeleted,
     Event,
+    GenerationSettingsUpdated,
     IndexedEvent,
     InputChunkReceived,
     InstanceCreated,
@@ -107,6 +108,8 @@ def event_apply(event: Event, state: State) -> State:
             return apply_instance_link_created(event, state)
         case InstanceLinkDeleted():
             return apply_instance_link_deleted(event, state)
+        case GenerationSettingsUpdated():
+            return state.model_copy(update={"generation_settings": event.generation_settings})
 
 
 def apply(state: State, event: IndexedEvent) -> State:
