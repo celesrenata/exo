@@ -28,7 +28,7 @@ interface SettingsSnapshot {
 }
 
 class GenerationSettingsStore {
-  thinking_mode = $state<boolean>(true);
+  thinking_mode = $state<boolean>(false);
   thinking_token_budget = $state<number | null>(null);
   output_token_budget = $state<number | null>(null);
   error = $state<string | null>(null);
@@ -55,6 +55,19 @@ class GenerationSettingsStore {
       const data: GenerationSettingsResponse = await response.json();
       this.applyResponse(data);
       this.error = null;
+
+      // Re-apply saved settings if server reset to defaults after restart
+      const savedRaw = localStorage.getItem("exo-generation-settings");
+      if (savedRaw) {
+        const savedPatch: GenerationSettingsPatch = JSON.parse(savedRaw);
+        const needsReapply =
+          (savedPatch.thinking_mode !== undefined && savedPatch.thinking_mode !== data.thinkingMode) ||
+          (savedPatch.thinking_token_budget !== undefined && savedPatch.thinking_token_budget !== data.thinkingTokenBudget) ||
+          (savedPatch.output_token_budget !== undefined && savedPatch.output_token_budget !== data.outputTokenBudget);
+        if (needsReapply) {
+          this.update(savedPatch);
+        }
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to fetch generation settings";
@@ -137,6 +150,7 @@ class GenerationSettingsStore {
       const data: GenerationSettingsResponse = await response.json();
       this.applyResponse(data);
       this.error = null;
+      this.saveToLocalStorage();
     } catch (err) {
       // Revert to the state before the debounce window started
       if (snapshot) {
@@ -148,6 +162,15 @@ class GenerationSettingsStore {
       this.error = message;
       addToast({ type: "error", message });
     }
+  }
+
+  private saveToLocalStorage(): void {
+    const patch: GenerationSettingsPatch = {
+      thinking_mode: this.thinking_mode,
+      thinking_token_budget: this.thinking_token_budget,
+      output_token_budget: this.output_token_budget,
+    };
+    localStorage.setItem("exo-generation-settings", JSON.stringify(patch));
   }
 }
 
