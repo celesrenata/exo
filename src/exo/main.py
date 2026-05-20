@@ -159,28 +159,22 @@ class Node:
                 tg.start_soon(self.master.run)
             if self.api:
                 tg.start_soon(self.api.run)
-                # Start telemetry collector on this node, reporting to the API aggregator
-                collector = TelemetryCollector(self.node_id, self.api.telemetry_aggregator.report)  # pyright: ignore[reportAttributeAccessIssue]
-            else:
-                # Non-API nodes: report telemetry via HTTP POST to master
-                async def _remote_telemetry_report(telemetry: "NodeTelemetry") -> None:  # pyright: ignore[reportUnusedFunction]
-                    import json as _json
-                    import urllib.request
-                    try:
-                        data = _json.dumps(telemetry.model_dump(mode="json")).encode()
-                        req = urllib.request.Request(
-                            f"http://10.1.1.12:{self._api_port}/api/telemetry/report",
-                            data=data,
-                            headers={"Content-Type": "application/json"},
-                            method="POST",
-                        )
-                        loop = __import__("asyncio").get_running_loop()
-                        await loop.run_in_executor(None, urllib.request.urlopen, req)
-                    except Exception:
-                        pass
 
-                collector = TelemetryCollector(self.node_id, _remote_telemetry_report)
-
+            # All nodes report telemetry to master (10.1.1.12) via HTTP POST
+            async def _telemetry_report(telemetry: "NodeTelemetry") -> None:  # pyright: ignore[reportUnusedFunction]
+                import json as _json
+                import urllib.request
+                try:
+                    data = _json.dumps(telemetry.model_dump(mode="json")).encode()
+                    req = urllib.request.Request(
+                        f"http://10.1.1.12:{self._api_port}/api/telemetry/report",
+                        data=data, headers={"Content-Type": "application/json"}, method="POST",
+                    )
+                    loop = __import__("asyncio").get_running_loop()
+                    await loop.run_in_executor(None, urllib.request.urlopen, req)
+                except Exception:
+                    pass
+            collector = TelemetryCollector(self.node_id, _telemetry_report)
             collector.start()
             tg.start_soon(self._elect_loop)
 
