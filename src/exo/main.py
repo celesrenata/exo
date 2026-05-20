@@ -21,6 +21,7 @@ from exo.shared.constants import EXO_LOG
 from exo.shared.election import Election, ElectionResult
 from exo.shared.logging import logger_cleanup, logger_setup
 from exo.shared.types.common import NodeId, SessionId
+from exo.telemetry.collector import TelemetryCollector
 from exo.utils.channels import Receiver, channel
 from exo.utils.pydantic_ext import FrozenModel
 from exo.utils.task_group import TaskGroup
@@ -158,6 +159,9 @@ class Node:
                 tg.start_soon(self.master.run)
             if self.api:
                 tg.start_soon(self.api.run)
+                # Start telemetry collector on this node, reporting to the API aggregator
+                collector = TelemetryCollector(self.node_id, self.api.telemetry_aggregator.report)  # pyright: ignore[reportAttributeAccessIssue]
+                collector.start()
             tg.start_soon(self._elect_loop)
 
     def shutdown(self):
