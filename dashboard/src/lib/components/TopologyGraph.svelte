@@ -10,6 +10,7 @@
     nodeIdentities,
     type NodeInfo,
   } from "$lib/stores/app.svelte";
+  import { telemetryStore } from "$lib/stores/telemetry.svelte";
 
   interface Props {
     class?: string;
@@ -546,6 +547,14 @@
         }
         if (macmon.sys_power) {
           sysPower = macmon.sys_power;
+        }
+      }
+
+      // Fallback: use telemetry store for GPU usage on Linux nodes
+      if (gpuUsagePercent === 0) {
+        const telemetry = telemetryStore.nodes.get(nodeInfo.id);
+        if (telemetry?.gpu?.utilization_percent != null) {
+          gpuUsagePercent = telemetry.gpu.utilization_percent;
         }
       }
 

@@ -8,8 +8,6 @@
     ModelPickerModal,
     ChatModelSelector,
     InferenceSettingsPanel,
-    GpuTelemetryPanel,
-    NetworkTelemetryPanel,
   } from "$lib/components";
   import {
     pickAutoModel,
@@ -5591,12 +5589,6 @@
 
           <!-- Inference Settings Panel -->
           <InferenceSettingsPanel />
-
-          <!-- GPU Telemetry Panel -->
-          <GpuTelemetryPanel />
-
-          <!-- Network Telemetry Panel -->
-          <NetworkTelemetryPanel />
 
           <!-- Models Panel - Scrollable -->
           <div class="p-4 flex-1 overflow-y-auto">
