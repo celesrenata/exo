@@ -1218,6 +1218,7 @@
     const _hoveredNodeId = hoveredNodeId;
     const _filteredNodes = filteredNodes;
     const _highlightedNodes = highlightedNodes;
+    const _telemetryNodes = telemetryStore.nodes;
     if (_data) {
       renderGraph();
     }
