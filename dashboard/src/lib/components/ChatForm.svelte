@@ -11,6 +11,7 @@
     setConversationThinking,
     stopGeneration,
   } from "$lib/stores/app.svelte";
+  import { generationSettingsStore } from "$lib/stores/generationSettings.svelte";
   import ChatAttachments from "./ChatAttachments.svelte";
   import ImageParamsPanel from "./ImageParamsPanel.svelte";
   import type { ChatUploadedFile } from "$lib/types/files";
@@ -58,7 +59,7 @@
   let fileInputRef: HTMLInputElement | undefined = $state();
   let uploadedFiles = $state<ChatUploadedFile[]>([]);
   let isDragOver = $state(false);
-  const thinkingEnabled = $derived(thinkingEnabledStore());
+  const thinkingEnabled = $derived(thinkingEnabledStore() ?? generationSettingsStore.thinking_mode);
   let loading = $derived(isLoading());
   const currentModel = $derived(selectedChatModel());
   const currentTtft = $derived(ttftMs());
