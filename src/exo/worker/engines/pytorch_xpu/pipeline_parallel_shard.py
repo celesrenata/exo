@@ -19,6 +19,9 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 if TYPE_CHECKING:
+    from exo.worker.engines.pytorch_xpu.compiled_decode_path import (
+        CompiledDecodePath,
+    )
     from exo.worker.engines.pytorch_xpu.continuous_batching import (
         DecodeMicrobatch,
         PerRequestCacheManager,
@@ -227,6 +230,16 @@ class PipelineParallelShard:
             else True
         )
 
+        # Determine whether sync removal optimization is enabled.
+        # When enabled, the decode hot path avoids .item(), .cpu(), .numpy()
+        # calls on XPU tensors (Req 1.1, 1.2, 1.3).
+        # When no config is provided, default to disabled (safe default).
+        self._sync_removal_enabled: bool = (
+            optimization_config.enable_sync_removal
+            if optimization_config is not None
+            else False
+        )
+
         # KV cache: one entry per local layer (None until first forward pass)
         self._kv_cache: list[tuple[torch.Tensor, torch.Tensor] | None] = [
             None
@@ -307,6 +320,20 @@ class PipelineParallelShard:
         # Attempt torch.compile() for kernel fusion (fallback to eager on failure)
         self._compiled_forward = self._try_compile()
 
+        # CompiledDecodePath: full-graph compiled decode for single-token steps.
+        # Created when enable_torch_compile is True AND this shard has all required
+        # components (embed_tokens, lm_head, final_norm — i.e., a full model or
+        # the last stage with all components). Gate behind enable_torch_compile flag.
+        # Req 4.1, 11.1, 11.3
+        self._compiled_decode_path: CompiledDecodePath | None = None
+        self._torch_compile_enabled: bool = (
+            optimization_config.enable_torch_compile
+            if optimization_config is not None
+            else False
+        )
+        if self._torch_compile_enabled:
+            self._compiled_decode_path = self._try_create_compiled_decode_path()
+
         # Decode shape stability tracking for fast-path communication.
         # The fast path relies on decode activations having a stable shape
         # (batch_size, 1, hidden_size) every step. These fields track whether
@@ -326,8 +353,10 @@ class PipelineParallelShard:
             f"hf_cache={self._hf_cache is not None}, "
             f"gated_deltanet_cache={self._gated_deltanet_cache is not None}, "
             f"gated_deltanet_persistent_state={self._gated_deltanet_persistent_state_enabled}, "
+            f"sync_removal={self._sync_removal_enabled}, "
             f"decode_buffer_pool={self._decode_output_buffer_pool is not None}, "
             f"compiled={self._compiled_forward is not None}, "
+            f"compiled_decode_path={self._compiled_decode_path is not None}, "
             f"instrumented={self.performance_recorder is not None}"
         )
 
@@ -378,6 +407,64 @@ class PipelineParallelShard:
             logger.warning(
                 f"torch.compile failed for pipeline stage rank={self.config.rank}: {e}. "
                 f"Falling back to eager execution."
+            )
+            return None
+
+    def _try_create_compiled_decode_path(self) -> CompiledDecodePath | None:
+        """Attempt to create a CompiledDecodePath for optimized single-token decode.
+
+        The CompiledDecodePath requires embed_tokens, lm_head, and final_norm to be
+        present (full model on this shard, or a single-stage pipeline). If any are
+        missing, or if creation fails, returns None and logs at WARNING level.
+
+        The caller falls back to the existing _forward_layer loop when this returns None.
+
+        Returns:
+            A CompiledDecodePath instance, or None if creation failed.
+
+        Requirements: 4.1, 11.1, 11.3
+        """
+        # CompiledDecodePath requires all model components on this shard
+        if self.embed_tokens is None or self.lm_head is None or self.final_norm is None:
+            logger.info(
+                f"Pipeline stage rank={self.config.rank}: CompiledDecodePath not created "
+                f"(requires embed_tokens, lm_head, and final_norm on this shard). "
+                f"embed={self.embed_tokens is not None}, lm_head={self.lm_head is not None}, "
+                f"final_norm={self.final_norm is not None}"
+            )
+            return None
+
+        try:
+            from exo.worker.engines.pytorch_xpu.compiled_decode_path import (
+                CompiledDecodePath as _CompiledDecodePath,
+            )
+
+            compiled_path = _CompiledDecodePath(
+                layers=self.layers,
+                embed_tokens=self.embed_tokens,
+                lm_head=self.lm_head,
+                final_norm=self.final_norm,
+                config=self.config,
+                optimization_config=self._optimization_config,  # type: ignore[arg-type]
+            )
+
+            if compiled_path.is_compiled:
+                logger.info(
+                    f"Pipeline stage rank={self.config.rank}: CompiledDecodePath created "
+                    f"and compiled (max_seq_len={compiled_path.max_seq_len})"
+                )
+            else:
+                logger.warning(
+                    f"Pipeline stage rank={self.config.rank}: CompiledDecodePath created "
+                    f"but compilation failed. Will use as eager fallback."
+                )
+
+            return compiled_path
+
+        except Exception as exc:
+            logger.warning(
+                f"Pipeline stage rank={self.config.rank}: CompiledDecodePath creation "
+                f"failed: {exc}. Falling back to standard _forward_layer loop."
             )
             return None
 
@@ -543,7 +630,7 @@ class PipelineParallelShard:
             - logits [batch, seq_len, vocab_size] if last stage
             - hidden_state [batch, seq_len, hidden_size] if not last stage
 
-        Requirements: 2.1, 2.2, 2.3, 2.4, 5.1, 5.2, 6.1, 6.2
+        Requirements: 2.1, 2.2, 2.3, 2.4, 4.1, 5.1, 5.2, 6.1, 6.2, 11.1, 11.3
         """
         with torch.no_grad():
             # Use provided KV cache or internal state
@@ -559,6 +646,52 @@ class PipelineParallelShard:
                 hidden_states = input_data
 
             batch_size, seq_len, _ = hidden_states.shape
+
+            # --- CompiledDecodePath dispatch (Req 4.1, 11.1, 11.3) ---
+            # For single-token decode steps, use the compiled decode path if
+            # available. This bypasses the Python _forward_layer loop entirely
+            # and executes the full layer stack as a compiled graph.
+            if (
+                seq_len == 1
+                and self._compiled_decode_path is not None
+                and self._compiled_decode_path.is_compiled
+            ):
+                try:
+                    # Extract the token ID from the input for the compiled path.
+                    # If we already embedded (first stage), we need the original
+                    # token ID. If not first stage, the compiled path handles
+                    # the full pipeline including embedding, so this path only
+                    # applies when we have all components.
+                    token_id = input_data[0, 0] if input_data.dim() == 2 else input_data[0, 0, 0].to(torch.int64)
+
+                    # Use the compiled path's internal position tracking
+                    position = self._compiled_decode_path.position
+
+                    # Ensure token_id is a 1D tensor of shape [1]
+                    if token_id.dim() == 0:
+                        token_id = token_id.unsqueeze(0)
+
+                    logits = self._compiled_decode_path.forward(token_id, position)
+
+                    # The compiled path returns logits [1, vocab_size].
+                    # Reshape to [batch, 1, vocab_size] for consistency.
+                    if logits.dim() == 2:
+                        logits = logits.unsqueeze(1)
+
+                    # Return logits with empty KV cache update (compiled path
+                    # manages its own static cache internally).
+                    return logits, self._kv_cache
+
+                except Exception as exc:
+                    # Runtime failure in compiled path — fall back to eager
+                    # and disable the compiled path permanently (Req 11.3).
+                    logger.warning(
+                        f"Pipeline stage rank={self.config.rank}: CompiledDecodePath "
+                        f"runtime failure: {exc}. Falling back to eager execution "
+                        f"permanently."
+                    )
+                    self._compiled_decode_path = None
+                    # Fall through to the standard eager path below
 
             # Determine mode for instrumentation: prefill vs decode
             mode = "prefill" if seq_len > 1 else "decode"
@@ -824,6 +957,7 @@ class PipelineParallelShard:
         - Decode output buffer pool
         - Decode shape stability tracking
         - Current request identifier
+        - CompiledDecodePath static cache (if active)
 
         Requirements: 5.3, 5.7, 5.8, 6.3
         """
@@ -833,6 +967,9 @@ class PipelineParallelShard:
         self._in_decode_steady_state = False
         # Clear current request identifier
         self._current_request_id = None
+
+        # Reset the CompiledDecodePath static cache for new generation
+        self.reset_compiled_path()
 
         # Recycle GatedDeltaNet persistent states (zeros tensors, keeps containers
         # available for reuse by the next request — avoids reallocation cost)
@@ -881,6 +1018,23 @@ class PipelineParallelShard:
             f"hf_cache recreated, gated_deltanet states recycled, "
             f"decode buffer pool cleared, decode shape stability reset)"
         )
+
+    def reset_compiled_path(self) -> None:
+        """Reset the CompiledDecodePath static cache for a new generation.
+
+        Calls ``CompiledDecodePath.reset()`` to zero the static KV cache position
+        and reuse the pre-allocated tensor storage. This must be called at the start
+        of each new generation request.
+
+        If no CompiledDecodePath is active, this is a no-op.
+
+        Requirements: 2.4, 4.1
+        """
+        if self._compiled_decode_path is not None:
+            self._compiled_decode_path.reset()
+            logger.debug(
+                f"Pipeline stage rank={self.config.rank}: CompiledDecodePath cache reset"
+            )
 
     def initialize_request(self, request_id: str) -> None:
         """Initialize per-request state before decode begins.
@@ -1103,7 +1257,16 @@ class PipelineParallelShard:
             # For the last stage, output is logits [1, 1, vocab_size]
             # Take argmax as the generated token (greedy placeholder)
             if self.config.is_last_stage and output.dim() == 3:
-                generated_token = int(torch.argmax(output[0, -1, :]).item())
+                # When enable_sync_removal is active, avoid .item() on XPU
+                # tensors during the decode hot path. The actual token
+                # extraction is deferred to the pipeline generator /
+                # OnDeviceSampler which handles on-device sampling and
+                # async CPU transfer. Use 0 as a placeholder here.
+                # (Req 1.1: no .item() on XPU tensors during decode)
+                if self._sync_removal_enabled:
+                    generated_token = 0
+                else:
+                    generated_token = int(torch.argmax(output[0, -1, :]).item())
             else:
                 # Non-last stages produce hidden states, not tokens.
                 # Use a placeholder token_id of 0 (the pipeline generator
@@ -1164,6 +1327,25 @@ class PipelineParallelShard:
     def gated_deltanet_persistent_state_enabled(self) -> bool:
         """Whether GatedDeltaNet persistent state optimization is active."""
         return self._gated_deltanet_persistent_state_enabled
+
+    @property
+    def sync_removal_enabled(self) -> bool:
+        """Whether implicit synchronization removal is active on the decode hot path.
+
+        When True, the shard avoids .item(), .cpu(), .numpy() calls on XPU
+        tensors during decode. All output tensors remain on XPU device.
+
+        Requirements: 1.1, 1.2, 1.3
+        """
+        return self._sync_removal_enabled
+
+    @property
+    def compiled_decode_path(self) -> CompiledDecodePath | None:
+        """Access the CompiledDecodePath instance (None if not created or disabled).
+
+        Requirements: 4.1, 11.1
+        """
+        return self._compiled_decode_path
 
     @property
     def gated_deltanet_cache(self) -> GatedDeltaNetCache | None:

@@ -10,7 +10,7 @@ to enforce immutability and type safety at runtime.
 
 from __future__ import annotations
 
-from typing import final
+from typing import Literal, final
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -444,6 +444,43 @@ class PytorchXpuOptimizationConfiguration(BaseModel):
     decode_protocol_version: int = 1
     """Version of the decode fast-path communication protocol."""
 
+    # --- Kernel launch optimization flags ---
+
+    enable_static_kv_cache: bool = False
+    """Use pre-allocated static KV cache instead of DynamicCache."""
+
+    enable_torch_compile: bool = False
+    """Compile decode path with torch.compile(backend='inductor')."""
+
+    enable_packed_projections: bool = False
+    """Pack QKV and gate/up projections into single matmuls."""
+
+    enable_fused_kernels: bool = False
+    """Use fused pointwise kernels (RMSNorm+residual, SiLU*gate, rotary)."""
+
+    enable_on_device_sampling: bool = False
+    """Perform sampling on XPU without transferring logits to CPU."""
+
+    enable_async_output: bool = False
+    """Decouple token output from decode loop via async queue."""
+
+    enable_sync_removal: bool = False
+    """Remove all implicit synchronization from the decode hot path."""
+
+    # --- Compile configuration ---
+
+    torch_compile_mode: Literal["default", "reduce-overhead", "max-autotune"] = "max-autotune"
+    """torch.compile optimization mode for XPU Inductor."""
+
+    static_cache_max_seq_len: int = 2048
+    """Maximum sequence length for static KV cache pre-allocation."""
+
+    async_output_max_pending: int = 32
+    """Maximum pending tokens before backpressure activates."""
+
+    async_output_resume_threshold: int = 16
+    """Queue depth at which generation resumes after backpressure."""
+
     # --- Nested configuration ---
 
     pipeline_layer_distribution: PipelineLayerDistribution = (
@@ -482,5 +519,48 @@ class PytorchXpuOptimizationConfiguration(BaseModel):
         if value <= 0:
             raise ValueError(
                 f"decode_protocol_version must be positive, got {value}"
+            )
+        return value
+
+    @field_validator("torch_compile_mode")
+    @classmethod
+    def validate_torch_compile_mode(
+        cls, value: str
+    ) -> str:
+        """Validate that torch_compile_mode is one of the allowed values."""
+        allowed = {"default", "reduce-overhead", "max-autotune"}
+        if value not in allowed:
+            raise ValueError(
+                f"torch_compile_mode must be one of {allowed}, got '{value}'"
+            )
+        return value
+
+    @field_validator("static_cache_max_seq_len")
+    @classmethod
+    def validate_static_cache_max_seq_len(cls, value: int) -> int:
+        """Validate that static_cache_max_seq_len is positive."""
+        if value <= 0:
+            raise ValueError(
+                f"static_cache_max_seq_len must be positive, got {value}"
+            )
+        return value
+
+    @field_validator("async_output_max_pending")
+    @classmethod
+    def validate_async_output_max_pending(cls, value: int) -> int:
+        """Validate that async_output_max_pending is positive."""
+        if value <= 0:
+            raise ValueError(
+                f"async_output_max_pending must be positive, got {value}"
+            )
+        return value
+
+    @field_validator("async_output_resume_threshold")
+    @classmethod
+    def validate_async_output_resume_threshold(cls, value: int) -> int:
+        """Validate that async_output_resume_threshold is positive."""
+        if value <= 0:
+            raise ValueError(
+                f"async_output_resume_threshold must be positive, got {value}"
             )
         return value

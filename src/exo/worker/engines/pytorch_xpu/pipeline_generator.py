@@ -40,6 +40,7 @@ from exo.api.types import (
 )
 from exo.shared.types.memory import Memory
 from exo.shared.types.worker.runner_response import GenerationResponse
+from exo.worker.engines.pytorch_xpu.async_output_streamer import AsyncOutputStreamer
 from exo.worker.engines.pytorch_xpu.buffer_pool import CommunicationBufferPool
 from exo.worker.engines.pytorch_xpu.distributed import (
     DecodeActivationProtocol,
@@ -58,6 +59,7 @@ from exo.worker.engines.pytorch_xpu.instrumentation import (
     EventMode,
     PerformanceRecorder,
 )
+from exo.worker.engines.pytorch_xpu.on_device_sampling import OnDeviceSampler
 from exo.worker.engines.pytorch_xpu.pipeline_config import (
     PytorchXpuOptimizationConfiguration,
 )
@@ -67,6 +69,9 @@ logger = logging.getLogger(__name__)
 
 TERMINATION_SENTINEL: int = -1
 """Special token ID broadcast by last rank to signal all ranks to exit generation."""
+
+_BACKPRESSURE_SLEEP_SECONDS: float = 0.001
+"""Sleep interval when waiting for backpressure to clear (1ms)."""
 
 
 def _create_recorder_from_configuration(
@@ -107,6 +112,101 @@ def _is_fast_path_enabled(
     if optimization_configuration is None:
         return True
     return optimization_configuration.enable_decode_fast_path
+
+
+def _create_on_device_sampler(
+    optimization_configuration: PytorchXpuOptimizationConfiguration | None,
+    device: str,
+) -> OnDeviceSampler | None:
+    """Create an OnDeviceSampler if on-device sampling is enabled.
+
+    Returns None when the configuration disables on-device sampling or when
+    the sampler cannot be created (logs at WARNING level per Req 11.3).
+
+    Args:
+        optimization_configuration: Optimization configuration with flags.
+        device: Device string for the sampler (e.g., "xpu:0", "cpu").
+
+    Returns:
+        An OnDeviceSampler instance, or None if disabled or creation failed.
+    """
+    if optimization_configuration is None:
+        return None
+    if not optimization_configuration.enable_on_device_sampling:
+        return None
+    try:
+        sampler = OnDeviceSampler(device=torch.device(device))
+        logger.info("On-device sampling enabled on %s", device)
+        return sampler
+    except Exception as exc:
+        logger.warning(
+            "Failed to create OnDeviceSampler, falling back to CPU sampling: %s",
+            exc,
+        )
+        return None
+
+
+def _sample_with_on_device_sampler(
+    logits: torch.Tensor,
+    on_device_sampler: OnDeviceSampler | None,
+    temperature: float = 1.0,
+    top_k: int | None = None,
+    top_p: float | None = None,
+) -> int:
+    """Sample a token using on-device sampling with fallback to CPU sampling.
+
+    When on_device_sampler is provided, attempts to sample entirely on device.
+    If on-device sampling fails at runtime, falls back to the existing
+    sample_token() function and logs at WARNING level (Req 11.3).
+
+    Args:
+        logits: Raw logits tensor from the model.
+        on_device_sampler: OnDeviceSampler instance, or None to use CPU path.
+        temperature: Sampling temperature.
+        top_k: Top-k sampling parameter.
+        top_p: Top-p sampling parameter.
+
+    Returns:
+        Sampled token ID as integer.
+    """
+    if on_device_sampler is None:
+        return sample_token(
+            logits, temperature=temperature, top_k=top_k, top_p=top_p
+        )
+
+    try:
+        # Normalize logits shape: extract last-position logits
+        sampling_logits = logits
+        if sampling_logits.dim() == 3:
+            sampling_logits = sampling_logits[:, -1, :]  # [1, vocab_size]
+
+        # Sample on device — returns [1] int64 tensor on device
+        token_id_tensor = on_device_sampler.sample(
+            sampling_logits,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+        )
+
+        # If the token is already on CPU (e.g., CPU device or test mode),
+        # read it directly. Otherwise, use async transfer for XPU→CPU.
+        if token_id_tensor.device.type == "cpu":
+            return int(token_id_tensor.item())
+
+        # Transfer token ID to CPU asynchronously (XPU → pinned CPU memory)
+        cpu_tensor = on_device_sampler.transfer_token_to_cpu_async(token_id_tensor)
+
+        # Read the token ID (blocks until async copy completes)
+        return int(cpu_tensor.item())
+
+    except Exception as exc:
+        logger.warning(
+            "On-device sampling failed, falling back to CPU sampling: %s",
+            exc,
+        )
+        return sample_token(
+            logits, temperature=temperature, top_k=top_k, top_p=top_p
+        )
 
 
 def _get_default_process_group() -> dist.ProcessGroup:
@@ -158,6 +258,7 @@ def pipeline_parallel_generate(
     top_p: float | None = None,
     performance_recorder: PerformanceRecorder | None = None,
     optimization_configuration: PytorchXpuOptimizationConfiguration | None = None,
+    async_output_streamer: AsyncOutputStreamer | None = None,
 ) -> Generator[GenerationResponse, None, None]:
     """Drive autoregressive generation on rank 0 (pipeline parallelism).
 
@@ -192,11 +293,18 @@ def pipeline_parallel_generate(
             If provided, takes precedence over optimization_configuration.
         optimization_configuration: Optional configuration used to create a
             recorder when performance_recorder is not provided.
+        async_output_streamer: Optional AsyncOutputStreamer instance for
+            decoupling token output from the decode loop. When provided and
+            ``enable_async_output`` is True in the optimization configuration,
+            token IDs are pushed into the streamer immediately after sampling
+            (before tokenizer decode), allowing an async consumer to read
+            tokens without blocking the decode loop. Backpressure is applied
+            when the streamer's queue exceeds its max_pending threshold.
 
     Yields:
         GenerationResponse objects containing generated tokens.
 
-    Requirements: 2.1, 2.7, 2.8, 2.9, 2.11, 4.1, 4.2, 4.3, 4.4, 8.1, 8.2, 8.4, 11.1, 11.2, 11.3
+    Requirements: 2.1, 2.7, 2.8, 2.9, 2.11, 4.1, 4.2, 4.3, 4.4, 8.1, 8.2, 8.4, 9.1, 9.2, 9.3, 11.1, 11.2, 11.3
     """
     logger.info(
         f"Starting pipeline-parallel generation: prompt_len={len(prompt)}, "
@@ -235,10 +343,28 @@ def pipeline_parallel_generate(
     # Single-stage mode: rank 0 is both first and last stage
     is_single_stage: bool = world_size == 1
 
+    # Determine whether async output streaming is active (Requirements 9.1, 9.2, 9.3)
+    # When enabled, token IDs are pushed into the streamer immediately after
+    # sampling, before tokenizer decode. This decouples the API consumer from
+    # the decode loop — the consumer reads from the streamer asynchronously.
+    async_output_active: bool = (
+        async_output_streamer is not None
+        and optimization_configuration is not None
+        and optimization_configuration.enable_async_output
+    )
+
     # Decode fast-path state (initialized after prefill)
     fast_path_enabled: bool = _is_fast_path_enabled(optimization_configuration) and not is_single_stage
     send_protocol: DecodeActivationProtocol | None = None
     buffer_pool: CommunicationBufferPool | None = None
+
+    # --- On-device sampling (Requirements 8.1, 8.2, 8.3, 8.4, 8.5) ---
+    # When enabled, sampling executes entirely on the XPU device. The only
+    # CPU transfer is a single int64 token ID via non-blocking copy. Falls
+    # back to CPU sampling (sample_token) on failure (Req 11.3).
+    on_device_sampler: OnDeviceSampler | None = _create_on_device_sampler(
+        optimization_configuration, device
+    )
 
     _start_time: float = time.perf_counter()
 
@@ -257,8 +383,13 @@ def pipeline_parallel_generate(
 
         if is_single_stage:
             # Single stage: output is logits, sample directly
-            first_token_id: int = sample_token(
-                output, temperature=temperature, top_k=top_k, top_p=top_p
+            # Use on-device sampling when enabled (Req 8.1, 8.4, 11.1)
+            first_token_id: int = _sample_with_on_device_sampler(
+                output,
+                on_device_sampler,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
             )
         else:
             # Multi-stage: output is hidden_state, send to rank 1
@@ -275,6 +406,9 @@ def pipeline_parallel_generate(
         # Check for termination sentinel from last rank (error/abort case)
         if first_token_id == TERMINATION_SENTINEL:
             logger.debug("Received termination sentinel after prefill")
+            if async_output_active:
+                assert async_output_streamer is not None
+                async_output_streamer.signal_end()
             return
 
         # Check if first token is EOS
@@ -283,6 +417,10 @@ def pipeline_parallel_generate(
             if is_single_stage:
                 # Broadcast termination to self (no-op in single stage, but consistent)
                 pass
+            if async_output_active:
+                assert async_output_streamer is not None
+                async_output_streamer.put_token(first_token_id)
+                async_output_streamer.signal_end()
             yield GenerationResponse(
                 text="",
                 token=first_token_id,
@@ -307,6 +445,10 @@ def pipeline_parallel_generate(
         # Check max_tokens == 1
         if max_tokens <= 1:
             logger.debug("max_tokens reached (max_tokens=1)")
+            if async_output_active:
+                assert async_output_streamer is not None
+                async_output_streamer.put_token(first_token_id)
+                async_output_streamer.signal_end()
             first_token_text: str = tokenizer.decode([first_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
             yield GenerationResponse(
                 text=first_token_text,
@@ -330,6 +472,17 @@ def pipeline_parallel_generate(
             return
 
         # Yield first token response
+        # When async output is active, push the token into the streamer
+        # immediately (Requirement 9.1, 9.2, 9.3). The streamer makes the
+        # token available to the async consumer without waiting for tokenizer
+        # decode or API consumption.
+        if async_output_active:
+            assert async_output_streamer is not None  # type narrowing
+            _continue = async_output_streamer.put_token(first_token_id)
+            if not _continue:
+                # Backpressure active — wait for consumer to drain
+                while not async_output_streamer.should_resume:
+                    time.sleep(_BACKPRESSURE_SLEEP_SECONDS)
         first_token_text = tokenizer.decode([first_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
         yield GenerationResponse(
             text=first_token_text,
@@ -403,6 +556,19 @@ def pipeline_parallel_generate(
         prev_token_id: int = first_token_id
         decode_start: float = time.perf_counter()
 
+        # Determine whether to defer tokenizer decode (Requirement 1.4, 9.1)
+        defer_tokenizer_decode: bool = (
+            optimization_configuration is not None
+            and optimization_configuration.enable_sync_removal
+        )
+
+        # State for deferred tokenizer decode: holds the token ID that has
+        # been sampled but not yet decoded/yielded. The decode happens after
+        # the NEXT forward pass is launched, overlapping CPU tokenizer work
+        # with GPU compute.
+        _pending_token_id: int | None = None
+        _pending_completion_tokens: int = 0
+
         with recorder.span(
             "decode_total",
             mode="decode",
@@ -441,10 +607,51 @@ def pipeline_parallel_generate(
                         output, _kv_cache = model.forward(input_data=token_input)
                         _step_elapsed_ms = (time.perf_counter() - step_start) * 1000.0
 
+                    # --- Deferred tokenizer decode (Requirement 1.4, 9.1) ---
+                    # After the forward pass has been launched (GPU work is
+                    # queued), decode and yield the PREVIOUS token. This
+                    # overlaps CPU-side tokenizer work with GPU compute.
+                    if defer_tokenizer_decode and _pending_token_id is not None:
+                        _deferred_decode_elapsed = time.perf_counter() - decode_start
+                        _deferred_generation_tps: float = (
+                            (_pending_completion_tokens - 1) / _deferred_decode_elapsed
+                            if _deferred_decode_elapsed > 0
+                            else 0.0
+                        )
+                        _deferred_token_text: str = tokenizer.decode(  # pyright: ignore[reportAny]
+                            [_pending_token_id], skip_special_tokens=True
+                        )
+                        yield GenerationResponse(
+                            text=_deferred_token_text,
+                            token=_pending_token_id,
+                            finish_reason=None,
+                            usage=Usage(
+                                prompt_tokens=prompt_tokens,
+                                completion_tokens=_pending_completion_tokens,
+                                total_tokens=prompt_tokens + _pending_completion_tokens,
+                                prompt_tokens_details=PromptTokensDetails(
+                                    cached_tokens=0, audio_tokens=0
+                                ),
+                                completion_tokens_details=CompletionTokensDetails(
+                                    reasoning_tokens=0, audio_tokens=0
+                                ),
+                            ),
+                            stats=GenerationStats(
+                                prompt_tps=prompt_tps,
+                                generation_tps=_deferred_generation_tps,
+                                prompt_tokens=prompt_tokens,
+                                generation_tokens=_pending_completion_tokens,
+                                peak_memory_usage=Memory(in_bytes=0),
+                            ),
+                        )
+                        _pending_token_id = None
+
                     if is_single_stage:
                         # Single stage: output is logits, sample directly
-                        next_token_id: int = sample_token(
+                        # Use on-device sampling when enabled (Req 8.1, 8.4, 11.1)
+                        next_token_id: int = _sample_with_on_device_sampler(
                             output,
+                            on_device_sampler,
                             temperature=temperature,
                             top_k=top_k,
                             top_p=top_p,
@@ -468,9 +675,27 @@ def pipeline_parallel_generate(
                 completion_tokens += 1
                 recorder.increment_counter("tokens_generated")
 
+                # --- Async output streaming (Requirements 9.1, 9.2, 9.3) ---
+                # Push the token into the streamer immediately after sampling,
+                # before tokenizer decode or EOS checking. This ensures the
+                # async consumer receives tokens without waiting for CPU-side
+                # processing. The next forward pass has already been launched
+                # (via deferred decode pattern), so the GPU is not idle.
+                if async_output_active:
+                    assert async_output_streamer is not None  # type narrowing
+                    _continue = async_output_streamer.put_token(next_token_id)
+                    if not _continue:
+                        # Backpressure active — wait for consumer to drain
+                        while not async_output_streamer.should_resume:
+                            time.sleep(_BACKPRESSURE_SLEEP_SECONDS)
+
                 # Check for termination sentinel (error/abort from last rank)
                 if next_token_id == TERMINATION_SENTINEL:
                     logger.debug("Received termination sentinel during decode")
+                    # Signal end to streamer before returning
+                    if async_output_active:
+                        assert async_output_streamer is not None
+                        async_output_streamer.signal_end()
                     return
 
                 # Calculate generation stats
@@ -486,6 +711,10 @@ def pipeline_parallel_generate(
                     logger.debug(
                         f"EOS token {next_token_id} at step {completion_tokens}, terminating"
                     )
+                    # Signal end to streamer before returning
+                    if async_output_active:
+                        assert async_output_streamer is not None
+                        async_output_streamer.signal_end()
                     yield GenerationResponse(
                         text="",
                         token=next_token_id,
@@ -514,6 +743,10 @@ def pipeline_parallel_generate(
                 # Check max_tokens termination
                 if completion_tokens >= max_tokens:
                     logger.debug(f"max_tokens ({max_tokens}) reached, terminating")
+                    # Signal end to streamer before returning
+                    if async_output_active:
+                        assert async_output_streamer is not None
+                        async_output_streamer.signal_end()
                     token_text: str = tokenizer.decode([next_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
                     yield GenerationResponse(
                         text=token_text,
@@ -540,16 +773,67 @@ def pipeline_parallel_generate(
                     )
                     return
 
-                # Yield intermediate token response
-                token_text = tokenizer.decode([next_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
+                if defer_tokenizer_decode:
+                    # Deferred path: store token for decode after next forward
+                    # pass launches (Requirement 1.4, 9.1). Token ordering is
+                    # preserved because _pending_token_id is yielded at the
+                    # start of the next iteration before any new token is
+                    # produced.
+                    _pending_token_id = next_token_id
+                    _pending_completion_tokens = completion_tokens
+                else:
+                    # Standard path: decode and yield immediately
+                    token_text = tokenizer.decode([next_token_id], skip_special_tokens=True)  # pyright: ignore[reportAny]
+                    yield GenerationResponse(
+                        text=token_text,
+                        token=next_token_id,
+                        finish_reason=None,
+                        usage=Usage(
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=prompt_tokens + completion_tokens,
+                            prompt_tokens_details=PromptTokensDetails(
+                                cached_tokens=0, audio_tokens=0
+                            ),
+                            completion_tokens_details=CompletionTokensDetails(
+                                reasoning_tokens=0, audio_tokens=0
+                            ),
+                        ),
+                        stats=GenerationStats(
+                            prompt_tps=prompt_tps,
+                            generation_tps=generation_tps,
+                            prompt_tokens=prompt_tokens,
+                            generation_tokens=completion_tokens,
+                            peak_memory_usage=Memory(in_bytes=0),
+                        ),
+                    )
+
+                # Update for next iteration
+                prev_token_id = next_token_id
+
+            # --- End of decode loop: flush any pending deferred token ---
+            # This handles the case where the loop completes all iterations
+            # without hitting EOS or max_tokens (edge case: max_tokens - 1
+            # iterations completed but completion_tokens < max_tokens due to
+            # the first token being counted separately).
+            if defer_tokenizer_decode and _pending_token_id is not None:
+                _final_decode_elapsed = time.perf_counter() - decode_start
+                _final_generation_tps: float = (
+                    (_pending_completion_tokens - 1) / _final_decode_elapsed
+                    if _final_decode_elapsed > 0
+                    else 0.0
+                )
+                _final_token_text: str = tokenizer.decode(  # pyright: ignore[reportAny]
+                    [_pending_token_id], skip_special_tokens=True
+                )
                 yield GenerationResponse(
-                    text=token_text,
-                    token=next_token_id,
+                    text=_final_token_text,
+                    token=_pending_token_id,
                     finish_reason=None,
                     usage=Usage(
                         prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        total_tokens=prompt_tokens + completion_tokens,
+                        completion_tokens=_pending_completion_tokens,
+                        total_tokens=prompt_tokens + _pending_completion_tokens,
                         prompt_tokens_details=PromptTokensDetails(
                             cached_tokens=0, audio_tokens=0
                         ),
@@ -559,15 +843,20 @@ def pipeline_parallel_generate(
                     ),
                     stats=GenerationStats(
                         prompt_tps=prompt_tps,
-                        generation_tps=generation_tps,
+                        generation_tps=_final_generation_tps,
                         prompt_tokens=prompt_tokens,
-                        generation_tokens=completion_tokens,
+                        generation_tokens=_pending_completion_tokens,
                         peak_memory_usage=Memory(in_bytes=0),
                     ),
                 )
 
-                # Update for next iteration
-                prev_token_id = next_token_id
+            # --- Signal end to async output streamer ---
+            # If the decode loop completed naturally (all iterations exhausted
+            # without EOS or max_tokens), signal end to the streamer so the
+            # async consumer knows no more tokens will arrive.
+            if async_output_active:
+                assert async_output_streamer is not None
+                async_output_streamer.signal_end()
 
     except Exception as exc:
         # --- Error Handling (Requirements: 11.1, 11.2, 11.3) ---
@@ -576,6 +865,11 @@ def pipeline_parallel_generate(
             f"{type(exc).__name__}: {exc}"
         )
         logger.error(error_msg, exc_info=True)
+
+        # Signal end to streamer on error so the async consumer is not left waiting
+        if async_output_active:
+            assert async_output_streamer is not None
+            async_output_streamer.signal_end()
 
         # Yield error response
         yield GenerationResponse(
@@ -836,6 +1130,15 @@ def pipeline_parallel_worker_loop(
     recv_protocol: DecodeActivationProtocol | None = None
     buffer_pool: CommunicationBufferPool | None = None
 
+    # --- On-device sampling for last rank (Requirements 8.1, 8.2, 8.3, 8.4) ---
+    # Only the last rank performs sampling. Create the sampler only if this
+    # is the last rank and on-device sampling is enabled.
+    on_device_sampler: OnDeviceSampler | None = None
+    if is_last_rank:
+        on_device_sampler = _create_on_device_sampler(
+            optimization_configuration, device
+        )
+
     is_first_iteration: bool = True
     step_index: int = 0
 
@@ -934,8 +1237,13 @@ def pipeline_parallel_worker_loop(
                             token_id = int(token_tensor.item())
                 else:
                     # Last stage: output is logits, sample token
-                    token_id = sample_token(
-                        output, temperature=temperature, top_k=top_k, top_p=top_p
+                    # Use on-device sampling when enabled (Req 8.1, 8.4, 11.1)
+                    token_id = _sample_with_on_device_sampler(
+                        output,
+                        on_device_sampler,
+                        temperature=temperature,
+                        top_k=top_k,
+                        top_p=top_p,
                     )
 
                     if is_first_iteration or send_protocol is None:
