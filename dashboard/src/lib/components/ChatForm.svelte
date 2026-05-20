@@ -369,35 +369,7 @@
             </div>
           </div>
         </div>
-        <!-- Thinking toggle -->
-        {#if modelSupportsThinking()}
-          <button
-            type="button"
-            onclick={() => setConversationThinking(!thinkingEnabled)}
-            class="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-mono tracking-wide transition-all duration-200 flex-shrink-0 cursor-pointer border {thinkingEnabled
-              ? 'bg-exo-yellow/15 border-exo-yellow/40 text-exo-yellow'
-              : 'bg-exo-medium-gray/30 border-exo-medium-gray/50 text-exo-light-gray/60 hover:text-exo-light-gray'}"
-            title={thinkingEnabled
-              ? "Thinking enabled — click to disable"
-              : "Thinking disabled — click to enable"}
-          >
-            <svg
-              class="w-3.5 h-3.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7zM9 20h6M10 22h4"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            <span>{thinkingEnabled ? "THINK" : "NO THINK"}</span>
-          </button>
-        {/if}
-
+        <!-- Thinking toggle moved to input area -->
         <!-- Performance stats -->
         {#if currentTtft !== null || currentTps !== null}
           <div class="flex items-center gap-4 text-xs font-mono flex-shrink-0">
@@ -481,6 +453,35 @@
         class="flex-1 resize-none bg-transparent text-foreground placeholder:text-exo-light-gray/60 placeholder:text-sm placeholder:tracking-[0.15em] placeholder:leading-7 focus:outline-none focus:ring-0 focus:border-none text-sm leading-7 font-mono"
         style="min-height: 28px; max-height: 150px;"
       ></textarea>
+
+      <!-- Thinking toggle -->
+      {#if modelSupportsThinking()}
+        <button
+          type="button"
+          onclick={() => setConversationThinking(!thinkingEnabled)}
+          class="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-mono tracking-wide transition-all duration-200 flex-shrink-0 cursor-pointer border {thinkingEnabled
+            ? 'bg-exo-yellow/15 border-exo-yellow/40 text-exo-yellow'
+            : 'bg-exo-medium-gray/30 border-exo-medium-gray/50 text-exo-light-gray/60 hover:text-exo-light-gray'}"
+          title={thinkingEnabled
+            ? "Thinking enabled — click to disable"
+            : "Thinking disabled — click to enable"}
+        >
+          <svg
+            class="w-3.5 h-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path
+              d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7zM9 20h6M10 22h4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span>{thinkingEnabled ? "THINK" : "NO THINK"}</span>
+        </button>
+      {/if}
 
       {#if loading}
         <button
