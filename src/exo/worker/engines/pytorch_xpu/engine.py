@@ -253,7 +253,7 @@ class PyTorchXPUEngine(Engine):
             f"prompt_tail={repr(prompt[-120:]) if isinstance(prompt, str) else repr(prompt)}"
         )
 
-        max_tokens = task.task_params.max_output_tokens or 100
+        max_tokens = task.task_params.max_output_tokens or 4096
         temperature = task.task_params.temperature or 1.0
         top_k = getattr(task.task_params, "top_k", None)
         top_p = task.task_params.top_p
