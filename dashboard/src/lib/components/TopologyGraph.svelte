@@ -418,6 +418,28 @@
           .attr("marker-end", "url(#arrowhead)");
       }
 
+      // Network throughput label on edge
+      const telemetryA = telemetryStore.nodes.get(entry.a);
+      const throughput = telemetryA?.network?.throughput_sent_bytes_per_sec ?? 0;
+      if (throughput > 100) {
+        let formattedLabel = '';
+        if (throughput > 1048576) {
+          formattedLabel = (throughput / 1048576).toFixed(1) + ' MB/s';
+        } else if (throughput > 1024) {
+          formattedLabel = (throughput / 1024).toFixed(1) + ' KB/s';
+        } else {
+          formattedLabel = Math.round(throughput) + ' B/s';
+        }
+        linksGroup.append('text')
+          .attr('x', mx)
+          .attr('y', my + 20)
+          .attr('text-anchor', 'middle')
+          .attr('fill', 'rgba(255,215,0,0.7)')
+          .attr('font-family', 'SF Mono, Monaco, monospace')
+          .attr('font-size', isMinimized ? '7px' : '9px')
+          .text(formattedLabel);
+      }
+
       // Collect debug labels for later positioning at edges
       if (debugEnabled && entry.connections.length > 0) {
         // Determine which side of viewport based on edge midpoint
