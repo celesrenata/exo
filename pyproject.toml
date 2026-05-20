@@ -34,6 +34,7 @@ dependencies = [
 
 [project.scripts]
 exo = "exo.main:main"
+generate-docs = "exo.docgen.cli:main"
 
 # dependencies only required for development
 [dependency-groups]
@@ -140,6 +141,7 @@ exclude = [
   "**/.direnv",
   "**/rust",
   "**/.github",
+  "**/docgen/tests/fixtures",
 ]
 stubPath = ".mlx_typings"
 
@@ -214,6 +216,7 @@ extend-exclude = [
   "*mlx_typings/**",
   "rust/exo_pyo3_bindings/**",
   "bench/vendor/**",
+  "src/exo/docgen/tests/fixtures/**",
 ]
 
 [tool.ruff.lint]
