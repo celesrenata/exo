@@ -102,7 +102,9 @@ def register_telemetry_routes(api: "API") -> None:
         return aggregator.get_cluster_snapshot()
 
     @api.app.post("/api/telemetry/report")
-    async def report_telemetry(telemetry: NodeTelemetry) -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+    async def report_telemetry(request: Request) -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+        body = await request.body()
+        telemetry = NodeTelemetry.model_validate_json(body)
         await aggregator.report(telemetry)
         return {"status": "ok"}
 

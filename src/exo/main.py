@@ -162,10 +162,9 @@ class Node:
 
             # All nodes report telemetry to master (10.1.1.12) via HTTP POST
             async def _telemetry_report(telemetry: "NodeTelemetry") -> None:  # pyright: ignore[reportUnusedFunction]
-                import json as _json
                 import urllib.request
                 try:
-                    data = _json.dumps(telemetry.model_dump(mode="json")).encode()
+                    data = telemetry.model_dump_json().encode()
                     req = urllib.request.Request(
                         f"http://10.1.1.12:{self._api_port}/api/telemetry/report",
                         data=data, headers={"Content-Type": "application/json"}, method="POST",
