@@ -1726,6 +1726,9 @@ class API:
         """Returns list of available models, optionally filtered by being downloaded."""
         cards = await get_model_cards()
 
+        # Filter out MLX-specific models (not compatible with PyTorch XPU backend)
+        cards = [c for c in cards if not str(c.model_id).startswith("mlx-community/")]
+
         if status == "downloaded":
             downloaded_model_ids: set[str] = set()
             for node_downloads in self.state.downloads.values():
