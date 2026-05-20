@@ -134,6 +134,10 @@ class PyTorchXPUEngine(Engine):
                 output.append((task.task_id, CancelledResponse()))
                 return output
 
+            # Reset KV cache from previous request before starting new generation
+            if hasattr(self.model, "reset_state"):
+                self.model.reset_state()
+
             gen = self._build_generator(task)
             self._active = (task, gen)
 
