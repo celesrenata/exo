@@ -4,6 +4,7 @@
   import katex from "katex";
   import "katex/dist/katex.min.css";
   import { browser } from "$app/environment";
+  import { copyText } from "$lib/utils/clipboard";
 
   interface Props {
     content: string;
@@ -431,9 +432,8 @@
 
     const code = decodeURIComponent(encodedCode);
 
-    try {
-      await navigator.clipboard.writeText(code);
-      // Show copied feedback
+    const ok = await copyText(code);
+    if (ok) {
       const originalHtml = target.innerHTML;
       target.innerHTML = `
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -445,8 +445,6 @@
         target.innerHTML = originalHtml;
         target.classList.remove("copied");
       }, 2000);
-    } catch (error) {
-      console.error("Failed to copy:", error);
     }
   }
 
@@ -457,9 +455,8 @@
 
     const source = decodeURIComponent(encodedSource);
 
-    try {
-      await navigator.clipboard.writeText(source);
-      // Show copied feedback
+    const ok = await copyText(source);
+    if (ok) {
       const originalHtml = target.innerHTML;
       target.innerHTML = `
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -471,8 +468,6 @@
         target.innerHTML = originalHtml;
         target.classList.remove("copied");
       }, 2000);
-    } catch (error) {
-      console.error("Failed to copy math:", error);
     }
   }
 
