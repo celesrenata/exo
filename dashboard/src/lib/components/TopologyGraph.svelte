@@ -418,7 +418,7 @@
           .attr("marker-end", "url(#arrowhead)");
       }
 
-      // Network throughput label on edge
+      // Network throughput label on edge (offset perpendicular to avoid overlap)
       const telemetryA = telemetryStore.nodes.get(entry.a);
       const throughput = telemetryA?.network?.throughput_sent_bytes_per_sec ?? 0;
       if (throughput > 100) {
@@ -430,9 +430,12 @@
         } else {
           formattedLabel = Math.round(throughput) + ' B/s';
         }
+        // Offset perpendicular to the edge direction to avoid center overlap
+        const perpX = -uy * 14;
+        const perpY = ux * 14;
         linksGroup.append('text')
-          .attr('x', mx)
-          .attr('y', my + 20)
+          .attr('x', mx + perpX)
+          .attr('y', my + perpY)
           .attr('text-anchor', 'middle')
           .attr('fill', 'rgba(255,215,0,0.7)')
           .attr('font-family', 'SF Mono, Monaco, monospace')
