@@ -31,12 +31,14 @@ from exo.shared.types.commands import (
     TaskFinished,
     TestCommand,
     TextGeneration,
+    UpdateGenerationSettings,
 )
 from exo.shared.types.common import CommandId, NodeId, SessionId, SystemId
 from exo.shared.types.events import (
     CustomModelCardAdded,
     CustomModelCardDeleted,
     Event,
+    GenerationSettingsUpdated,
     GlobalForwarderEvent,
     IndexedEvent,
     InputChunkReceived,
@@ -437,6 +439,12 @@ class Master:
                         case DeleteInstanceLink():
                             generated_events.append(
                                 InstanceLinkDeleted(link_id=command.link_id)
+                            )
+                        case UpdateGenerationSettings():
+                            generated_events.append(
+                                GenerationSettingsUpdated(
+                                    generation_settings=command.generation_settings
+                                )
                             )
                         case RequestEventLog():
                             # We should just be able to send everything, since other buffers will ignore old messages
