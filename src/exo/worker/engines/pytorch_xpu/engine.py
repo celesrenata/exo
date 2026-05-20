@@ -212,17 +212,29 @@ class PyTorchXPUEngine(Engine):
             PipelineParallelShard,
         )
 
-        # Extract prompt from task params
-        prompt = ""
-        if task.task_params.input:
-            prompt = task.task_params.input[0].content or ""
+        # Build the full conversation messages list for the chat template.
+        # Use pre-formatted chat_template_messages if available (preserves
+        # tool_calls, reasoning_content, and multi-turn structure from the API
+        # adapter). Otherwise, fall back to iterating task_params.input.
+        messages: list[dict[str, Any]] = []
 
-        # Build messages list from task params, including system prompt if present
-        instructions = getattr(task.task_params, "instructions", None)
-        messages: list[dict[str, str]] = []
-        if instructions:
-            messages.append({"role": "system", "content": str(instructions)})
-        messages.append({"role": "user", "content": prompt})
+        if task.task_params.chat_template_messages is not None and len(task.task_params.chat_template_messages) > 0:
+            messages = list(task.task_params.chat_template_messages)
+        else:
+            instructions = getattr(task.task_params, "instructions", None)
+            if instructions:
+                messages.append({"role": "system", "content": str(instructions)})
+            for msg in task.task_params.input:
+                if msg.content:
+                    messages.append({"role": msg.role, "content": str(msg.content)})
+
+        # Fallback prompt: last user message content (used if chat template fails)
+        prompt = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                content = msg.get("content", "")
+                prompt = str(content) if content else ""
+                break
 
         # Apply chat template if tokenizer supports it.
         # enable_thinking=False tells Qwen3.5 to skip the <think>...</think> block.
