@@ -552,6 +552,55 @@ The tool outputs performance metrics including prompt tokens per second (prompt_
 
 ---
 
+## Documentation Generator
+
+exo includes a built-in documentation generator (`generate-docs`) that scans source files, identifies undocumented code, and uses local LLM servers to produce comprehensive documentation.
+
+**What it generates:**
+- Google-style Python docstrings for functions, classes, and modules
+- Module README files with public API listings and usage examples
+- API endpoint documentation from FastAPI route definitions
+- Architecture overview with Mermaid component interaction diagrams
+
+**Prerequisites:** A local model server (e.g. [ollama](https://ollama.ai)) running at `http://localhost:11434`.
+
+**Basic usage:**
+
+```bash
+# Preview what would be generated (no files written)
+uv run generate-docs --dry-run
+
+# Generate documentation for all changed files
+uv run generate-docs
+
+# Force regenerate everything
+uv run generate-docs --force
+
+# Scope to a specific directory
+uv run generate-docs --target src/exo/api/
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Preview changes without writing files |
+| `--force` | Regenerate all docs regardless of file changes |
+| `--strict` | Exit with code 1 if any validation failures occur |
+| `--target <path>` | Only process files under this path |
+| `--output <dir>` | Output directory for generated markdown (default: `docs/`) |
+
+**Environment variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DOCGEN_MODEL_URL` | Base URL of the local model server | `http://localhost:11434` |
+| `DOCGEN_MODEL_MAP` | Model alias mapping (format: `deepseek=model1,condense=model2,fast=model3`) | Built-in defaults |
+
+The tool uses incremental hashing (SHA-256) to skip unchanged files between runs. Model selection is automatic: `deepseek` for code documentation, `condense` for summaries and architecture, `fast` for boilerplate and formatting.
+
+---
+
 ## Hardware Accelerator Support
 
 On macOS, exo uses the GPU. On Linux, exo currently runs on CPU. We are working on extending hardware accelerator support. If you'd like support for a new hardware platform, please [search for an existing feature request](https://github.com/exo-explore/exo/issues) and add a thumbs up so we know what hardware is important to the community.
