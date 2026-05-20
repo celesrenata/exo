@@ -156,7 +156,18 @@
 
   async function handleCopy(content: string, messageId: string) {
     try {
-      await navigator.clipboard.writeText(content);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = content;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
       copiedMessageId = messageId;
       setTimeout(() => {
         copiedMessageId = null;
