@@ -161,7 +161,23 @@ class Node:
                 tg.start_soon(self.api.run)
                 # Start telemetry collector on this node, reporting to the API aggregator
                 collector = TelemetryCollector(self.node_id, self.api.telemetry_aggregator.report)  # pyright: ignore[reportAttributeAccessIssue]
-                collector.start()
+            else:
+                # Non-API nodes: report telemetry via HTTP POST to master
+                async def _remote_telemetry_report(telemetry: "NodeTelemetry") -> None:  # pyright: ignore[reportUnusedFunction]
+                    import httpx  # pyright: ignore[reportMissingModuleSource]
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            await client.post(
+                                f"http://10.1.1.12:{self._api_port}/api/telemetry/report",
+                                json=telemetry.model_dump(mode="json"),
+                                timeout=2.0,
+                            )
+                    except Exception:
+                        pass
+
+                collector = TelemetryCollector(self.node_id, _remote_telemetry_report)
+
+            collector.start()
             tg.start_soon(self._elect_loop)
 
     def shutdown(self):

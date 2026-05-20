@@ -101,6 +101,11 @@ def register_telemetry_routes(api: "API") -> None:
     async def get_cluster_telemetry() -> ClusterTelemetry:  # pyright: ignore[reportUnusedFunction]
         return aggregator.get_cluster_snapshot()
 
+    @api.app.post("/api/telemetry/report")
+    async def report_telemetry(telemetry: NodeTelemetry) -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+        await aggregator.report(telemetry)
+        return {"status": "ok"}
+
     @api.app.get("/api/telemetry/stream")
     async def stream_telemetry(request: Request) -> StreamingResponse:  # pyright: ignore[reportUnusedFunction]
         _send, receive = aggregator.subscribe()
