@@ -164,14 +164,18 @@ class Node:
             else:
                 # Non-API nodes: report telemetry via HTTP POST to master
                 async def _remote_telemetry_report(telemetry: "NodeTelemetry") -> None:  # pyright: ignore[reportUnusedFunction]
-                    import httpx  # pyright: ignore[reportMissingModuleSource]
+                    import json as _json
+                    import urllib.request
                     try:
-                        async with httpx.AsyncClient() as client:
-                            await client.post(
-                                f"http://10.1.1.12:{self._api_port}/api/telemetry/report",
-                                json=telemetry.model_dump(mode="json"),
-                                timeout=2.0,
-                            )
+                        data = _json.dumps(telemetry.model_dump(mode="json")).encode()
+                        req = urllib.request.Request(
+                            f"http://10.1.1.12:{self._api_port}/api/telemetry/report",
+                            data=data,
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        loop = __import__("asyncio").get_running_loop()
+                        await loop.run_in_executor(None, urllib.request.urlopen, req)
                     except Exception:
                         pass
 
