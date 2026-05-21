@@ -312,7 +312,9 @@ class PyTorchXPUEngine(Engine):
                     top_p=top_p,
                 )
             else:
-                return self._pipeline_worker_loop_generator()
+                # Non-rank-0: worker thread from warmup handles communication.
+                # Return a no-op generator — step() will just yield StopIteration.
+                return iter([])
 
         if self.world_size > 1 and self.rank == 0:
             # Multi-node: use tensor parallel generator
