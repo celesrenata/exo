@@ -182,7 +182,7 @@ class PyTorchXPUBuilder(Builder):
 
         from exo.worker.engines.pytorch_xpu.engine import PyTorchXPUEngine
 
-        return PyTorchXPUEngine(
+        engine = PyTorchXPUEngine(
             model=self._model,
             tokenizer=self._tokenizer,
             rank=self._rank,
@@ -191,6 +191,23 @@ class PyTorchXPUBuilder(Builder):
             cancel_receiver=self.cancel_receiver,
             event_sender=self.event_sender,
         )
+
+        # Start pipeline worker thread for non-rank-0 nodes immediately.
+        # This runs in the runner subprocess where Gloo lives, and ensures
+        # the thread is receiving BEFORE rank 0 sends the first prefill.
+        from exo.worker.engines.pytorch_xpu.pipeline_parallel_shard import PipelineParallelShard
+        if isinstance(self._model, PipelineParallelShard) and self._world_size > 1 and self._rank != 0:
+            import threading
+            from exo.worker.engines.pytorch_xpu.pipeline_generator import pipeline_parallel_worker_loop
+            threading.Thread(
+                target=pipeline_parallel_worker_loop,
+                kwargs={'model': self._model, 'device': self._device, 'rank': self._rank, 'world_size': self._world_size, 'tokenizer': self._tokenizer},
+                daemon=True,
+            ).start()
+            engine._worker_thread_started = True
+            logger.info(f"PyTorchXPUBuilder.build: started pipeline worker thread (rank={self._rank})")
+
+        return engine
 
     def close(self) -> None:
         """Clean up model and process group."""
