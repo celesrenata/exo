@@ -196,7 +196,8 @@ class PyTorchXPUBuilder(Builder):
         # This runs in the runner subprocess where Gloo lives, and ensures
         # the thread is receiving BEFORE rank 0 sends the first prefill.
         from exo.worker.engines.pytorch_xpu.pipeline_parallel_shard import PipelineParallelShard
-        if isinstance(self._model, PipelineParallelShard) and self._world_size > 1 and self._rank != 0:
+        _is_pipeline = isinstance(self._model, PipelineParallelShard) or type(self._model).__name__ == "PipelineParallelShard"
+        if _is_pipeline and self._world_size > 1 and self._rank != 0:
             import threading
             from exo.worker.engines.pytorch_xpu.pipeline_generator import pipeline_parallel_worker_loop
             threading.Thread(
@@ -206,6 +207,8 @@ class PyTorchXPUBuilder(Builder):
             ).start()
             engine._worker_thread_started = True
             logger.info(f"PyTorchXPUBuilder.build: started pipeline worker thread (rank={self._rank})")
+        else:
+            logger.info(f"PyTorchXPUBuilder.build: no worker thread (pipeline={_is_pipeline}, rank={self._rank}, world={self._world_size}, model={type(self._model).__name__})")
 
         return engine
 
