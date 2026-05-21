@@ -60,6 +60,11 @@ class TPShardConfig:
     # Whether rotary frequencies are interleaved (cos, sin applied to alternating dims)
     # vs the standard half-rotation layout. Qwen3.5 uses mrope_interleaved=True.
     mrope_interleaved: bool = False
+    # RMSNorm weight convention:
+    # - True: Qwen3.5 style — weight initialized to zeros, applied as (1 + weight) * x
+    # - False: Llama/Phi style — weight initialized to ones, applied as weight * x
+    # Must be set based on model_type. Qwen3.5/3.6 use True; all others use False.
+    rms_norm_add_unit: bool = False
 
     def __post_init__(self) -> None:
         """Validate that model dimensions are compatible with the world size."""
@@ -899,16 +904,21 @@ class TensorParallelShard:
         return self.sharded_state_dict.get(key)
 
     def _rms_norm(self, hidden_states: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
-        """Apply RMS normalization (Qwen3.5 style: weight is (1 + learned_weight)).
+        """Apply RMS normalization.
 
-        Qwen3.5 RMSNorm initializes weight to zeros and applies as (1 + weight),
-        unlike Llama which initializes to ones and applies as weight directly.
+        Two conventions exist:
+        - Qwen3.5 style (rms_norm_add_unit=True): weight initialized to zeros,
+          applied as (1 + weight) * normalized.
+        - Llama/Phi style (rms_norm_add_unit=False): weight initialized to ones,
+          applied as weight * normalized.
         """
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + eps)
-        return ((1.0 + weight.float()) * hidden_states).to(input_dtype)
+        if self.config.rms_norm_add_unit:
+            return ((1.0 + weight.float()) * hidden_states).to(input_dtype)
+        return (weight.float() * hidden_states).to(input_dtype)
 
     def _apply_norm(
         self,

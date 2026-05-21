@@ -387,6 +387,10 @@ class ModelLoader:
             if "rope_theta" in rope_params_raw:
                 rope_theta = float(rope_params_raw["rope_theta"])
 
+        # Qwen3.5/3.6 uses (1 + weight) RMSNorm convention; all others use weight directly
+        model_type = getattr(text_config, "model_type", "")
+        rms_norm_add_unit = model_type in ("qwen3_5", "qwen3_5_moe")
+
         tp_config = TPShardConfig(
             rank=shard_metadata.device_rank,
             world_size=shard_metadata.world_size,
@@ -399,6 +403,7 @@ class ModelLoader:
             rope_scaling=rope_scaling,
             partial_rotary_factor=partial_rotary_factor,
             mrope_interleaved=mrope_interleaved,
+            rms_norm_add_unit=rms_norm_add_unit,
         )
 
         logger.info(
@@ -527,6 +532,8 @@ class ModelLoader:
         )
 
         # Construct TPShardConfig
+        model_type = getattr(text_config, "model_type", "")
+        rms_norm_add_unit = model_type in ("qwen3_5", "qwen3_5_moe")
         tp_config = TPShardConfig(
             rank=shard_metadata.device_rank,
             world_size=shard_metadata.world_size,
@@ -538,6 +545,7 @@ class ModelLoader:
             rope_theta=rope_theta,
             rope_scaling=rope_scaling,
             partial_rotary_factor=partial_rotary_factor,
+            rms_norm_add_unit=rms_norm_add_unit,
         )
 
         logger.info(
