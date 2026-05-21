@@ -128,6 +128,14 @@ def place_instance(
             raise ValueError(
                 f"Requested Tensor sharding but this model does not support tensor parallelism: {command.model_card.model_id}"
             )
+        # Qwen3.5/3.6 hybrid models (Gated DeltaNet linear attention) do not work
+        # with tensor parallel — only pipeline parallel produces correct output.
+        # The TOML cards may have stale supports_tensor=true; enforce here.
+        _model_id_str = str(command.model_card.model_id)
+        if "Qwen3.5" in _model_id_str or "Qwen3.6" in _model_id_str:
+            raise ValueError(
+                f"Qwen3.5/3.6 hybrid models require Pipeline sharding: {command.model_card.model_id}"
+            )
         # TODO: the condition here for tensor parallel is not correct, but it works good enough for now.
         # DeepSeek V4 is MQA (num_key_value_heads=1) but its sharding strategy
         # head-parallelises wq_b/wo_a and shards MoE experts instead of splitting
