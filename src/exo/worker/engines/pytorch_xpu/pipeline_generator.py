@@ -70,6 +70,9 @@ logger = logging.getLogger(__name__)
 TERMINATION_SENTINEL: int = -1
 """Special token ID broadcast by last rank to signal all ranks to exit generation."""
 
+SHUTDOWN_SENTINEL: int = -2
+"""Special token ID to signal worker processes to shut down entirely."""
+
 _BACKPRESSURE_SLEEP_SECONDS: float = 0.001
 """Sleep interval when waiting for backpressure to clear (1ms)."""
 
@@ -1264,14 +1267,20 @@ def pipeline_parallel_worker_loop(
 
             recorder.increment_counter("tokens_generated")
 
-            # Step 5: Check for termination
-            if token_id == TERMINATION_SENTINEL:
-                logger.debug(f"Worker rank={rank}: received termination sentinel, exiting")
+            # Step 5: Check for termination or reset
+            if token_id == SHUTDOWN_SENTINEL:
+                logger.debug(f"Worker rank={rank}: received shutdown sentinel, exiting")
                 break
 
-            if token_id in eos_token_ids:
-                logger.debug(f"Worker rank={rank}: EOS token {token_id}, exiting")
-                break
+            if token_id == TERMINATION_SENTINEL or token_id in eos_token_ids:
+                logger.debug(f"Worker rank={rank}: generation ended (token={token_id}), resetting for next request")
+                model.reset_state()
+                send_protocol = None
+                recv_protocol = None
+                buffer_pool = None
+                is_first_iteration = True
+                step_index = 0
+                continue
 
             # After first iteration (prefill), negotiate decode fast path
             if is_first_iteration and fast_path_enabled:
