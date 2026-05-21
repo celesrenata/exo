@@ -103,27 +103,6 @@ class PyTorchXPUEngine(Engine):
         except Exception as e:
             logger.warning(f"PyTorchXPUEngine.warmup failed (non-fatal): {e}")
 
-        if (
-            isinstance(self.model, PipelineParallelShard)
-            and self.world_size > 1
-            and self.rank != 0
-        ):
-            import threading
-            from exo.worker.engines.pytorch_xpu.pipeline_generator import pipeline_parallel_worker_loop
-            self._worker_thread = threading.Thread(
-                target=pipeline_parallel_worker_loop,
-                kwargs={
-                    'model': self.model,
-                    'device': self.device,
-                    'rank': self.rank,
-                    'world_size': self.world_size,
-                    'tokenizer': self.tokenizer,
-                },
-                daemon=True
-            )
-            self._worker_thread.start()
-            logger.info(f"PyTorchXPUEngine.warmup: started pipeline worker thread (rank={self.rank})")
-
     def submit(self, task: GenerationTask) -> None:
         """Queue a generation task."""
         assert isinstance(task, TextGeneration)
@@ -158,6 +137,21 @@ class PyTorchXPUEngine(Engine):
             # Reset KV cache from previous request before starting new generation
             if hasattr(self.model, "reset_state"):
                 self.model.reset_state()
+
+            # Start pipeline worker thread on first task in runner subprocess
+            # (Gloo process group lives here, not in supervisor where warmup runs)
+            from exo.worker.engines.pytorch_xpu.pipeline_parallel_shard import PipelineParallelShard
+            if not getattr(self, '_worker_thread_started', False):
+                if isinstance(self.model, PipelineParallelShard) and self.world_size > 1 and self.rank != 0:
+                    import threading
+                    from exo.worker.engines.pytorch_xpu.pipeline_generator import pipeline_parallel_worker_loop
+                    threading.Thread(
+                        target=pipeline_parallel_worker_loop,
+                        kwargs={'model': self.model, 'device': self.device, 'rank': self.rank, 'world_size': self.world_size, 'tokenizer': self.tokenizer},
+                        daemon=True,
+                    ).start()
+                    self._worker_thread_started = True
+                    logger.info(f"PyTorchXPUEngine.step: started pipeline worker thread (rank={self.rank})")
 
             gen = self._build_generator(task)
             self._active = (task, gen)
