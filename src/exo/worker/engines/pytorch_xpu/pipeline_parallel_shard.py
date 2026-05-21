@@ -317,6 +317,16 @@ class PipelineParallelShard:
         # Detect layer types for hybrid attention models (Qwen3.5)
         self._layer_types: list[str] = self._detect_layer_types()
 
+        # Detect the correct kwarg name for passing KV cache to layers.
+        # Phi-3/Phi-4 uses "past_key_value" (singular), Qwen3.5/3.6 uses "past_key_values" (plural).
+        import inspect
+        _first_layer_params = inspect.signature(layers[0].forward).parameters
+        if "past_key_value" in _first_layer_params and "past_key_values" not in _first_layer_params:
+            self._cache_kwarg_name: str = "past_key_value"
+        else:
+            self._cache_kwarg_name = "past_key_values"
+        logger.info(f"Pipeline shard rank={config.rank}: cache kwarg = '{self._cache_kwarg_name}'")
+
         # Attempt torch.compile() for kernel fusion (fallback to eager on failure)
         self._compiled_forward = self._try_compile()
 
@@ -852,15 +862,15 @@ class PipelineParallelShard:
         # conv_state and recurrent_state inside this cache object. Without it,
         # they lose memory between decode steps and produce garbage.
         #
-        # CRITICAL: The kwarg name MUST be "past_key_values" (plural) to match
-        # Qwen3_5DecoderLayer.forward(). Using singular "past_key_value" causes
-        # the argument to be swallowed by **kwargs and silently ignored.
+        # CRITICAL: The kwarg name MUST match the layer's forward() signature.
+        # Qwen3.5/3.6 uses "past_key_values" (plural), Phi-3/4 uses "past_key_value" (singular).
+        # Using the wrong name causes the argument to be swallowed by **kwargs.
         if self._hf_cache is not None:
-            layer_kwargs["past_key_values"] = self._hf_cache
+            layer_kwargs[self._cache_kwarg_name] = self._hf_cache
         elif layer_type == "full_attention" and layer_past is not None:
-            layer_kwargs["past_key_values"] = layer_past
+            layer_kwargs[self._cache_kwarg_name] = layer_past
         else:
-            layer_kwargs["past_key_values"] = None
+            layer_kwargs[self._cache_kwarg_name] = None
 
         # Determine mode from sequence length for per-layer instrumentation
         seq_len = hidden_states.shape[1]
