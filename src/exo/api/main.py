@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, cast
 from uuid import uuid4
 
 import anyio
-from anyio import BrokenResourceError, ClosedResourceError
+from anyio import BrokenResourceError, ClosedResourceError, to_thread
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -46,8 +46,8 @@ from exo.api.adapters.responses import (
     responses_request_to_text_generation,
 )
 from exo.api.generation_settings import register_generation_settings_routes
-from exo.api.telemetry import register_telemetry_routes
 from exo.api.keepalive import with_sse_keepalive
+from exo.api.telemetry import register_telemetry_routes
 from exo.api.types import (
     AddCustomModelParams,
     AdvancedImageParams,
@@ -121,6 +121,7 @@ from exo.api.types.openai_responses import (
     ResponsesRequest,
     ResponsesResponse,
 )
+from exo.download.download_utils import resolve_existing_model
 from exo.master.image_store import ImageStore
 from exo.master.placement import place_instance as get_instance_placements
 from exo.shared.apply import apply
@@ -173,7 +174,7 @@ from exo.shared.types.commands import (
     TaskFinished,
     TextGeneration,
 )
-from exo.shared.types.common import CommandId, Id, NodeId, SystemId
+from exo.shared.types.common import CommandId, Id, ModelId, NodeId, SystemId
 from exo.shared.types.events import (
     ChunkGenerated,
     Event,
@@ -359,6 +360,9 @@ class API:
         self.app.post("/models/add")(self.add_custom_model)
         self.app.delete("/models/custom/{model_id:path}")(self.delete_custom_model)
         self.app.get("/models/search")(self.search_models)
+        self.app.get("/api/models/{model_id:path}/available")(self.check_model_available)
+        self.app.get("/api/files/{model_id:path}")(self.list_model_files)
+        self.app.get("/api/file-content/{model_id:path}")(self.serve_model_file)
         self.app.post("/v1/chat/completions", response_model=None)(
             self.chat_completions
         )
@@ -1847,6 +1851,57 @@ class API:
                 sort="downloads",
                 limit=limit,
             )
+        )
+
+    async def list_model_files(self, model_id: str) -> list[str]:
+        model_id_typed = ModelId(model_id)
+        model_path = await to_thread.run_sync(resolve_existing_model, model_id_typed, None)
+        if model_path is None:
+            raise HTTPException(status_code=404, detail=f"Model {model_id} is not available locally")
+
+        def scan_files(path: Path) -> list[str]:
+            files = [p for p in path.rglob("*") if p.is_file()]
+            return [str(f.relative_to(path)) for f in files]
+
+        return await to_thread.run_sync(scan_files, model_path)
+
+    async def check_model_available(self, model_id: str) -> dict[str, bool | str | None]:
+        model_id_typed = ModelId(model_id)
+        result = await to_thread.run_sync(resolve_existing_model, model_id_typed, None)
+        if result is not None:
+            return {"available": True, "model_directory": str(result)}
+        return {"available": False, "model_directory": None}
+
+    async def serve_model_file(self, model_id: str, file_path: str = Query(..., alias="path")) -> FileResponse:
+        model_id_typed = ModelId(model_id)
+        model_path = await to_thread.run_sync(resolve_existing_model, model_id_typed, None)
+        if model_path is None:
+            raise HTTPException(status_code=404, detail=f"Model {model_id} is not available locally")
+
+        requested_file = model_path / file_path
+        resolved_file = requested_file.resolve()
+        resolved_model = model_path.resolve()
+
+        if not resolved_file.is_relative_to(resolved_model):
+            raise HTTPException(status_code=404, detail="Invalid file path")
+
+        if not resolved_file.is_file():
+            raise HTTPException(status_code=404, detail=f"File {file_path} not found")
+
+        suffix = resolved_file.suffix.lower()
+        media_type_map: dict[str, str] = {
+            ".safetensors": "application/octet-stream",
+            ".bin": "application/octet-stream",
+            ".json": "application/json",
+            ".txt": "text/plain",
+            ".md": "text/plain",
+        }
+        media_type = media_type_map.get(suffix, "application/octet-stream")
+
+        return FileResponse(
+            path=str(resolved_file),
+            filename=resolved_file.name,
+            media_type=media_type,
         )
 
     async def run(self):

@@ -3,6 +3,7 @@ import multiprocessing as mp
 import os
 import resource
 import signal
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Self
 
@@ -21,6 +22,7 @@ from exo.shared.constants import EXO_LOG
 from exo.shared.election import Election, ElectionResult
 from exo.shared.logging import logger_cleanup, logger_setup
 from exo.shared.types.common import NodeId, SessionId
+from exo.shared.types.topology import SocketConnection
 from exo.telemetry.collector import TelemetryCollector
 from exo.utils.channels import Receiver, channel
 from exo.utils.pydantic_ext import FrozenModel
@@ -42,6 +44,7 @@ class Node:
     node_id: NodeId
     offline: bool
     _api_port: int
+    _peer_addresses_provider: Callable[[], list[str]]
     _tg: TaskGroup = field(init=False, default_factory=TaskGroup)
 
     @classmethod
@@ -69,18 +72,6 @@ class Node:
 
         logger.info(f"Starting node {node_id}")
 
-        # Create DownloadCoordinator (unless --no-downloads)
-        if not args.no_downloads:
-            download_coordinator = DownloadCoordinator(
-                node_id,
-                exo_shard_downloader(offline=args.offline),
-                event_sender=event_router.sender(),
-                download_command_receiver=router.receiver(topics.DOWNLOAD_COMMANDS),
-                offline=args.offline,
-            )
-        else:
-            download_coordinator = None
-
         if args.spawn_api:
             api = API(
                 node_id,
@@ -92,6 +83,34 @@ class Node:
             )
         else:
             api = None
+
+        def _get_peer_addresses() -> list[str]:
+            if api is None:
+                return []
+            topology = api.state.topology
+            if topology is None:
+                return []
+            peer_ips: dict[NodeId, str] = {}
+            for connection in topology.out_edges(node_id):
+                edge = connection.edge
+                if isinstance(edge, SocketConnection):
+                    sink_id = connection.sink
+                    if sink_id not in peer_ips:
+                        peer_ips[sink_id] = edge.sink_multiaddr.ip_address
+            return [f"http://{ip}:{args.api_port}" for ip in peer_ips.values()]
+
+        # Create DownloadCoordinator (unless --no-downloads)
+        if not args.no_downloads:
+            download_coordinator = DownloadCoordinator(
+                node_id,
+                exo_shard_downloader(offline=args.offline),
+                event_sender=event_router.sender(),
+                download_command_receiver=router.receiver(topics.DOWNLOAD_COMMANDS),
+                offline=args.offline,
+                peer_addresses_provider=_get_peer_addresses,
+            )
+        else:
+            download_coordinator = None
 
         if not args.no_worker:
             worker = Worker(
@@ -142,6 +161,7 @@ class Node:
             node_id,
             args.offline,
             args.api_port,
+            _get_peer_addresses,
         )
 
     async def run(self):
@@ -256,6 +276,7 @@ class Node:
                                 topics.DOWNLOAD_COMMANDS
                             ),
                             offline=self.offline,
+                            peer_addresses_provider=self._peer_addresses_provider,
                         )
                         self._tg.start_soon(self.download_coordinator.run)
                     if self.worker:

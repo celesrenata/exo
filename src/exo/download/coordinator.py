@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
+from urllib.parse import quote
 
+import aiofiles
+import aiofiles.os as aios
 import anyio
+import httpx
 from anyio import BrokenResourceError, ClosedResourceError, current_time, to_thread
 from loguru import logger
 
@@ -48,6 +54,7 @@ class DownloadCoordinator:
     download_command_receiver: Receiver[ForwarderDownloadCommand]
     event_sender: Sender[Event]
     offline: bool = False
+    peer_addresses_provider: Callable[[], list[str]] = field(default_factory=lambda: list)
 
     # Local state
     download_status: dict[ModelId, DownloadProgress] = field(default_factory=dict)
@@ -129,6 +136,126 @@ class DownloadCoordinator:
             logger.debug(
                 f"Event stream closed while sending download progress for {model_id}, skipping update"
             )
+
+    async def _try_download_from_peer(
+        self, shard: ShardMetadata, peer_addresses: list[str]
+    ) -> bool:
+        """Attempt to download a model from a peer node instead of HuggingFace.
+
+        Queries each peer for model availability and downloads all files from
+        the first peer that has the model. Returns True on success, False if
+        no peer has the model or all downloads fail.
+        """
+        model_id = shard.model_card.model_id
+        model_dir = Path(self._default_model_dir(model_id))
+        total_size = shard.model_card.storage_size.in_bytes
+
+        async with httpx.AsyncClient() as client:
+            for peer in peer_addresses:
+                logger.info(f"Checking peer {peer} for model {model_id}")
+                try:
+                    response = await client.get(
+                        f"{peer}/api/models/{model_id}/available",
+                        timeout=httpx.Timeout(2.0),
+                    )
+                    response.raise_for_status()
+                    data: dict[str, object] = response.json()
+                    if not data.get("available", False):
+                        logger.info(f"Peer {peer} does not have model {model_id}")
+                        continue
+                except Exception as exc:
+                    logger.warning(
+                        f"Failed to check model availability on peer {peer}: {exc}"
+                    )
+                    continue
+
+                try:
+                    file_response = await client.get(
+                        f"{peer}/api/files/{model_id}",
+                        timeout=httpx.Timeout(10.0),
+                    )
+                    file_response.raise_for_status()
+                    file_list: list[str] = file_response.json()
+                except Exception as exc:
+                    logger.warning(
+                        f"Failed to get file list from peer {peer}: {exc}"
+                    )
+                    continue
+
+                if not file_list:
+                    logger.warning(f"Peer {peer} returned empty file list for {model_id}")
+                    continue
+
+                await aios.makedirs(str(model_dir), exist_ok=True)
+                logger.info(
+                    f"Downloading {model_id} from peer {peer}: {len(file_list)} files"
+                )
+
+                start_time = current_time()
+                total_downloaded = 0
+                completed = 0
+                total_files = len(file_list)
+                download_failed = False
+
+                for filename in file_list:
+                    file_path = model_dir / filename
+                    await aios.makedirs(str(file_path.parent), exist_ok=True)
+
+                    try:
+                        download_url = (
+                            f"{peer}/api/file-content/{model_id}"
+                            f"?path={quote(filename, safe='')}"
+                        )
+                        async with client.stream(
+                            "GET",
+                            download_url,
+                            timeout=httpx.Timeout(300.0, connect=10.0),
+                        ) as stream:
+                            stream.raise_for_status()
+                            async with aiofiles.open(file_path, "wb") as f:
+                                async for chunk in stream.aiter_bytes():
+                                    await f.write(chunk)
+                                    total_downloaded += len(chunk)
+                    except Exception as exc:
+                        logger.warning(
+                            f"Failed to download {filename} from peer {peer}: {exc}"
+                        )
+                        download_failed = True
+                        break
+
+                    completed += 1
+                    elapsed = current_time() - start_time
+                    speed = total_downloaded / elapsed if elapsed > 0 else 0.0
+                    remaining_bytes = max(0, total_size - total_downloaded)
+                    eta_seconds = remaining_bytes / speed if speed > 0 else 0.0
+
+                    progress = RepoDownloadProgress(
+                        repo_id=model_id,
+                        repo_revision="peer",
+                        shard=shard,
+                        completed_files=completed,
+                        total_files=total_files,
+                        downloaded=Memory.from_bytes(total_downloaded),
+                        downloaded_this_session=Memory.from_bytes(total_downloaded),
+                        total=Memory.from_bytes(max(total_downloaded, total_size)),
+                        overall_speed=speed,
+                        overall_eta=timedelta(seconds=eta_seconds),
+                        status="complete" if completed == total_files else "in_progress",
+                        file_progress={},
+                    )
+                    await self._download_progress_callback(shard, progress)
+
+                if not download_failed and completed == total_files:
+                    logger.info(
+                        f"Successfully downloaded {model_id} from peer {peer}"
+                    )
+                    return True
+
+                logger.warning(
+                    f"Download from peer {peer} incomplete, trying next peer"
+                )
+
+        return False
 
     async def run(self) -> None:
         logger.info(
@@ -261,6 +388,10 @@ class DownloadCoordinator:
         # Start actual download
         self._start_download_task(shard, initial_progress)
 
+    def _get_peer_addresses(self) -> list[str]:
+        """Return peer node addresses for peer-to-peer download."""
+        return self.peer_addresses_provider()
+
     def _start_download_task(
         self, shard: ShardMetadata, initial_progress: RepoDownloadProgress
     ) -> None:
@@ -281,6 +412,18 @@ class DownloadCoordinator:
         async def download_wrapper(cancel_scope: anyio.CancelScope) -> None:
             try:
                 with cancel_scope:
+                    peer_addresses = self._get_peer_addresses()
+                    if peer_addresses:
+                        success = await self._try_download_from_peer(shard, peer_addresses)
+                        if success:
+                            logger.info(
+                                f"Downloaded {model_id} from peer, skipping HuggingFace"
+                            )
+                            return
+                        else:
+                            logger.warning(
+                                f"Peer download failed for {model_id}, falling back to HuggingFace download"
+                            )
                     await self.shard_downloader.ensure_shard(shard)
             except Exception as e:
                 logger.error(f"Download failed for {model_id}: {e}")
